@@ -1,6 +1,7 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Extensions.ObjectExtensions;
@@ -26,6 +27,7 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
         private IBindable<double> tailMaskHeight = null!;
 
         private bool gradient;
+        private bool useNoteTopHalf;
 
         [Resolved]
         private DrawableHitObject? drawableObject { get; set; }
@@ -60,6 +62,8 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
             if (gradient)
                 return;
 
+            useNoteTopHalf = false;
+
             animation = Factory.CreateAnimation(TailName);
 
             if (animation.FrameCount == 0)
@@ -75,25 +79,51 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
                     if (animation.FrameCount == 0)
                     {
                         animation.Dispose();
+                        animation = null;
                         return;
                     }
+
+                    useNoteTopHalf = true;
                 }
             }
 
-            MainContainer.Child = new Container
+            if (useNoteTopHalf)
             {
-                RelativeSizeAxes = Axes.X,
-                Anchor = Anchor.BottomCentre,
-                Origin = Anchor.BottomCentre,
-                Masking = true,
-                Child = new Container
+                // 与 EzHoldNoteHead 回退到 note 时显示下半部分对称：tail 显示 note 上半部分
+                MainContainer.Anchor = Anchor.TopCentre;
+                MainContainer.Origin = Anchor.TopCentre;
+                MainContainer.RelativeSizeAxes = Axes.X;
+                MainContainer.Masking = true;
+                MainContainer.Child = new Container
+                {
+                    Anchor = Anchor.TopCentre,
+                    Origin = Anchor.TopCentre,
+                    RelativeSizeAxes = Axes.X,
+                    Masking = true,
+                    Child = animation,
+                };
+            }
+            else
+            {
+                MainContainer.Anchor = Anchor.Centre;
+                MainContainer.Origin = Anchor.Centre;
+                MainContainer.RelativeSizeAxes = Axes.X;
+                MainContainer.Masking = false;
+                MainContainer.Child = new Container
                 {
                     RelativeSizeAxes = Axes.X,
                     Anchor = Anchor.BottomCentre,
                     Origin = Anchor.BottomCentre,
-                    Child = animation,
-                }
-            };
+                    Masking = true,
+                    Child = new Container
+                    {
+                        RelativeSizeAxes = Axes.X,
+                        Anchor = Anchor.BottomCentre,
+                        Origin = Anchor.BottomCentre,
+                        Child = animation,
+                    }
+                };
+            }
         }
 
         protected override void UpdateDrawable()
@@ -101,8 +131,25 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
             if (gradient)
                 return;
 
-            float visibleHeight = NoteHeight - (float)tailMaskHeight.Value;
-            Height = visibleHeight;
+            float maskHeight = (float)tailMaskHeight.Value;
+
+            if (useNoteTopHalf)
+            {
+                float halfHeight = NoteHeight * 0.5f;
+                float visibleHeight = Math.Max(halfHeight - maskHeight, 0);
+                Height = visibleHeight;
+
+                if (MainContainer.Child is Container clipContainer)
+                {
+                    MainContainer.Height = visibleHeight;
+                    clipContainer.Height = NoteHeight;
+                }
+            }
+            else
+            {
+                float visibleHeight = NoteHeight - maskHeight;
+                Height = visibleHeight;
+            }
         }
 
         protected override void UpdateColor()

@@ -38,6 +38,7 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
         private float lastBodyContainerHeight = float.NaN;
         private float lastBodyScaleY = float.NaN;
         private float lastTopContainerY = float.NaN;
+        private float lastTopContainerHeight = float.NaN;
         private float cachedTailMaskHeight = float.NaN;
 
         private bool lnGradient;
@@ -52,18 +53,23 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
         {
             lnGradient = ezConfig.Get<bool>(Ez2Setting.ManiaLNGradientEnable);
 
-            // 暂时不完善
-            if (lnGradient)
+            tailMaskHeight = ezSkinInfo.HoldTailMaskHeight;
+            tailAlpha = ezSkinInfo.HoldTailAlpha;
+            tailMaskHeight.BindValueChanged(onTailMaskHeightChanged, true);
+            tailAlpha.BindValueChanged(_ =>
             {
-                tailMaskHeight = ezSkinInfo.HoldTailMaskHeight;
-                tailAlpha = ezSkinInfo.HoldTailAlpha;
-                tailMaskHeight.BindValueChanged(e =>
-                {
-                    cachedTailMaskHeight = (float)e.NewValue;
-                    OnDrawableChanged();
-                }, true);
-                tailAlpha.BindValueChanged(_ => OnColourChanged(), true);
-            }
+                if (lnGradient)
+                    OnColourChanged();
+            }, true);
+
+            ezSkinInfo.ManiaLNGradientEnable.BindValueChanged(e =>
+            {
+                if (lnGradient == e.NewValue)
+                    return;
+
+                lnGradient = e.NewValue;
+                OnLoadChanged();
+            });
 
             holdNote = (DrawableHoldNote)drawableObject;
 
@@ -104,20 +110,28 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
             topContainer?.Expire();
             bodyContainer?.Expire();
 
-            topContainer = new Container
+            if (lnGradient)
             {
-                RelativeSizeAxes = Axes.X,
-                Anchor = Anchor.TopCentre,
-                Origin = Anchor.TopCentre,
-                Masking = true,
-                Child = new Container
+                topContainer = new Container
                 {
                     RelativeSizeAxes = Axes.X,
                     Anchor = Anchor.TopCentre,
                     Origin = Anchor.TopCentre,
-                    Child = tail
-                }
-            };
+                    Masking = true,
+                    Child = new Container
+                    {
+                        RelativeSizeAxes = Axes.X,
+                        Anchor = Anchor.TopCentre,
+                        Origin = Anchor.TopCentre,
+                        Child = tail
+                    }
+                };
+            }
+            else
+            {
+                topContainer = null;
+            }
+
             bodyContainer = new Container
             {
                 RelativeSizeAxes = Axes.X,
@@ -139,7 +153,9 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
             };
 
             MainContainer.Clear();
-            MainContainer.Children = [bodyContainer, topContainer];
+            MainContainer.Children = lnGradient
+                ? [bodyContainer, topContainer!]
+                : [bodyContainer];
 
             // 重新初始化光效层
             OnLightChanged();
@@ -152,16 +168,8 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
         {
             halfNoteHeight = NoteHeight * 0.5f;
 
-            // 当设置为负值时，隐藏 topContainer；非负值时显示
-            if (topContainer != null)
-                topContainer.Alpha = cachedTailMaskHeight >= 0 ? 1 : 0;
-
-            if (topContainer?.Child is Container topInner)
-            {
-                topContainer.Height = halfNoteHeight;
-                topInner.Height = NoteHeight;
-                topContainer.Y = cachedTailMaskHeight;
-            }
+            if (lnGradient)
+                updateTopContainerLayout(getTailMaskHeight());
 
             if (bodyInnerContainer != null)
             {
@@ -169,11 +177,22 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
                 bodyInnerContainer.Y = -halfNoteHeight;
             }
 
+            if (lnGradient && halfNoteHeight > 0)
+                updateBodyLayout(getTailMaskHeight());
+
             // TODO: V3 版应该增加一个顶部 Dot 标识，以免常规图无法分辨正确的面尾
         }
 
         protected override void UpdateColor()
         {
+            if (!lnGradient)
+            {
+                if (bodyContainer != null)
+                    bodyContainer.Colour = NoteColor;
+
+                return;
+            }
+
             if (topContainer != null)
             {
                 topContainer.Colour = ColourInfo.GradientVertical(
@@ -189,38 +208,74 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
         {
             base.Update();
 
-            if (!lnGradient || MainContainer.Children.Count == 0 || halfNoteHeight <= 0)
+            if (MainContainer.Children.Count == 0)
                 return;
 
-            if (bodyContainer != null)
+            halfNoteHeight = NoteHeight * 0.5f;
+
+            if (halfNoteHeight <= 0)
+                return;
+
+            float moveDown = lnGradient ? getTailMaskHeight() : 0;
+
+            if (lnGradient)
+                updateTopContainerLayout(moveDown);
+
+            updateBodyLayout(moveDown);
+        }
+
+        private void updateTopContainerLayout(float maskHeight)
+        {
+            if (topContainer?.Child is not Container topInner)
+                return;
+
+            // 当设置为负值时，隐藏 topContainer；非负值时随遮罩高度收缩顶部段
+            topContainer.Alpha = maskHeight >= 0 ? 1 : 0;
+
+            float topHeight = Math.Max(halfNoteHeight - maskHeight, 0);
+            float topY = halfNoteHeight - topHeight;
+
+            if (layoutChanged(lastTopContainerY, topY) || layoutChanged(lastTopContainerHeight, topHeight))
             {
-                float moveDown = (float)tailMaskHeight.Value;
+                topContainer.Height = topHeight;
+                topContainer.Y = topY;
+                lastTopContainerY = topY;
+                lastTopContainerHeight = topHeight;
+            }
 
-                if (topContainer != null && layoutChanged(lastTopContainerY, moveDown))
-                {
-                    topContainer.Y = moveDown;
-                    lastTopContainerY = moveDown;
-                }
+            topInner.Height = NoteHeight;
+        }
 
-                float drawHeightMinusHalf = DrawHeight - halfNoteHeight;
-                float middleHeight = Math.Max(drawHeightMinusHalf, halfNoteHeight);
+        private void onTailMaskHeightChanged(ValueChangedEvent<double> height)
+        {
+            cachedTailMaskHeight = (float)height.NewValue;
+            resetLayoutCache();
+            OnDrawableChanged();
+        }
 
-                // 当 maskHeight 为正值时，缩短中间部分并下移 top；为负值时，延长中间部分实现上移效果
-                float targetBodyHeight = moveDown >= 0
-                    ? middleHeight - moveDown + 1
-                    : middleHeight + MathF.Abs(moveDown) + 2;
+        private void updateBodyLayout(float moveDown)
+        {
+            if (bodyContainer == null)
+                return;
 
-                if (layoutChanged(lastBodyContainerHeight, targetBodyHeight))
-                {
-                    bodyContainer.Height = targetBodyHeight;
-                    lastBodyContainerHeight = targetBodyHeight;
-                }
+            float drawHeightMinusHalf = DrawHeight - halfNoteHeight;
+            float middleHeight = Math.Max(drawHeightMinusHalf, halfNoteHeight);
 
-                if (bodyScaleContainer != null && layoutChanged(lastBodyScaleY, drawHeightMinusHalf))
-                {
-                    bodyScaleContainer.Scale = new Vector2(1, drawHeightMinusHalf);
-                    lastBodyScaleY = drawHeightMinusHalf;
-                }
+            // 当 maskHeight 为正值时，缩短中间部分并下移 top；为负值时，延长中间部分实现上移效果
+            float targetBodyHeight = moveDown >= 0
+                ? middleHeight - moveDown + 1
+                : middleHeight + MathF.Abs(moveDown) + 2;
+
+            if (layoutChanged(lastBodyContainerHeight, targetBodyHeight))
+            {
+                bodyContainer.Height = targetBodyHeight;
+                lastBodyContainerHeight = targetBodyHeight;
+            }
+
+            if (bodyScaleContainer != null && layoutChanged(lastBodyScaleY, drawHeightMinusHalf))
+            {
+                bodyScaleContainer.Scale = new Vector2(1, drawHeightMinusHalf);
+                lastBodyScaleY = drawHeightMinusHalf;
             }
         }
 
@@ -229,7 +284,10 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
             lastBodyContainerHeight = float.NaN;
             lastBodyScaleY = float.NaN;
             lastTopContainerY = float.NaN;
+            lastTopContainerHeight = float.NaN;
         }
+
+        private float getTailMaskHeight() => float.IsNaN(cachedTailMaskHeight) ? 0 : cachedTailMaskHeight;
 
         private static bool layoutChanged(float oldValue, float newValue) => float.IsNaN(oldValue) || MathF.Abs(oldValue - newValue) > 0.001f;
 
