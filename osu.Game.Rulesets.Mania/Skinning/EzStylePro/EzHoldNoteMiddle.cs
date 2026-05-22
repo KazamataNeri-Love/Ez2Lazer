@@ -38,7 +38,6 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
         private float lastBodyContainerHeight = float.NaN;
         private float lastBodyScaleY = float.NaN;
         private float lastTopContainerY = float.NaN;
-        private float lastTopContainerHeight = float.NaN;
         private float cachedTailMaskHeight = float.NaN;
 
         private bool lnGradient;
@@ -177,8 +176,7 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
                 bodyInnerContainer.Y = -halfNoteHeight;
             }
 
-            if (lnGradient && halfNoteHeight > 0)
-                updateBodyLayout(getTailMaskHeight());
+            updateBodyLayout(lnGradient ? getTailMaskHeight() : 0);
 
             // TODO: V3 版应该增加一个顶部 Dot 标识，以免常规图无法分辨正确的面尾
         }
@@ -229,18 +227,27 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
             if (topContainer?.Child is not Container topInner)
                 return;
 
-            // 当设置为负值时，隐藏 topContainer；非负值时随遮罩高度收缩顶部段
+            // 负值：隐藏伪面尾，由 body 上探代替；非负值：面尾形状不变，整体下移以缩短中部
             topContainer.Alpha = maskHeight >= 0 ? 1 : 0;
 
-            float topHeight = Math.Max(halfNoteHeight - maskHeight, 0);
-            float topY = halfNoteHeight - topHeight;
-
-            if (layoutChanged(lastTopContainerY, topY) || layoutChanged(lastTopContainerHeight, topHeight))
+            if (maskHeight >= 0)
             {
-                topContainer.Height = topHeight;
-                topContainer.Y = topY;
-                lastTopContainerY = topY;
-                lastTopContainerHeight = topHeight;
+                topContainer.Height = halfNoteHeight;
+
+                if (layoutChanged(lastTopContainerY, maskHeight))
+                {
+                    topContainer.Y = maskHeight;
+                    lastTopContainerY = maskHeight;
+                }
+
+                topInner.Y = 0;
+            }
+            else
+            {
+                float extendedHeight = halfNoteHeight - maskHeight;
+                topContainer.Height = extendedHeight;
+                topContainer.Y = halfNoteHeight - extendedHeight;
+                lastTopContainerY = topContainer.Y;
             }
 
             topInner.Height = NoteHeight;
@@ -258,11 +265,36 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
             if (bodyContainer == null)
                 return;
 
+            float targetBodyHeight;
+            float bodyScaleY;
+
+            if (!lnGradient)
+            {
+                // 常规模式：独立 tail，body 占满面身区域（不再预留半 note 给伪面尾）
+                targetBodyHeight = DrawHeight;
+                bodyScaleY = DrawHeight;
+
+                if (layoutChanged(lastBodyContainerHeight, targetBodyHeight))
+                {
+                    bodyContainer.Height = targetBodyHeight;
+                    lastBodyContainerHeight = targetBodyHeight;
+                }
+
+                if (bodyScaleContainer != null && layoutChanged(lastBodyScaleY, bodyScaleY))
+                {
+                    bodyScaleContainer.Scale = new Vector2(1, bodyScaleY);
+                    lastBodyScaleY = bodyScaleY;
+                }
+
+                return;
+            }
+
             float drawHeightMinusHalf = DrawHeight - halfNoteHeight;
             float middleHeight = Math.Max(drawHeightMinusHalf, halfNoteHeight);
+            bodyScaleY = drawHeightMinusHalf;
 
             // 当 maskHeight 为正值时，缩短中间部分并下移 top；为负值时，延长中间部分实现上移效果
-            float targetBodyHeight = moveDown >= 0
+            targetBodyHeight = moveDown >= 0
                 ? middleHeight - moveDown + 1
                 : middleHeight + MathF.Abs(moveDown) + 2;
 
@@ -272,10 +304,10 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
                 lastBodyContainerHeight = targetBodyHeight;
             }
 
-            if (bodyScaleContainer != null && layoutChanged(lastBodyScaleY, drawHeightMinusHalf))
+            if (bodyScaleContainer != null && layoutChanged(lastBodyScaleY, bodyScaleY))
             {
-                bodyScaleContainer.Scale = new Vector2(1, drawHeightMinusHalf);
-                lastBodyScaleY = drawHeightMinusHalf;
+                bodyScaleContainer.Scale = new Vector2(1, bodyScaleY);
+                lastBodyScaleY = bodyScaleY;
             }
         }
 
@@ -284,7 +316,6 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
             lastBodyContainerHeight = float.NaN;
             lastBodyScaleY = float.NaN;
             lastTopContainerY = float.NaN;
-            lastTopContainerHeight = float.NaN;
         }
 
         private float getTailMaskHeight() => float.IsNaN(cachedTailMaskHeight) ? 0 : cachedTailMaskHeight;
