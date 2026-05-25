@@ -36,6 +36,13 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly EzLocalizationManager.EzLocalisableString EZ_GAME_SECTION_HEADER = new EzLocalizationManager.EzLocalisableString("Ez游玩设置", "Ez Gameplay");
         public static readonly EzLocalizationManager.EzLocalisableString EZ_UI_SETTINGS_HEADER = new EzLocalizationManager.EzLocalisableString("Ez 界面设置", "Ez UI Settings");
 
+        public static readonly EzLocalizationManager.EzLocalisableString UPDATE_FRAME_LIMITER =
+            new EzLocalizationManager.EzLocalisableString("Update 帧率限制", "Update frame limiter");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UPDATE_FRAME_LIMITER_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "限制游戏逻辑更新（Update）线程的最高帧率。Draw 帧率仍由图形设置中的「帧率限制」控制。",
+            "Limits the maximum update rate of the game logic thread. Draw frame rate is still controlled by the \"Frame limiter\" setting in Graphics.");
+
         public static readonly EzLocalizationManager.EzLocalisableString HIDE_MAIN_MENU_ONLINE_BANNER =
             new EzLocalizationManager.EzLocalisableString("屏蔽主界面底部新闻广告", "Hide main menu bottom news banner");
 
@@ -107,8 +114,10 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly LocalisableString SKIP_EMPTY_EDGE_COLUMNS = new EzLocalizationManager.EzLocalisableString("使用Ez2Ac 10k2s1p", "Use Ez2Ac 10k2s1p");
 
         public static readonly LocalisableString SKIP_EMPTY_EDGE_COLUMNS_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
-            "开启后，14k皮肤跳过最后一列，加载成13k，用于游玩Ez2Ac街机谱面。",
-            "When enabled, 14k skins will skip the last column and load as 13k, for playing Ez2Ac arcade beatmaps.");
+            "开启后，14k皮肤跳过最后一列，加载成13k，用于游玩Ez2Ac街机谱面。"
+            + "\n注意：14k最后一列有note时必须开启此选项，否则进入谱面时会导致程序崩溃！",
+            "When enabled, 14k skins will skip the last column and load as 13k, for playing Ez2Ac arcade beatmaps."
+            + "Note: This option must be enabled when there are note in the 14k last column, otherwise it will cause a crash when entering the beatmap!");
 
         // public static readonly LocalisableString SKIP_EMPTY_EDGE_COLUMNS = new EzLocalizationManager.EzLocalisableString("跳过空边缘列", "Skip Empty Edge Columns");
         //

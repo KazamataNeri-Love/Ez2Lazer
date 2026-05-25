@@ -10,7 +10,7 @@ using osu.Game.Rulesets.Mania.UI;
 
 namespace osu.Game.Rulesets.Mania.Skinning.SbI
 {
-    internal abstract partial class FastNoteBase : CompositeDrawable, IColumnNote
+    public abstract partial class FastNoteBase : CompositeDrawable, IColumnNote
     {
         protected virtual bool UseColorization => true;
 
@@ -100,18 +100,15 @@ namespace osu.Game.Rulesets.Mania.Skinning.SbI
             }
         }
 
-        void IColumnNote.ForwardOnNoteSetChanged() => OnLoadChanged();
-        void IColumnNote.ForwardOnNoteSizeChanged() => OnDrawableChanged();
-        void IColumnNote.ForwardOnColourChanged() => OnColourChanged();
-
         protected override void Dispose(bool isDisposing)
         {
             if (isDisposing)
-            {
                 ColumnWatcher.Remove(Column, this);
-            }
-
             base.Dispose(isDisposing);
         }
+
+        void IColumnNote.ForwardOnNoteSetChanged() => OnLoadChanged();
+        void IColumnNote.ForwardOnNoteSizeChanged() => OnDrawableChanged();
+        void IColumnNote.ForwardOnColourChanged() => OnColourChanged();
     }
 }

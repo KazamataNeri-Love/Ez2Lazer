@@ -79,11 +79,12 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.AccuracyCutoffS, 0.95, 0.95, 1, 0.005);
             SetDefault(Ez2Setting.AccuracyCutoffA, 0.9, 0.9, 1, 0.005);
 
+            SetDefault(Ez2Setting.UpdateFrameLimiter, FrameSync.Unlimited);
             SetDefault(Ez2Setting.EzAnalysisRecEnabled, true);
             SetDefault(Ez2Setting.EzAnalysisSqliteEnabled, true);
             SetDefault(Ez2Setting.HideMainMenuOnlineBanner, false);
             SetDefault(Ez2Setting.HitObjectLifetimeUsesOwnTime, true);
-            SetDefault(Ez2Setting.ManiaSkipEmptyEdgeColumns, true);
+            SetDefault(Ez2Setting.ManiaSkipEmptyEdgeColumns, false);
 
             SetDefault(Ez2Setting.StoryboardAutoVideoSize, false);
             SetDefault(Ez2Setting.KeySoundPreviewMode, KeySoundPreviewMode.Off);
@@ -739,6 +740,8 @@ namespace osu.Game.EzOsuGame.Configuration
         GameplayDisableCmdSpace,
         AccuracyCutoffS,
         AccuracyCutoffA,
+
+        UpdateFrameLimiter,
 
         EzAnalysisRecEnabled,
         EzAnalysisSqliteEnabled,

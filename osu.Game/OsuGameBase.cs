@@ -160,7 +160,7 @@ namespace osu.Game
                     return informationalVersion.Split('+').First();
 
                 Version version = AssemblyVersion;
-                return $@"{version.Major}.{version.Minor}.{version.Build}-lazer";
+                return $@"{version.Major}.{version.Minor}.{version.Build}-ez2lazer";
             }
         }
 
@@ -322,6 +322,8 @@ namespace osu.Game
             GlobalConfigStore.Config = LocalConfig;
             GlobalConfigStore.EzConfig = Ez2ConfigManager;
             dependencies.Cache(Ez2ConfigManager);
+
+            bindUpdateFrameLimiter(Ez2ConfigManager);
             EzSkinInfo = new EzSkinInfo(Ez2ConfigManager);
             dependencies.CacheAs<IEzSkinInfo>(EzSkinInfo);
             dependencies.CacheAs(EzResourceStore = new EzResourceStore(Ez2ConfigManager, Host.Renderer, Audio, Storage, realm));
@@ -615,10 +617,34 @@ namespace osu.Game
             Storage ??= host.Storage;
 
             LocalConfig ??= UseDevelopmentServer
-                ? new DevelopmentOsuConfigManager(Storage, host)
-                : new OsuConfigManager(Storage, host);
+                ? new DevelopmentOsuConfigManager(Storage)
+                : new OsuConfigManager(Storage);
 
             host.ExceptionThrown += onExceptionThrown;
+        }
+
+        private void bindUpdateFrameLimiter(Ez2ConfigManager ezConfig)
+        {
+            var updateFrameLimiter = ezConfig.GetBindable<FrameSync>(Ez2Setting.UpdateFrameLimiter);
+
+            void apply()
+            {
+                int refreshRate = 60;
+
+                if (Host.Window != null)
+                {
+                    refreshRate = (int)MathF.Round(Host.Window.CurrentDisplayMode.Value.RefreshRate);
+
+                    if (refreshRate <= 0)
+                        refreshRate = 60;
+                }
+
+                Host.MaximumUpdateHz = updateFrameLimiter.Value.ToUpdateHz(refreshRate, Host.AllowBenchmarkUnlimitedFrames);
+            }
+
+            updateFrameLimiter.BindValueChanged(_ => apply(), true);
+
+            Host.Window?.CurrentDisplayMode.BindValueChanged(_ => apply());
         }
 
         #region Exit handling
@@ -664,7 +690,7 @@ namespace osu.Game
         /// <param name="path">The path to migrate to.</param>
         /// <returns>Whether migration succeeded to completion. If <c>false</c>, some files were left behind.</returns>
         /// <exception cref="TimeoutException"></exception>
-        public bool Migrate(string path)
+        public bool MigrateUserData(string path)
         {
             Logger.Log($@"Migrating osu! data from ""{Storage.GetFullPath(string.Empty)}"" to ""{path}""...");
 
