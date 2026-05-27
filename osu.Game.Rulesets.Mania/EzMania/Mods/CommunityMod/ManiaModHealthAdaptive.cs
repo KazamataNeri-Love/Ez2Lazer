@@ -13,6 +13,7 @@ using osu.Game.Beatmaps.Timing;
 using osu.Game.Configuration;
 using osu.Game.Overlays.Settings;
 using osu.Game.Rulesets.Judgements;
+using osu.Game.Rulesets.Mania.Mods;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Objects.Drawables;
@@ -63,7 +64,10 @@ namespace osu.Game.Rulesets.Mania.EzMania.Mods.CommunityMod
         public static List<BreakPeriod> BreakPeriods = new List<BreakPeriod>();
         private BreakPeriod[] breakPeriodsArray = Array.Empty<BreakPeriod>();
 
-        public override Type[] IncompatibleMods => new[] { typeof(ModRateAdjust), typeof(ModTimeRamp), typeof(ModAutoplay) };
+        public override Type[] IncompatibleMods => new[]
+        {
+            typeof(IManiaRateAdjustmentMod),
+        };
 
         [SettingSource("Initial rate", "The starting speed of the track.", SettingControlType = typeof(MultiplierSettingsSlider))]
         public BindableNumber<double> InitialRate { get; } = new BindableDouble(1)

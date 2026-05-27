@@ -21,6 +21,8 @@ using osu.Game.Input.Bindings;
 using osu.Game.Input.Handlers;
 using osu.Game.EzOsuGame;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Scoring;
+using osu.Game.Rulesets.Mania.Scoring;
 using osu.Game.Replays;
 using osu.Game.Rulesets.Mania.Beatmaps;
 using osu.Game.Rulesets.Mania.Configuration;
@@ -41,7 +43,7 @@ using osuTK.Input;
 
 namespace osu.Game.Rulesets.Mania.UI
 {
-    public partial class DrawableManiaRuleset : DrawableScrollingRuleset<ManiaHitObject>, IPreviewScrollDensityAdjustable
+    public partial class DrawableManiaRuleset : DrawableScrollingRuleset<ManiaHitObject>, IPreviewScrollDensityAdjustable, IManiaGameplayModeSnapshot
     {
         /// <summary>
         /// The minimum time range. This occurs at a <see cref="ManiaRulesetSetting.ScrollSpeed"/> of 40.
@@ -89,9 +91,16 @@ namespace osu.Game.Rulesets.Mania.UI
         [Resolved]
         private RealmAccess realm { get; set; } = null!;
 
+        [Resolved(canBeNull: true)]
+        private GameplayState? gameplayState { get; set; }
+
         private readonly Bindable<EzEnumHitMode> hitModeBindable = new Bindable<EzEnumHitMode>();
         private EzEnumHitMode gameplayHitMode;
         private bool suppressHitModeRevert;
+
+        int IManiaGameplayModeSnapshot.HitMode => (int)gameplayHitMode;
+        int IManiaGameplayModeSnapshot.HealthMode => (int)ManiaHealthProcessor.ActiveHealthMode;
+
         private readonly Bindable<EzManiaScrollingStyle> scrollingStyle = new Bindable<EzManiaScrollingStyle>();
         private readonly BindableDouble configBaseMs = new BindableDouble();
         private readonly BindableDouble configTimePerSpeed = new BindableDouble();
@@ -179,8 +188,12 @@ namespace osu.Game.Rulesets.Mania.UI
 
             hitModeBindable.BindValueChanged(h =>
             {
+                // 仅在“本局本地游玩尚未完成”期间锁定 HitMode，避免中途更改破坏一致性。
+                // 结算/回放/分析等非活跃本地游玩场景应允许改动，不要回退全局设置值。
+                bool lockHitModeForThisSession = ReplayScore == null && gameplayState?.HasCompleted == false;
+
                 // 游戏中途修改判定模式将回退到开局时的设置
-                if (h.NewValue != gameplayHitMode)
+                if (lockHitModeForThisSession && h.NewValue != gameplayHitMode)
                 {
                     if (suppressHitModeRevert)
                         return;

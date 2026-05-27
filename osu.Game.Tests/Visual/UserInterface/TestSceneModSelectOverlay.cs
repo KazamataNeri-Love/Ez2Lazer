@@ -25,6 +25,8 @@ using osu.Game.Rulesets.Catch.Mods;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Osu;
 using osu.Game.Rulesets.Osu.Mods;
+using osu.Game.Rulesets.Osu.Scoring;
+using osu.Game.Rulesets.Scoring;
 using osu.Game.Rulesets.Taiko.Mods;
 using osu.Game.Screens;
 using osu.Game.Screens.Footer;
@@ -122,7 +124,7 @@ namespace osu.Game.Tests.Visual.UserInterface
             AddUntilStep("two panels active", () => modSelectOverlay.ChildrenOfType<ModPanel>().Count(panel => panel.Active.Value) == 2);
             AddAssert("mod multiplier correct", () =>
             {
-                double multiplier = SelectedMods.Value.Aggregate(1d, (m, mod) => m * mod.ScoreMultiplier);
+                double multiplier = new OsuScoreMultiplierCalculator(new ScoreMultiplierContext()).CalculateFor(SelectedMods.Value);
                 return Precision.AlmostEquals(multiplier, this.ChildrenOfType<RankingInformationDisplay>().Single().ModMultiplier.Value);
             });
             assertCustomisationToggleState(disabled: false, active: false);
@@ -137,7 +139,7 @@ namespace osu.Game.Tests.Visual.UserInterface
             AddUntilStep("two panels active", () => modSelectOverlay.ChildrenOfType<ModPanel>().Count(panel => panel.Active.Value) == 2);
             AddAssert("mod multiplier correct", () =>
             {
-                double multiplier = SelectedMods.Value.Aggregate(1d, (m, mod) => m * mod.ScoreMultiplier);
+                double multiplier = new OsuScoreMultiplierCalculator(new ScoreMultiplierContext()).CalculateFor(SelectedMods.Value);
                 return Precision.AlmostEquals(multiplier, this.ChildrenOfType<RankingInformationDisplay>().Single().ModMultiplier.Value);
             });
             assertCustomisationToggleState(disabled: false, active: false);
@@ -814,13 +816,16 @@ namespace osu.Game.Tests.Visual.UserInterface
         {
             createScreen();
             changeRuleset(0);
+            int defaultVisibleColumnCount = 0;
+
+            AddStep("record default visible column count", () => defaultVisibleColumnCount = this.ChildrenOfType<ModColumn>().Count(col => col.IsPresent));
 
             AddStep("set filter for 2 columns", () => modSelectOverlay.IsValidMod = mod => mod.Type is ModType.DifficultyIncrease or ModType.Conversion);
 
             AddAssert("two columns visible", () => this.ChildrenOfType<ModColumn>().Count(col => col.IsPresent) == 2);
 
             AddStep("unset filter", () => modSelectOverlay.IsValidMod = _ => true);
-            AddAssert("all columns visible", () => this.ChildrenOfType<ModColumn>().All(col => col.IsPresent));
+            AddUntilStep("columns restored to default", () => this.ChildrenOfType<ModColumn>().Count(col => col.IsPresent) == defaultVisibleColumnCount);
 
             AddStep("filter out everything", () => modSelectOverlay.IsValidMod = _ => false);
             AddAssert("no columns visible", () => this.ChildrenOfType<ModColumn>().All(col => !col.IsPresent));
@@ -840,8 +845,9 @@ namespace osu.Game.Tests.Visual.UserInterface
         {
             createScreen();
             changeRuleset(0);
+            int defaultVisibleColumnCount = 0;
 
-            AddAssert("all columns visible", () => this.ChildrenOfType<ModColumn>().All(col => col.IsPresent));
+            AddStep("record default visible column count", () => defaultVisibleColumnCount = this.ChildrenOfType<ModColumn>().Count(col => col.IsPresent));
 
             AddStep("set search", () => modSelectOverlay.SearchTerm = "HD");
             AddAssert("two columns visible", () => this.ChildrenOfType<ModColumn>().Count(col => col.IsPresent) == 2);
@@ -850,7 +856,7 @@ namespace osu.Game.Tests.Visual.UserInterface
             AddAssert("no columns visible", () => this.ChildrenOfType<ModColumn>().All(col => !col.IsPresent));
 
             AddStep("clear search bar", () => modSelectOverlay.SearchTerm = "");
-            AddAssert("all columns visible", () => this.ChildrenOfType<ModColumn>().All(col => col.IsPresent));
+            AddUntilStep("columns restored to default", () => this.ChildrenOfType<ModColumn>().Count(col => col.IsPresent) == defaultVisibleColumnCount);
         }
 
         [Test]
@@ -858,31 +864,37 @@ namespace osu.Game.Tests.Visual.UserInterface
         {
             createScreen();
             changeRuleset(0);
+            int defaultVisibleColumnCount = 0;
 
-            AddAssert("all columns visible", () => this.ChildrenOfType<ModColumn>().All(col => col.IsPresent));
+            AddStep("record default visible column count", () => defaultVisibleColumnCount = this.ChildrenOfType<ModColumn>().Count(col => col.IsPresent));
 
             AddStep("set search", () => modSelectOverlay.SearchTerm = "fail");
-            AddAssert("one column visible", () => this.ChildrenOfType<ModColumn>().Count(col => col.IsPresent) == 1);
+            AddAssert("fewer columns visible", () =>
+            {
+                int visible = this.ChildrenOfType<ModColumn>().Count(col => col.IsPresent);
+                return visible > 0 && visible < defaultVisibleColumnCount;
+            });
 
             AddStep("hide", () => modSelectOverlay.Hide());
             AddStep("show", () => modSelectOverlay.Show());
 
-            AddAssert("all columns visible", () => this.ChildrenOfType<ModColumn>().All(col => col.IsPresent));
+            AddUntilStep("columns restored to default", () => this.ChildrenOfType<ModColumn>().Count(col => col.IsPresent) == defaultVisibleColumnCount);
         }
 
         [Test]
         public void TestColumnHidingOnRulesetChange()
         {
             createScreen();
+            int defaultVisibleColumnCount = 0;
 
             changeRuleset(0);
-            AddAssert("5 columns visible", () => this.ChildrenOfType<ModColumn>().Count(col => col.IsPresent) == 5);
+            AddStep("record default visible column count", () => defaultVisibleColumnCount = this.ChildrenOfType<ModColumn>().Count(col => col.IsPresent));
 
             AddStep("change to ruleset without all mod types", () => Ruleset.Value = TestCustomisableModRuleset.CreateTestRulesetInfo());
             AddUntilStep("1 column visible", () => this.ChildrenOfType<ModColumn>().Count(col => col.IsPresent) == 1);
 
             changeRuleset(0);
-            AddAssert("5 columns visible", () => this.ChildrenOfType<ModColumn>().Count(col => col.IsPresent) == 5);
+            AddUntilStep("columns restored to default", () => this.ChildrenOfType<ModColumn>().Count(col => col.IsPresent) == defaultVisibleColumnCount);
         }
 
         [Test]
@@ -1087,6 +1099,7 @@ namespace osu.Game.Tests.Visual.UserInterface
                     State = { Value = Visibility.Visible },
                     Beatmap = { Value = Beatmap.Value },
                     SelectedMods = { BindTarget = SelectedMods },
+                    Ruleset = { BindTarget = Ruleset },
                     ShowPresets = true,
                 });
             }

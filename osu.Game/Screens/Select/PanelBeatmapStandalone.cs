@@ -21,6 +21,7 @@ using osu.Game.Graphics.Carousel;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
 using osu.Game.EzOsuGame.Analysis;
+using osu.Game.EzOsuGame.Beatmaps;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.UserInterface;
 using osu.Game.Overlays;
@@ -76,6 +77,7 @@ namespace osu.Game.Screens.Select
         private ScheduledDelegate? scheduledEzAnalysisUpdate;
 
         private bool ezAnalysisEnabled;
+        private bool shouldDisplayXxyStarRating;
         private string? scratchText;
 
         private const int mania_ui_update_throttle_ms = 15;
@@ -287,6 +289,7 @@ namespace osu.Game.Screens.Select
             ruleset.BindValueChanged(_ =>
             {
                 ezAnalysisEnabled = ezAnalysisCacheEnabled || ezAnalysisSqliteEnabled;
+                shouldDisplayXxyStarRating = EzXxyStarRatingSupport.SupportsRuleset(ruleset.Value);
 
                 resetEzDisplay();
                 updateKeyCount();
@@ -307,13 +310,7 @@ namespace osu.Game.Screens.Select
 
             var beatmapSet = beatmap.BeatmapSet!;
 
-            scheduledBackgroundRetrieval = Scheduler.AddDelayed(b =>
-            {
-                var workingBeatmap = beatmaps.GetWorkingBeatmap(b);
-                beatmapBackground.Beatmap = workingBeatmap;
-                ezDisplayTag.TagSummary = null;
-                ezDisplayTag.Working = workingBeatmap;
-            }, beatmap, 50);
+            scheduledBackgroundRetrieval = Scheduler.AddDelayed(b => beatmapBackground.Beatmap = beatmaps.GetWorkingBeatmap(b), beatmap, 50);
 
             titleText.Text = new RomanisableString(beatmapSet.Metadata.TitleUnicode, beatmapSet.Metadata.Title);
             artistText.Text = new RomanisableString(beatmapSet.Metadata.ArtistUnicode, beatmapSet.Metadata.Artist);
@@ -331,22 +328,34 @@ namespace osu.Game.Screens.Select
             spreadDisplay.Beatmap.Value = beatmap;
             updateKeyCount();
 
+            resetEzDisplay();
+            ezDisplayTag.Beatmap = beatmap;
+            updateManiaDisplayFromBeatmap();
             computeEzAnalysis();
         }
 
         private void resetEzDisplay()
         {
-            if (ezAnalysisEnabled && ruleset.Value.OnlineID == 3)
-            {
+            // ruleset 变更会广播到所有 panel；仅更新当前在用的可见实例（与 Update 中取消计算的条件一致）。
+            if (Item?.IsVisible != true)
+                return;
+
+            bool showXxy = shouldDisplayXxyStarRating && beatmap.SupportsXxyStarRating();
+
+            if (showXxy)
                 displaySR.Show();
-                ezDisplayKpc.Show();
+            else
+            {
+                displaySR.Current.Value = EzManiaSummary.EMPTY;
+                displaySR.Hide();
             }
+
+            if (ezAnalysisEnabled && showXxy)
+                ezDisplayKpc.Show();
             else
             {
                 ezDisplayKpc.ManiaSummary = null;
                 ezDisplayKpc.Hide();
-                displaySR.Current.Value = EzManiaSummary.EMPTY;
-                displaySR.Hide();
             }
         }
 
@@ -384,8 +393,7 @@ namespace osu.Game.Screens.Select
             if (!resetDisplay)
                 return;
 
-            ezDisplayTag.Working = null;
-            ezDisplayTag.TagSummary = null;
+            ezDisplayTag.Beatmap = null;
             scratchText = null;
 
             displaySR.Current.Value = EzManiaSummary.EMPTY;
@@ -394,16 +402,19 @@ namespace osu.Game.Screens.Select
 
         private void updateKPS(EzAnalysisResult ezAnalysisResult)
         {
+            if (Item?.IsVisible != true)
+                return;
+
             double avgKPS = ezAnalysisResult.AverageKps;
             double maxKps = ezAnalysisResult.MaxKps;
             IReadOnlyList<double> kpsList = ezAnalysisResult.KpsList;
-            ezDisplayKps.SetKps(ezAnalysisResult.Pp, avgKPS, maxKps);
+            double? baselinePp = beatmap.PerformancePoints >= 0
+                ? beatmap.PerformancePoints
+                : ezAnalysisResult.Pp;
+            ezDisplayKps.SetKps(baselinePp, avgKPS, maxKps);
             ezDisplayKpsGraph.SetPoints(kpsList);
 
-            if (ezAnalysisEnabled && ezAnalysisResult.TagSummary != null)
-                ezDisplayTag.TagSummary = ezAnalysisResult.TagSummary;
-
-            if (ezAnalysisEnabled && ruleset.Value.OnlineID == 3)
+            if (shouldDisplayXxyStarRating && beatmap.SupportsXxyStarRating())
             {
                 var maniaSummary = ezAnalysisResult.ManiaSummary;
                 var columnCounts = maniaSummary?.ColumnCounts ?? new Dictionary<int, int>();
@@ -411,8 +422,16 @@ namespace osu.Game.Screens.Select
                 scratchText = EzBeatmapCalculator.GetScratchFromPrecomputed(columnCounts, maxKps, kpsList);
                 updateKeyCount();
                 ezDisplayKpc.ManiaSummary = maniaSummary;
-                displaySR.Current.Value = maniaSummary ?? EzManiaSummary.EMPTY;
+                displaySR.Current.Value = beatmap.ToEzManiaSummaryForDisplay(maniaSummary);
             }
+        }
+
+        private void updateManiaDisplayFromBeatmap()
+        {
+            if (!shouldDisplayXxyStarRating || !beatmap.SupportsXxyStarRating())
+                return;
+
+            displaySR.Current.Value = beatmap.ToEzManiaSummaryForDisplay();
         }
 
         private void computeEzAnalysis()

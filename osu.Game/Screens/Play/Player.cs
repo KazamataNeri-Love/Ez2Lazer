@@ -28,6 +28,7 @@ using osu.Game.Graphics.Containers;
 using osu.Game.IO.Archives;
 using osu.Game.EzOsuGame.Audio;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Online.API;
 using osu.Game.Overlays;
 using osu.Game.Rulesets;
@@ -1071,6 +1072,9 @@ namespace osu.Game.Screens.Play
             if (!canShowResults && !forceImport)
                 return Task.FromResult<ScoreInfo>(null);
 
+            // Persist mania gameplay modes on the score before cloning for import/submission.
+            Score.ScoreInfo.ApplyManiaGameplayModes(DrawableRuleset);
+
             // Clone score before beginning any async processing.
             // - Must be run synchronously as the score may potentially be mutated in the background.
             // - Must be cloned for the same reason.
@@ -1448,6 +1452,9 @@ namespace osu.Game.Screens.Play
             // the import process will re-attach managed beatmap/rulesets to this score. we don't want this for now, so create a temporary copy to import.
             var importableScore = score.ScoreInfo.DeepClone();
 
+            int maniaHitMode = importableScore.ManiaHitMode;
+            int maniaHealthMode = importableScore.ManiaHealthMode;
+
             var imported = scoreManager.Import(importableScore, replayReader);
             Debug.Assert(imported != null);
 
@@ -1457,7 +1464,18 @@ namespace osu.Game.Screens.Play
                 score.ScoreInfo.Hash = s.Hash;
                 score.ScoreInfo.ID = s.ID;
                 score.ScoreInfo.Files.AddRange(s.Files.Detach());
+                score.ScoreInfo.ManiaHitMode = s.ManiaHitMode;
+                score.ScoreInfo.ManiaHealthMode = s.ManiaHealthMode;
             });
+
+            if (maniaHitMode >= 0 && maniaHealthMode >= 0)
+            {
+                imported.PerformWrite(s =>
+                {
+                    s.ManiaHitMode = maniaHitMode;
+                    s.ManiaHealthMode = maniaHealthMode;
+                });
+            }
 
             return Task.CompletedTask;
         }

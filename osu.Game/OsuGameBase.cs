@@ -113,6 +113,9 @@ namespace osu.Game
 
         public virtual EndpointConfiguration CreateEndpoints()
         {
+            if (UseDevelopmentServer && GlobalConfigStore.UseDevelopmentEndpointsForTests)
+                return new DevelopmentEndpointConfiguration();
+
             // 如果Ez2ConfigManager已初始化，根据服务器预设选择对应的配置
             if (Ez2ConfigManager != null)
             {
@@ -205,6 +208,11 @@ namespace osu.Game
         protected EzLocalTextureFactory NoteFactory { get; private set; }
 
         protected EzResourceStore EzResourceStore { get; private set; }
+
+        private Bindable<FrameSync> ezUpdateFrameLimiter = null!;
+        private Bindable<FrameSync> ezDrawFrameLimiter = null!;
+        private Bindable<double> ezBaseFrameLimiter = null!;
+        private bool ezFrameLimiterDisplayModeBound;
 
         /// <summary>
         /// The language in which the game is currently displayed in.
@@ -323,7 +331,7 @@ namespace osu.Game
             GlobalConfigStore.EzConfig = Ez2ConfigManager;
             dependencies.Cache(Ez2ConfigManager);
 
-            bindUpdateFrameLimiter(Ez2ConfigManager);
+            bindFrameLimiter(Ez2ConfigManager, frameworkConfig);
             EzSkinInfo = new EzSkinInfo(Ez2ConfigManager);
             dependencies.CacheAs<IEzSkinInfo>(EzSkinInfo);
             dependencies.CacheAs(EzResourceStore = new EzResourceStore(Ez2ConfigManager, Host.Renderer, Audio, Storage, realm));
@@ -604,6 +612,9 @@ namespace osu.Game
             // 启动脚本皮肤文件监控
             var skinManager = Dependencies.Get<SkinManager>();
             skinManager.StartScriptWatching();
+
+            ensureFrameLimiterDisplayModeBinding();
+            scheduleFrameLimiterApply();
         }
 
         protected override IReadOnlyDependencyContainer CreateChildDependencies(IReadOnlyDependencyContainer parent) =>
@@ -623,28 +634,40 @@ namespace osu.Game
             host.ExceptionThrown += onExceptionThrown;
         }
 
-        private void bindUpdateFrameLimiter(Ez2ConfigManager ezConfig)
+        private void bindFrameLimiter(Ez2ConfigManager ezConfig, FrameworkConfigManager frameworkConfig)
         {
-            var updateFrameLimiter = ezConfig.GetBindable<FrameSync>(Ez2Setting.UpdateFrameLimiter);
+            ezUpdateFrameLimiter = ezConfig.GetBindable<FrameSync>(Ez2Setting.UpdateFrameLimiter);
+            ezDrawFrameLimiter = frameworkConfig.GetBindable<FrameSync>(FrameworkSetting.FrameSync);
+            ezBaseFrameLimiter = ezConfig.GetBindable<double>(Ez2Setting.FrameLimiterBase);
 
-            void apply()
-            {
-                int refreshRate = 60;
+            ezUpdateFrameLimiter.BindValueChanged(_ => scheduleFrameLimiterApply(), true);
+            ezDrawFrameLimiter.BindValueChanged(_ => scheduleFrameLimiterApply(), true);
+            ezBaseFrameLimiter.BindValueChanged(_ => scheduleFrameLimiterApply(), true);
 
-                if (Host.Window != null)
-                {
-                    refreshRate = (int)MathF.Round(Host.Window.CurrentDisplayMode.Value.RefreshRate);
+            ensureFrameLimiterDisplayModeBinding();
+        }
 
-                    if (refreshRate <= 0)
-                        refreshRate = 60;
-                }
+        private void ensureFrameLimiterDisplayModeBinding()
+        {
+            if (ezFrameLimiterDisplayModeBound || Host.Window == null)
+                return;
 
-                Host.MaximumUpdateHz = updateFrameLimiter.Value.ToUpdateHz(refreshRate, Host.AllowBenchmarkUnlimitedFrames);
-            }
+            Host.Window.CurrentDisplayMode.BindValueChanged(_ => scheduleFrameLimiterApply());
+            ezFrameLimiterDisplayModeBound = true;
+        }
 
-            updateFrameLimiter.BindValueChanged(_ => apply(), true);
+        private void scheduleFrameLimiterApply()
+        {
+            // Defer to the update thread so we apply after GameHost.updateFrameSyncMode() during startup.
+            Host?.UpdateThread.Scheduler.Add(applyFrameLimiter);
+        }
 
-            Host.Window?.CurrentDisplayMode.BindValueChanged(_ => apply());
+        private void applyFrameLimiter()
+        {
+            if (Host == null)
+                return;
+
+            EzFrameLimiter.Apply(Host, ezUpdateFrameLimiter.Value, ezDrawFrameLimiter.Value, ezBaseFrameLimiter);
         }
 
         #region Exit handling

@@ -94,6 +94,28 @@ namespace osu.Game.Beatmaps
         /// </summary>
         public double StarRating { get; set; } = -1;
 
+        /// <summary>
+        /// Ez2Lazer: Baseline mania xxy star rating (no mods). Defaults to -1 (not yet calculated). Populated by <see cref="BeatmapUpdater"/>.
+        /// </summary>
+        public double XxyStarRating { get; set; } = -1;
+
+        /// <summary>
+        /// Ez2Lazer: Baseline perfect-play performance points (no mods). Defaults to -1 (not yet calculated). Populated by <see cref="BeatmapUpdater"/>.
+        /// </summary>
+        public double PerformancePoints { get; set; } = -1;
+
+        /// <summary>
+        /// Ez2Lazer: Whether the beatmap set's storyboard file contains a video event.
+        /// Null means not computed yet.
+        /// </summary>
+        public bool? HasVideo { get; set; }
+
+        /// <summary>
+        /// Ez2Lazer: Whether the beatmap set's storyboard file contains sprite/animation events.
+        /// Null means not computed yet.
+        /// </summary>
+        public bool? HasStoryboard { get; set; }
+
         [Indexed]
         public string MD5Hash { get; set; } = string.Empty;
 

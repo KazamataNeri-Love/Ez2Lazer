@@ -28,7 +28,9 @@ using osu.Game.Online.Leaderboards;
 using osu.Game.Overlays;
 using osu.Game.Resources.Localisation.Web;
 using osu.Game.Rulesets.Mods;
+using osu.Game.Rulesets.Scoring;
 using osu.Game.Rulesets.UI;
+using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Scoring;
 using osu.Game.Utils;
 using osuTK;
@@ -120,19 +122,26 @@ namespace osu.Game.Screens.Select
                         var judgementsStatistics = value.GetStatisticsForDisplay().Select(s =>
                             new StatisticRow(s.DisplayName.ToUpper(), s.Count.ToLocalisableString("N0"), colours.ForHitResult(s.Result)));
 
-                        double multiplier = 1.0;
+                        var ruleset = value.Ruleset.CreateInstance();
+                        var scoreMultiplierCalculator = ruleset.CreateScoreMultiplierCalculator(new ScoreMultiplierContext());
+                        double multiplier = scoreMultiplierCalculator.CalculateFor(value.Mods);
 
-                        foreach (var mod in value.Mods)
-                            multiplier *= mod.ScoreMultiplier;
-
-                        var generalStatistics = new[]
+                        var generalStatistics = new List<Drawable>
                         {
                             new StatisticRow(BeatmapsetsStrings.ShowScoreboardHeadersCombo, value.MaxCombo.ToLocalisableString(@"0\x")),
                             new StatisticRow(BeatmapsetsStrings.ShowScoreboardHeadersAccuracy, value.Accuracy.FormatAccuracy()),
                             new PerformanceStatisticRow(BeatmapsetsStrings.ShowScoreboardHeaderspp.ToUpper(), score),
-                            Empty().With(d => d.Height = 20),
-                            new StatisticRow(ModSelectOverlayStrings.ScoreMultiplier, ModUtils.FormatScoreMultiplier(multiplier)),
                         };
+
+                        if (value.TryGetManiaGameplayModes(out int hitMode, out int healthMode))
+                        {
+                            generalStatistics.Add(Empty().With(d => d.Height = 10));
+                            generalStatistics.Add(new StatisticRow("HIT", EzManiaScoreModeExtensions.GetHitModeDisplayName(hitMode)));
+                            generalStatistics.Add(new StatisticRow("HP", EzManiaScoreModeExtensions.GetHealthModeDisplayName(healthMode)));
+                        }
+
+                        generalStatistics.Add(Empty().With(d => d.Height = 20));
+                        generalStatistics.Add(new StatisticRow(ModSelectOverlayStrings.ScoreMultiplier, ModUtils.FormatScoreMultiplier(multiplier)));
 
                         statistics.ChildrenEnumerable = judgementsStatistics
                                                         .Append(Empty().With(d => d.Height = 20))

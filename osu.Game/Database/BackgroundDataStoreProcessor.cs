@@ -17,6 +17,7 @@ using osu.Framework.Logging;
 using osu.Framework.Platform;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
+using osu.Game.EzOsuGame.Analysis;
 using osu.Game.Extensions;
 using osu.Game.Online.API;
 using osu.Game.Overlays;
@@ -75,7 +76,48 @@ namespace osu.Game.Database
 
         private LocalCachedBeatmapMetadataSource localMetadataSource = null!;
 
+        private readonly object ezRealmBackfillLock = new object();
+        private bool ezRealmBackfillQueued;
+
         protected virtual int TimeToSleepDuringGameplay => 30000;
+
+        /// <summary>
+        /// Queue Ez Realm metadata backfill (Tag / XxySR / PP) on a background thread.
+        /// </summary>
+        /// <param name="forceAll">When true, clears persisted values first so all supported beatmaps are recomputed.</param>
+        public void QueueEzRealmMetadataBackfill(bool forceAll = false)
+        {
+            lock (ezRealmBackfillLock)
+            {
+                if (ezRealmBackfillQueued)
+                {
+                    Logger.Log("Ez Realm metadata backfill is already running; ignoring duplicate request.");
+                    return;
+                }
+
+                ezRealmBackfillQueued = true;
+            }
+
+            Task.Factory.StartNew(() =>
+            {
+                try
+                {
+                    if (forceAll)
+                        forceEzRealmMetadataRecalculation();
+
+                    runEzRealmMetadataBackfill();
+                }
+                catch (Exception e)
+                {
+                    Logger.Log($"Ez Realm metadata backfill failed: {e}");
+                }
+                finally
+                {
+                    lock (ezRealmBackfillLock)
+                        ezRealmBackfillQueued = false;
+                }
+            }, TaskCreationOptions.LongRunning);
+        }
 
         protected override void LoadComplete()
         {
@@ -85,18 +127,30 @@ namespace osu.Game.Database
 
             ProcessingTask = Task.Factory.StartNew(() =>
             {
-                Logger.Log("Beginning background data store processing..");
+                try
+                {
+                    Logger.Log("Beginning background data store processing..");
 
-                clearOutdatedStarRatings();
-                populateMissingStarRatings();
-                processOnlineBeatmapSetsWithNoUpdate();
-                // Note that the previous method will also update these on a fresh run.
-                processBeatmapsWithMissingObjectCounts();
-                processScoresWithMissingStatistics();
-                convertLegacyTotalScoreToStandardised();
-                upgradeScoreRanks();
-                backpopulateMissingSubmissionAndRankDates();
-                backpopulateUserTags();
+                    clearOutdatedStarRatings();
+                    clearOutdatedXxyStarRatings();
+
+                    // Run Ez Realm backfill before official star population so it is not blocked for long periods.
+                    runEzRealmMetadataBackfill();
+
+                    populateMissingStarRatings();
+                    processOnlineBeatmapSetsWithNoUpdate();
+                    // Note that the previous method will also update these on a fresh run.
+                    processBeatmapsWithMissingObjectCounts();
+                    processScoresWithMissingStatistics();
+                    convertLegacyTotalScoreToStandardised();
+                    upgradeScoreRanks();
+                    backpopulateMissingSubmissionAndRankDates();
+                    backpopulateUserTags();
+                }
+                catch (Exception e)
+                {
+                    Logger.Log($"Background data store processing failed: {e}");
+                }
             }, TaskCreationOptions.LongRunning).ContinueWith(t =>
             {
                 if (t.Exception?.InnerException is ObjectDisposedException)
@@ -143,6 +197,86 @@ namespace osu.Game.Database
                     Logger.Log($"Finished resetting {countReset} beatmap sets for {ruleset.Name}");
                 }
             }
+        }
+
+        /// <summary>
+        /// Check whether the databased xxy calculation version matches the latest ruleset provided version.
+        /// If it doesn't, clear out existing xxy values so they can be incrementally recalculated.
+        /// </summary>
+        private void clearOutdatedXxyStarRatings()
+        {
+            foreach (var ruleset in rulesetStore.AvailableRulesets)
+            {
+                if (!EzXxyStarRatingSupport.SupportsRuleset(ruleset))
+                    continue;
+
+                int currentVersion = ruleset.CreateInstance().CreateDifficultyCalculator(gameBeatmap.Value).Version;
+
+                if (ruleset.LastAppliedXxySrVersion < currentVersion)
+                {
+                    Logger.Log($"Resetting XxyStarRatings for {ruleset.Name} (XxySR version updated from {ruleset.LastAppliedXxySrVersion} to {currentVersion})");
+
+                    int countReset = 0;
+
+                    realmAccess.Write(r =>
+                    {
+                        foreach (var b in r.All<BeatmapInfo>())
+                        {
+                            if (b.Ruleset.ShortName == ruleset.ShortName)
+                            {
+                                b.XxyStarRating = -1;
+                                countReset++;
+                            }
+                        }
+
+                        r.Find<RulesetInfo>(ruleset.ShortName)!.LastAppliedXxySrVersion = currentVersion;
+                    });
+
+                    Logger.Log($"Finished resetting {countReset} beatmaps for xxy {ruleset.Name}");
+                }
+            }
+        }
+
+        private void runEzRealmMetadataBackfill()
+        {
+            populateMissingXxyStarRatings();
+            populateMissingPerformancePoints();
+            populateMissingBeatmapTagFlags();
+        }
+
+        private void forceEzRealmMetadataRecalculation()
+        {
+            Logger.Log("Forcing Ez Realm metadata recalculation (Tag / XxySR / PP)...");
+
+            int beatmapCount = 0;
+
+            realmAccess.Write(r =>
+            {
+                foreach (var beatmap in r.All<BeatmapInfo>())
+                {
+                    if (beatmap.BeatmapSet == null)
+                        continue;
+
+                    beatmap.HasVideo = null;
+                    beatmap.HasStoryboard = null;
+
+                    // Third-party / unavailable rulesets: keep persisted xxy/pp until the assembly is loadable again.
+                    if (!EzXxyStarRatingSupport.IsRulesetAvailable(beatmap.Ruleset))
+                    {
+                        beatmapCount++;
+                        continue;
+                    }
+
+                    beatmap.PerformancePoints = -1;
+
+                    if (EzXxyStarRatingSupport.SupportsRuleset(beatmap.Ruleset))
+                        beatmap.XxyStarRating = -1;
+
+                    beatmapCount++;
+                }
+            });
+
+            Logger.Log($"Marked {beatmapCount} beatmaps for Ez Realm metadata recalculation.");
         }
 
         /// <remarks>
@@ -194,7 +328,10 @@ namespace osu.Game.Database
                 var beatmap = realmAccess.Run(r => r.Find<BeatmapInfo>(id)?.Detach());
 
                 if (beatmap == null)
-                    return;
+                {
+                    ++failedCount;
+                    continue;
+                }
 
                 try
                 {
@@ -217,6 +354,213 @@ namespace osu.Game.Database
                 catch (Exception e)
                 {
                     Logger.Log($"Background processing failed on {beatmap}: {e}");
+                    ++failedCount;
+                }
+            }
+
+            completeNotification(notification, processedCount, beatmapIds.Count, failedCount);
+        }
+
+        /// <summary>
+        /// Incrementally backfill missing baseline xxy star ratings on <see cref="BeatmapInfo"/>.
+        /// Behaviour intentionally mirrors <see cref="populateMissingStarRatings"/>: beatmap-level query, beatmap-level compute and write.
+        /// </summary>
+        private void populateMissingXxyStarRatings()
+        {
+            HashSet<Guid> beatmapIds = new HashSet<Guid>();
+
+            Logger.Log("Querying for beatmaps with missing xxy star ratings...");
+
+            realmAccess.Run(r =>
+            {
+                foreach (var b in r.All<BeatmapInfo>().Where(b => b.XxyStarRating < 0 && b.BeatmapSet != null).AsEnumerable()
+                                   .Where(b => EzXxyStarRatingSupport.SupportsRuleset(b.Ruleset)))
+                    beatmapIds.Add(b.ID);
+            });
+
+            if (beatmapIds.Count == 0)
+                return;
+
+            Logger.Log($"Found {beatmapIds.Count} beatmaps which require xxy star rating reprocessing.");
+
+            var notification = showProgressNotification(beatmapIds.Count, "Reprocessing xxy star rating for beatmaps", "beatmaps' xxy star ratings have been updated");
+
+            int processedCount = 0;
+            int failedCount = 0;
+
+            foreach (Guid id in beatmapIds)
+            {
+                if (notification?.State == ProgressNotificationState.Cancelled)
+                    break;
+
+                updateNotificationProgress(notification, processedCount, beatmapIds.Count);
+
+                sleepIfRequired();
+
+                var beatmap = realmAccess.Run(r => r.Find<BeatmapInfo>(id)?.Detach());
+
+                if (beatmap == null)
+                {
+                    ++failedCount;
+                    continue;
+                }
+
+                try
+                {
+                    double xxyStarRating = beatmapUpdater.ComputeXxyStarRating(beatmap);
+
+                    realmAccess.Write(r =>
+                    {
+                        if (r.Find<BeatmapInfo>(id) is BeatmapInfo liveBeatmapInfo)
+                            liveBeatmapInfo.XxyStarRating = xxyStarRating;
+                    });
+                    ((IWorkingBeatmapCache)beatmapManager).Invalidate(beatmap);
+                    ++processedCount;
+                }
+                catch (Exception e)
+                {
+                    Logger.Log($"Background xxy processing failed on {beatmap}: {e}");
+                    ++failedCount;
+                }
+            }
+
+            completeNotification(notification, processedCount, beatmapIds.Count, failedCount);
+        }
+
+        /// <summary>
+        /// Backfill Ez Realm tag columns on <see cref="BeatmapInfo"/> (baseline HasVideo/HasStoryboard).
+        /// This method is intentionally separated from <see cref="BeatmapUpdater.Process"/> so we don't accidentally
+        /// recompute unrelated fields (star / xxy / pp) during PP/xxy backfills.
+        /// </summary>
+        private void populateMissingBeatmapTagFlags()
+        {
+            HashSet<Guid> beatmapIds = new HashSet<Guid>();
+            Logger.Log("Querying for beatmaps requiring Ez Realm tag backfill...");
+
+            realmAccess.Run(r =>
+            {
+                foreach (var beatmap in r.All<BeatmapInfo>().Where(b => b.BeatmapSet != null).AsEnumerable()
+                                         .Where(b => b.HasVideo == null || b.HasStoryboard == null))
+                    beatmapIds.Add(beatmap.ID);
+            });
+
+            if (beatmapIds.Count == 0)
+                return;
+
+            Logger.Log($"Found {beatmapIds.Count} beatmaps which require Ez Realm tag population.");
+
+            var notification = showProgressNotification(
+                beatmapIds.Count,
+                "Populating Ez beatmap tags in Realm",
+                "beatmaps have been updated with Ez tags");
+
+            int processedCount = 0;
+            int failedCount = 0;
+
+            foreach (var id in beatmapIds)
+            {
+                if (notification?.State == ProgressNotificationState.Cancelled)
+                    break;
+
+                updateNotificationProgress(notification, processedCount, beatmapIds.Count);
+
+                sleepIfRequired();
+
+                var beatmap = realmAccess.Run(r => r.Find<BeatmapInfo>(id)?.Detach());
+
+                if (beatmap == null)
+                {
+                    ++failedCount;
+                    continue;
+                }
+
+                try
+                {
+                    var working = beatmapManager.GetWorkingBeatmap(beatmap);
+                    var tagSummary = EzBeatmapTagParser.Parse(working);
+
+                    realmAccess.Write(r =>
+                    {
+                        if (r.Find<BeatmapInfo>(id) is BeatmapInfo liveBeatmapInfo)
+                        {
+                            liveBeatmapInfo.HasVideo = tagSummary.HasVideo;
+                            liveBeatmapInfo.HasStoryboard = tagSummary.HasStoryboard;
+                        }
+                    });
+
+                    ((IWorkingBeatmapCache)beatmapManager).Invalidate(beatmap);
+                    ++processedCount;
+                }
+                catch (Exception e)
+                {
+                    Logger.Log($"Background tag processing failed on {beatmap}: {e}");
+                    ++failedCount;
+                }
+            }
+
+            completeNotification(notification, processedCount, beatmapIds.Count, failedCount);
+        }
+
+        private void populateMissingPerformancePoints()
+        {
+            HashSet<Guid> beatmapIds = new HashSet<Guid>();
+
+            Logger.Log("Querying for beatmaps with missing baseline PP...");
+
+            realmAccess.Run(r =>
+            {
+                foreach (var b in r.All<BeatmapInfo>().Where(b => b.BeatmapSet != null && b.PerformancePoints < 0).AsEnumerable()
+                                   .Where(b => EzXxyStarRatingSupport.IsRulesetAvailable(b.Ruleset)))
+                    beatmapIds.Add(b.ID);
+            });
+
+            if (beatmapIds.Count == 0)
+                return;
+
+            Logger.Log($"Found {beatmapIds.Count} beatmaps which require PP reprocessing.");
+
+            var notification = showProgressNotification(beatmapIds.Count, "Reprocessing baseline PP for beatmaps", "beatmaps' baseline PP has been updated");
+
+            int processedCount = 0;
+            int failedCount = 0;
+
+            foreach (Guid id in beatmapIds)
+            {
+                if (notification?.State == ProgressNotificationState.Cancelled)
+                    break;
+
+                updateNotificationProgress(notification, processedCount, beatmapIds.Count);
+
+                sleepIfRequired();
+
+                var beatmap = realmAccess.Run(r => r.Find<BeatmapInfo>(id)?.Detach());
+
+                if (beatmap == null)
+                {
+                    ++failedCount;
+                    continue;
+                }
+
+                try
+                {
+                    var lookup = new EzAnalysisLookupCache(beatmap, beatmap.Ruleset, mods: null);
+
+                    double performancePoints = EzAnalysisComputation.TryComputePerformancePoints(beatmapManager, lookup, CancellationToken.None, out double computedPp)
+                        ? computedPp
+                        : -1;
+
+                    realmAccess.Write(r =>
+                    {
+                        if (r.Find<BeatmapInfo>(id) is BeatmapInfo liveBeatmapInfo)
+                            liveBeatmapInfo.PerformancePoints = performancePoints;
+                    });
+
+                    ((IWorkingBeatmapCache)beatmapManager).Invalidate(beatmap);
+                    ++processedCount;
+                }
+                catch (Exception e)
+                {
+                    Logger.Log($"Background PP processing failed on {beatmap}: {e}");
                     ++failedCount;
                 }
             }
@@ -853,11 +1197,17 @@ namespace osu.Game.Database
             if (notification == null)
                 return;
 
-            notification.Text = notification.Text.ToString().Split('(').First().TrimEnd() + $" ({processedCount} of {totalCount})";
-            notification.Progress = (float)processedCount / totalCount;
+            Schedule(() =>
+            {
+                if (notification.State == ProgressNotificationState.Cancelled)
+                    return;
+
+                notification.Text = notification.Text.ToString().Split('(').First().TrimEnd() + $" ({processedCount} of {totalCount})";
+                notification.Progress = (float)processedCount / totalCount;
+            });
 
             if (processedCount > 0 && processedCount % 100 == 0)
-                Logger.Log(notification.Text.ToString());
+                Logger.Log($"Background progress: {processedCount} of {totalCount}");
         }
 
         private void completeNotification(ProgressNotification? notification, int processedCount, int totalCount, int? failedCount = null)
@@ -865,35 +1215,38 @@ namespace osu.Game.Database
             if (notification == null)
                 return;
 
-            if (totalCount == 0)
+            Schedule(() =>
             {
-                notification.CompleteSilently();
-            }
-            else if (processedCount == totalCount)
-            {
-                notification.CompletionText = $"{processedCount} {notification.CompletionText}";
-                notification.Progress = 1;
-                notification.State = ProgressNotificationState.Completed;
-            }
-            else
-            {
-                notification.Text = $"{processedCount} of {totalCount} {notification.CompletionText}";
+                if (totalCount == 0)
+                {
+                    notification.CompleteSilently();
+                }
+                else if (processedCount == totalCount)
+                {
+                    notification.CompletionText = $"{processedCount} {notification.CompletionText}";
+                    notification.Progress = 1;
+                    notification.State = ProgressNotificationState.Completed;
+                }
+                else
+                {
+                    notification.Text = $"{processedCount} of {totalCount} {notification.CompletionText}";
 
-                // We may have arrived here due to user cancellation or completion with failures.
-                if (failedCount > 0)
-                    notification.Text += $" Check logs for issues with {failedCount} failed items.";
+                    // We may have arrived here due to user cancellation or completion with failures.
+                    if (failedCount > 0)
+                        notification.Text += $" Check logs for issues with {failedCount} failed items.";
 
-                notification.State = ProgressNotificationState.Cancelled;
-            }
+                    notification.State = ProgressNotificationState.Cancelled;
+                }
+            });
         }
 
         private ProgressNotification? showProgressNotification(int totalCount, string running, string completed)
         {
             if (notificationOverlay == null)
+            {
+                Logger.Log("Background progress notification skipped because INotificationOverlay is unavailable.");
                 return null;
-
-            if (totalCount < 10)
-                return null;
+            }
 
             ProgressNotification notification = new ProgressNotification
             {
@@ -902,7 +1255,7 @@ namespace osu.Game.Database
                 State = ProgressNotificationState.Active
             };
 
-            notificationOverlay?.Post(notification);
+            Schedule(() => notificationOverlay?.Post(notification));
 
             return notification;
         }

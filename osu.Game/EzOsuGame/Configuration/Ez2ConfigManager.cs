@@ -8,6 +8,7 @@ using System.Text;
 using JetBrains.Annotations;
 using osu.Framework.Bindables;
 using osu.Framework.Configuration;
+using osu.Framework.Development;
 using osu.Framework.Graphics;
 using osu.Framework.Platform;
 using osu.Game.Configuration;
@@ -69,6 +70,14 @@ namespace osu.Game.EzOsuGame.Configuration
         {
         }
 
+        protected override void PerformLoad()
+        {
+            if (DebugUtils.IsNUnitRunning)
+                return;
+
+            base.PerformLoad();
+        }
+
         protected override void InitialiseDefaults()
         {
             #region 全局游戏与界面设置
@@ -79,11 +88,13 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.AccuracyCutoffS, 0.95, 0.95, 1, 0.005);
             SetDefault(Ez2Setting.AccuracyCutoffA, 0.9, 0.9, 1, 0.005);
 
+            // 0 = 尚未设置，首次启动时用显示器刷新率写入
+            SetDefault(Ez2Setting.FrameLimiterBase, EzFrameLimiter.UNINITIALISED_BASE, 60.0, 720.0, 1.0);
             SetDefault(Ez2Setting.UpdateFrameLimiter, FrameSync.Unlimited);
             SetDefault(Ez2Setting.EzAnalysisRecEnabled, true);
             SetDefault(Ez2Setting.EzAnalysisSqliteEnabled, true);
             SetDefault(Ez2Setting.HideMainMenuOnlineBanner, false);
-            SetDefault(Ez2Setting.HitObjectLifetimeUsesOwnTime, true);
+            SetDefault(Ez2Setting.HitObjectLifetimeUsesOwnTime, !DebugUtils.IsNUnitRunning);
             SetDefault(Ez2Setting.ManiaSkipEmptyEdgeColumns, false);
 
             SetDefault(Ez2Setting.StoryboardAutoVideoSize, false);
@@ -92,7 +103,8 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.BeatmapPreviewDensity, 1.0, 0.1, 5.0, 0.05);
             SetDefault(Ez2Setting.EditorSyncTimelineSpacing, true);
 
-            SetDefault(Ez2Setting.SqliteFilter, false);
+            SetDefault(Ez2Setting.EzAnalysisFilter, false);
+            SetDefault(Ez2Setting.EzRealmMetadataBackfillVersion, 0);
             SetDefault(Ez2Setting.EzSelectCsMode, string.Empty);
             SetDefault(Ez2Setting.ColumnTypeListSelect, 4);
 
@@ -101,7 +113,9 @@ namespace osu.Game.EzOsuGame.Configuration
             #region 音频与输入
 
             SetDefault(Ez2Setting.AsioSampleRate, 48000);
+            SetDefault(Ez2Setting.AsioBitDepth, 24);
             SetDefault(Ez2Setting.AsioBufferSize, 128);
+            SetDefault(Ez2Setting.AsioPassThrough, false);
 
             SetDefault(Ez2Setting.OffsetPlusMania, 0.0, -200.0, 200.0, 1.0);
             SetDefault(Ez2Setting.OffsetPlusNonMania, 0.0, -200.0, 200.0, 1.0);
@@ -196,7 +210,7 @@ namespace osu.Game.EzOsuGame.Configuration
         {
             SetDefault(Ez2Setting.ManiaHitMode, EzEnumHitMode.Lazer);
             SetDefault(Ez2Setting.ManiaHealthMode, EzEnumHealthMode.Lazer);
-            SetDefault(Ez2Setting.BmsPoorHitResultEnable, true);
+            SetDefault(Ez2Setting.BmsPoorHitResultEnable, !DebugUtils.IsNUnitRunning);
             SetDefault(Ez2Setting.JudgePrecedence, EzEnumJudgePrecedence.Earliest);
             SetDefault(Ez2Setting.ManiaBarLinesBool, true);
 
@@ -741,6 +755,7 @@ namespace osu.Game.EzOsuGame.Configuration
         AccuracyCutoffS,
         AccuracyCutoffA,
 
+        FrameLimiterBase,
         UpdateFrameLimiter,
 
         EzAnalysisRecEnabled,
@@ -755,13 +770,20 @@ namespace osu.Game.EzOsuGame.Configuration
         BeatmapPreviewDensity,
         EditorSyncTimelineSpacing,
 
-        SqliteFilter,
+        EzAnalysisFilter,
+
+        /// <summary>
+        /// Last Ez Realm metadata schema version for which tag/xxy/PP backfill completed (see RealmAccess.EZ_REALM_SCHEMA_VERSION).
+        /// </summary>
+        EzRealmMetadataBackfillVersion,
         EzSelectCsMode,
         ColumnTypeListSelect,
 
         // 音频与输入
         AsioSampleRate,
+        AsioBitDepth,
         AsioBufferSize,
+        AsioPassThrough,
         OffsetPlusMania,
         OffsetPlusNonMania,
         HitObjectLifetimeUsesOwnTime,

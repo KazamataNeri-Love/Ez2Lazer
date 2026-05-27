@@ -77,6 +77,8 @@ namespace osu.Game.EzOsuGame.Overlays
         private readonly Container panelContainer;
         private readonly Container stageViewport;
         private readonly Container stageScaleContainer;
+        private readonly Container stageAreaContainer;
+        private readonly Container bottomControlsContainer;
         private readonly ProgressBar timeline;
         private readonly OsuSpriteText progressText;
         private readonly OsuSpriteText stateText;
@@ -116,6 +118,7 @@ namespace osu.Game.EzOsuGame.Overlays
         private ScheduledDelegate? scheduledSelectionLoad;
         private Drawable? pendingPreviewRoot;
         private DrawableRuleset? drawableRuleset;
+        private IManiaStaticPreviewRenderer? maniaStaticRenderer;
         private PreviewDensityController densityController = null!;
         private Bindable<double> previewDensity = null!;
 
@@ -131,11 +134,20 @@ namespace osu.Game.EzOsuGame.Overlays
         private string currentBeatmapHash = string.Empty;
 
         // 指示在隐藏时是否应立即释放所有引用（默认 true：隐藏即释放）。
-        private bool releaseOnHide = true;
+        private bool releaseOnHide { get; } = true;
 
         private bool dynamicMode => previewMode.Value == EzBeatmapPreviewMode.Dynamic;
 
+        private bool customManiaStaticMode => isManiaRuleset(currentRuleset)
+                                              && (previewMode.Value == EzBeatmapPreviewMode.StaticFullMap || previewMode.Value == EzBeatmapPreviewMode.StaticScroll);
+
+        private bool fullMapMode => previewMode.Value == EzBeatmapPreviewMode.StaticFullMap;
+        private bool scrollMode => previewMode.Value == EzBeatmapPreviewMode.StaticScroll;
+
         private bool expanded;
+        private bool fullMapFocusActive;
+        private float focusSavedPanelWidth;
+        private float focusSavedPanelHeight;
 
         public readonly Bindable<bool> ExpandedState = new Bindable<bool>();
 
@@ -189,7 +201,7 @@ namespace osu.Game.EzOsuGame.Overlays
                                 Direction = FillDirection.Vertical,
                                 Spacing = new Vector2(0, preview_mode_button_spacing),
                             },
-                            new Container
+                            stageAreaContainer = new Container
                             {
                                 RelativeSizeAxes = Axes.Both,
                                 Padding = new MarginPadding
@@ -234,7 +246,7 @@ namespace osu.Game.EzOsuGame.Overlays
                                     }
                                 }
                             },
-                            new Container
+                            bottomControlsContainer = new Container
                             {
                                 RelativeSizeAxes = Axes.X,
                                 Height = bottom_controls_height,
@@ -295,8 +307,8 @@ namespace osu.Game.EzOsuGame.Overlays
                 }
             };
 
-            timeline.OnSeek = time => seekTo(time, dynamicMode);
-            timeline.OnCommit = time => seekTo(time, dynamicMode);
+            timeline.OnSeek = onTimelineSeek;
+            timeline.OnCommit = onTimelineCommit;
 
             createPreviewModeButtons();
             // 初始化对外可观察的展开状态
@@ -341,6 +353,8 @@ namespace osu.Game.EzOsuGame.Overlays
             panelContainer.MoveTo(new Vector2(panel_left_margin, 14));
             panelContainer.FadeIn(160, Easing.OutQuint);
             panelContainer.MoveToY(0, 160, Easing.OutQuint);
+
+            updatePreviewControlsLayout();
 
             if (selectionDirty)
                 scheduleSelectionLoad();
@@ -612,27 +626,40 @@ namespace osu.Game.EzOsuGame.Overlays
                 }
             }
 
-            panelWidth = panelWidthManuallyAdjusted
-                ? clampPanelWidth(panelWidth <= 0 ? getDefaultPanelWidth() : panelWidth)
-                : getDefaultPanelWidth();
-
-            panelHeight = clampPanelHeight(panelHeight);
-
             float targetPanelY = expanded ? 0 : 14;
+            float displayPanelWidth;
+            float displayPanelHeight;
 
-            if (panelWidth != lastAppliedPanelWidth)
+            if (!fullMapFocusActive)
             {
-                panelContainer.Width = panelWidth;
-                lastAppliedPanelWidth = panelWidth;
+                panelWidth = panelWidthManuallyAdjusted
+                    ? clampPanelWidth(panelWidth <= 0 ? getDefaultPanelWidth() : panelWidth)
+                    : getDefaultPanelWidth();
+
+                panelHeight = clampPanelHeight(panelHeight);
+                displayPanelWidth = panelWidth;
+                displayPanelHeight = panelHeight;
+            }
+            else
+            {
+                displayPanelWidth = DrawWidth;
+                displayPanelHeight = DrawHeight;
+                targetPanelY = 0;
             }
 
-            if (panelHeight != lastAppliedPanelHeight)
+            if (displayPanelWidth != lastAppliedPanelWidth)
             {
-                panelContainer.Height = panelHeight;
-                lastAppliedPanelHeight = panelHeight;
+                panelContainer.Width = displayPanelWidth;
+                lastAppliedPanelWidth = displayPanelWidth;
             }
 
-            panelContainer.X = panel_left_margin;
+            if (displayPanelHeight != lastAppliedPanelHeight)
+            {
+                panelContainer.Height = displayPanelHeight;
+                lastAppliedPanelHeight = displayPanelHeight;
+            }
+
+            panelContainer.X = fullMapFocusActive ? 0 : panel_left_margin;
 
             if (targetPanelY != lastAppliedPanelY)
             {
@@ -643,7 +670,7 @@ namespace osu.Game.EzOsuGame.Overlays
             float viewportWidth = stageViewport.DrawWidth;
             float viewportHeight = stageViewport.DrawHeight;
 
-            if (viewportWidth != lastViewportWidth || viewportHeight != lastViewportHeight)
+            if (!customManiaStaticMode && (viewportWidth != lastViewportWidth || viewportHeight != lastViewportHeight))
             {
                 float scale = Math.Min(viewportWidth / stageScaleContainer.Width, viewportHeight / stageScaleContainer.Height);
                 float clampedScale = Math.Max(0.05f, scale);
@@ -660,6 +687,14 @@ namespace osu.Game.EzOsuGame.Overlays
 
             if (!expanded)
                 return;
+
+            if (customManiaStaticMode && maniaStaticRenderer != null)
+            {
+                if (scrollMode)
+                    maniaStaticRenderer.SetDensity((float)previewDensity.Value);
+
+                return;
+            }
 
             if (dynamicMode && drawableRuleset != null)
             {
@@ -722,12 +757,26 @@ namespace osu.Game.EzOsuGame.Overlays
             if (base.OnMouseDown(e))
                 return true;
 
+            if (customManiaStaticMode && fullMapMode && stageViewport.ReceivePositionalInputAt(e.ScreenSpaceMousePosition))
+            {
+                setFullMapFocusState(true);
+                return true;
+            }
+
             return isWithinPanel(e.ScreenSpaceMousePosition);
+        }
+
+        protected override void OnMouseUp(MouseUpEvent e)
+        {
+            if (fullMapFocusActive)
+                setFullMapFocusState(false);
+
+            base.OnMouseUp(e);
         }
 
         protected override bool OnScroll(ScrollEvent e)
         {
-            if (!expanded || drawableRuleset == null)
+            if (!expanded)
                 return base.OnScroll(e);
 
             var panelQuad = panelContainer.ScreenSpaceDrawQuad;
@@ -738,6 +787,39 @@ namespace osu.Game.EzOsuGame.Overlays
                 return base.OnScroll(e);
 
             // Alt + Scroll: 调整滚动规则集的时间跨度（note 疏密）
+            if (e.CurrentState.Keyboard.AltPressed && customManiaStaticMode)
+            {
+                float before = (float)previewDensity.Value;
+                float after = Math.Clamp(before + Math.Sign(e.ScrollDelta.Y) * 0.05f, 0.1f, 5f);
+
+                if (Math.Abs(after - before) > 0.001f)
+                {
+                    previewDensity.Value = after;
+                    maniaStaticRenderer?.SetDensity(after);
+                    string densityText = $"{after:F2}x";
+                    setStateText(densityText);
+
+                    Scheduler.AddDelayed(() =>
+                    {
+                        if (stateText.Text == densityText)
+                            setStateText(string.Empty);
+                    }, 1000);
+
+                    return true;
+                }
+            }
+
+            if (previewMode.Value == EzBeatmapPreviewMode.StaticScroll
+                && maniaStaticRenderer is StaticScrollPreviewRenderer scrollRenderer)
+            {
+                scrollRenderer.AdjustScroll(-e.ScrollDelta.Y * 48f);
+                syncTimelineFromScroll(scrollRenderer.GetScrollProgress());
+                return true;
+            }
+
+            if (drawableRuleset == null)
+                return base.OnScroll(e);
+
             if (e.CurrentState.Keyboard.AltPressed
                 && drawableRuleset is IDrawableScrollingRuleset scrolling
                 && densityController.TryAdjust(scrolling, Math.Sign(e.ScrollDelta.Y), out float displayDensity))
@@ -834,11 +916,18 @@ namespace osu.Game.EzOsuGame.Overlays
             if (cancellationToken.IsCancellationRequested || eventVersion != selectionEventVersion || !expanded)
                 return;
 
-            if (cancellationToken.IsCancellationRequested || eventVersion != selectionEventVersion || !expanded)
+            if (isManiaRuleset(rulesetInfo)
+                && (previewMode.Value == EzBeatmapPreviewMode.StaticFullMap || previewMode.Value == EzBeatmapPreviewMode.StaticScroll))
+            {
+                setupManiaStaticPreview(playableBeatmap);
                 return;
+            }
 
             var ruleset = rulesetInfo.CreateInstance();
             var newDrawableRuleset = ruleset.CreateDrawableRulesetWith(playableBeatmap);
+
+            stageScaleContainer.RelativeSizeAxes = Axes.None;
+            stageScaleContainer.Size = new Vector2(640, 480);
 
             newDrawableRuleset.Clock = framedPreviewClock;
             newDrawableRuleset.FrameStablePlayback = false;
@@ -867,6 +956,7 @@ namespace osu.Game.EzOsuGame.Overlays
 
                 stageScaleContainer.Child = loaded;
                 drawableRuleset = newDrawableRuleset;
+                maniaStaticRenderer = null;
 
                 // Capture after the ruleset has finished loading so TargetTimeRange / TimeRange are initialised.
                 Schedule(() =>
@@ -931,11 +1021,69 @@ namespace osu.Game.EzOsuGame.Overlays
                 previewClock.Seek(clamped);
             }
 
+            if (scrollMode)
+                syncScrollRendererFromTime(clamped);
+
             updateProgressDisplay(clamped);
+        }
+
+        private void onTimelineSeek(double time)
+        {
+            if (scrollMode)
+            {
+                seekTo(time);
+                return;
+            }
+
+            seekTo(time, dynamicMode);
+        }
+
+        private void onTimelineCommit(double time) => onTimelineSeek(time);
+
+        private void syncScrollRendererFromTime(double time)
+        {
+            if (maniaStaticRenderer is not StaticScrollPreviewRenderer scroll)
+                return;
+
+            float progress = beatmapMaxTime > beatmapMinTime
+                ? (float)((time - beatmapMinTime) / (beatmapMaxTime - beatmapMinTime))
+                : 0;
+
+            scroll.SetScrollProgress(progress);
+        }
+
+        private void syncTimelineFromScroll(float progress)
+        {
+            double time = beatmapMaxTime <= beatmapMinTime
+                ? 0
+                : beatmapMinTime + progress * (beatmapMaxTime - beatmapMinTime);
+
+            previewClock.Stop();
+            previewClock.Seek(time);
+            updateProgressDisplay(time);
+        }
+
+        private void updatePreviewControlsLayout()
+        {
+            bool showTimeline = expanded && !fullMapFocusActive && !fullMapMode;
+
+            bottomControlsContainer.Height = showTimeline ? bottom_controls_height : 0;
+            bottomControlsContainer.Alpha = showTimeline ? 1 : 0;
+
+            stageAreaContainer.Padding = new MarginPadding
+            {
+                Top = resize_handle_height,
+                Bottom = showTimeline ? bottom_controls_height : 8,
+                Left = preview_mode_list_width + 16,
+                Right = 8
+            };
         }
 
         private void updateProgressDisplay(double time)
         {
+            if (fullMapMode)
+                return;
+
             if (beatmapMaxTime <= beatmapMinTime)
             {
                 timeline.EndTime = 1;
@@ -954,17 +1102,15 @@ namespace osu.Game.EzOsuGame.Overlays
 
         private void disposePreviewResources()
         {
-            // First, clear the visual container (this disposes children on the update thread).
-            if (stageScaleContainer.Count > 0)
-            {
-                if (!IsLoaded)
-                    stageScaleContainer.Clear(true);
-                else
-                    Schedule(() => stageScaleContainer.Clear(true));
-            }
+            setFullMapFocusState(false);
 
             drawableRuleset = null;
+            maniaStaticRenderer = null;
             densityController.DisposeSession();
+
+            // Clear synchronously: a scheduled Clear can run after a newer preview is mounted (e.g. switching key count).
+            if (stageScaleContainer.Count > 0)
+                stageScaleContainer.Clear(true);
         }
 
         private float clampPanelWidth(float width)
@@ -1079,9 +1225,24 @@ namespace osu.Game.EzOsuGame.Overlays
         private void onPreviewModeChanged()
         {
             updatePreviewModeButtons();
+            setFullMapFocusState(false);
+            updatePreviewControlsLayout();
 
             nextDynamicLoopStartTime = 0;
             previewClock.Stop();
+
+            if (customManiaStaticMode && expanded && playableBeatmap != null)
+            {
+                setupManiaStaticPreview(playableBeatmap);
+                previewClock.Seek(Math.Clamp(previewClock.CurrentTime, beatmapMinTime, beatmapMaxTime));
+
+                if (scrollMode)
+                    syncScrollRendererFromTime(previewClock.CurrentTime);
+                else
+                    updateProgressDisplay(previewClock.CurrentTime);
+
+                return;
+            }
 
             if (!dynamicMode || !expanded || drawableRuleset == null)
             {
@@ -1121,6 +1282,71 @@ namespace osu.Game.EzOsuGame.Overlays
         }
 
         private static bool isManiaRuleset(RulesetInfo? ruleset) => ruleset?.OnlineID == 3;
+
+        private void setupManiaStaticPreview(IBeatmap beatmap)
+        {
+            ManiaPreviewData data = ManiaPreviewGeometryBuilder.Build(beatmap);
+
+            var renderer = previewMode.Value switch
+            {
+                EzBeatmapPreviewMode.StaticFullMap => (IManiaStaticPreviewRenderer)new StaticFullMapPreviewRenderer(),
+                EzBeatmapPreviewMode.StaticScroll => new StaticScrollPreviewRenderer(),
+                _ => null
+            };
+
+            if (renderer == null)
+                return;
+
+            renderer.SetData(data);
+            renderer.SetDensity((float)previewDensity.Value);
+            renderer.SetCurrentTime(previewClock.CurrentTime);
+
+            stageScaleContainer.RelativeSizeAxes = Axes.Both;
+            stageScaleContainer.Scale = Vector2.One;
+            stageScaleContainer.Size = Vector2.One;
+            stageScaleContainer.Child = (Drawable)renderer;
+
+            maniaStaticRenderer = renderer;
+            drawableRuleset = null;
+
+            if (scrollMode)
+                syncScrollRendererFromTime(previewClock.CurrentTime);
+
+            updatePreviewControlsLayout();
+        }
+
+        private void setFullMapFocusState(bool focused)
+        {
+            if (fullMapFocusActive == focused)
+                return;
+
+            if (focused)
+            {
+                focusSavedPanelWidth = lastAppliedPanelWidth > 0 ? lastAppliedPanelWidth : panelWidth;
+                focusSavedPanelHeight = lastAppliedPanelHeight > 0 ? lastAppliedPanelHeight : panelHeight;
+            }
+
+            fullMapFocusActive = focused;
+
+            previewModeButtonList.FadeTo(focused ? 0 : 1, 100, Easing.OutQuint);
+            loadTimeText.FadeTo(focused ? 0 : 1, 100, Easing.OutQuint);
+            topResizeHandle.FadeTo(focused ? 0 : 1, 100, Easing.OutQuint);
+            rightResizeHandle.FadeTo(focused ? 0 : 1, 100, Easing.OutQuint);
+            stateText.FadeTo(focused ? 0 : stateText.Alpha, 100, Easing.OutQuint);
+
+            updatePreviewControlsLayout();
+
+            if (!focused)
+            {
+                panelWidth = focusSavedPanelWidth;
+                panelHeight = focusSavedPanelHeight;
+                lastAppliedPanelWidth = -1;
+                lastAppliedPanelHeight = -1;
+            }
+
+            if (maniaStaticRenderer is StaticFullMapPreviewRenderer fullMapRenderer)
+                fullMapRenderer.SetZoom(focused);
+        }
 
         private readonly record struct LoadedPreviewData(
             long Version,

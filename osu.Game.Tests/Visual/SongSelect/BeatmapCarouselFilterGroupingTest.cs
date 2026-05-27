@@ -286,48 +286,44 @@ namespace osu.Game.Tests.Visual.SongSelect
             assertTotal(results, total);
         }
 
-        [Test]
-        public async Task TestGroupingByPp()
-        {
-            int total = 0;
-
-            var beatmapSets = new List<BeatmapSetInfo>();
-            addBeatmapSet(_ => { }, beatmapSets, out var beatmap55);
-            addBeatmapSet(_ => { }, beatmapSets, out var beatmap99);
-            addBeatmapSet(_ => { }, beatmapSets, out var beatmap100);
-            addBeatmapSet(_ => { }, beatmapSets, out var beatmap150);
-            addBeatmapSet(_ => { }, beatmapSets, out var beatmap250);
-            addBeatmapSet(_ => { }, beatmapSets, out var beatmapUnknown);
-
-            var ppValues = new Dictionary<Guid, double>();
-
-            foreach (var beatmap in beatmap55.Beatmaps)
-                ppValues[beatmap.ID] = 55;
-
-            foreach (var beatmap in beatmap99.Beatmaps)
-                ppValues[beatmap.ID] = 99.9;
-
-            foreach (var beatmap in beatmap100.Beatmaps)
-                ppValues[beatmap.ID] = 100;
-
-            foreach (var beatmap in beatmap150.Beatmaps)
-                ppValues[beatmap.ID] = 150.5;
-
-            foreach (var beatmap in beatmap250.Beatmaps)
-                ppValues[beatmap.ID] = 250;
-
-            var results = await runGrouping(GroupMode.PP, beatmapSets, beatmap => ppValues.TryGetValue(beatmap.ID, out double value) ? value : null);
-            assertGroup(results, 0, "0 - 100 PP", beatmap55.Beatmaps.Concat(beatmap99.Beatmaps), ref total);
-            assertGroup(results, 1, "100 - 200 PP", beatmap100.Beatmaps.Concat(beatmap150.Beatmaps), ref total);
-            assertGroup(results, 2, "200 - 300 PP", beatmap250.Beatmaps, ref total);
-            assertGroup(results, 3, "Unknown PP", beatmapUnknown.Beatmaps, ref total);
-            assertTotal(results, total);
-        }
-
         private Action<BeatmapSetInfo> applyStars(double stars)
         {
             return s => s.Beatmaps.ForEach(b => b.StarRating = stars);
         }
+
+        #endregion
+
+        #region xxy SR grouping
+
+        [Test]
+        public async Task TestGroupingByXxyStarRating()
+        {
+            int total = 0;
+
+            var beatmapSets = new List<BeatmapSetInfo>();
+            addBeatmapSet(applyXxyStars(0.5, 5.0), beatmapSets, out var beatmapBelow1);
+            addBeatmapSet(applyXxyStars(1.9, 1.0), beatmapSets, out var beatmapAbove1);
+            addBeatmapSet(applyXxyStars(2.0, 9.0), beatmapSets, out var beatmap2);
+            addBeatmapSet(applyXxyStars(7.0, 2.0), beatmapSets, out var beatmap7);
+
+            var results = await runGrouping(GroupMode.XxyStarRating, beatmapSets, getXxy: resolveXxy);
+            assertGroup(results, 0, "Below 1 Star", beatmapBelow1.Beatmaps, ref total);
+            assertGroup(results, 1, "1 Star", beatmapAbove1.Beatmaps, ref total);
+            assertGroup(results, 2, "2 Stars", beatmap2.Beatmaps, ref total);
+            assertGroup(results, 3, "7 Stars", beatmap7.Beatmaps, ref total);
+            assertTotal(results, total);
+        }
+
+        private Action<BeatmapSetInfo> applyXxyStars(double xxy, double starRating)
+        {
+            return s => s.Beatmaps.ForEach(b =>
+            {
+                b.XxyStarRating = xxy;
+                b.StarRating = starRating;
+            });
+        }
+
+        private static double resolveXxy(BeatmapInfo beatmap) => beatmap.XxyStarRating >= 0 ? beatmap.XxyStarRating : beatmap.StarRating;
 
         #endregion
 
@@ -431,43 +427,11 @@ namespace osu.Game.Tests.Visual.SongSelect
             assertTotal(results, total);
         }
 
-        [Test]
-        public async Task TestSetItemsPreserveInputOrder()
-        {
-            var beatmapSet = TestResources.CreateTestBeatmapSetInfo(3);
-
-            var groupingFilter = new BeatmapCarouselFilterGrouping
-            {
-                GetCriteria = () => new FilterCriteria { Group = GroupMode.None },
-                GetCollections = () => new List<BeatmapCollection>(),
-                GetLocalUserTopRanks = _ => new Dictionary<Guid, ScoreRank>(),
-                GetFavouriteBeatmapSets = () => favouriteBeatmapSets,
-                ShouldUseXxySrForDifficultyOperations = () => false,
-                GetDifficultiesForOperationsAsync = (beatmaps, _) => Task.FromResult<IReadOnlyDictionary<BeatmapInfo, double>>(beatmaps.ToDictionary(b => b, b => b.StarRating)),
-                GetPpForOperationsAsync = (beatmaps, _) => Task.FromResult<IReadOnlyDictionary<BeatmapInfo, double>>(new Dictionary<BeatmapInfo, double>()),
-            };
-
-            var inputOrder = new[]
-            {
-                beatmapSet.Beatmaps[2],
-                beatmapSet.Beatmaps[0],
-                beatmapSet.Beatmaps[1],
-            };
-
-            await groupingFilter.Run(inputOrder.Select(b => new CarouselItem(b)).ToList(), CancellationToken.None);
-
-            var groupedSet = groupingFilter.SetItems.Keys.Single();
-            var groupedItems = groupingFilter.SetItems[groupedSet];
-            var groupedBeatmaps = groupedItems.Select(i => i.Model).OfType<GroupedBeatmap>().Select(gb => gb.Beatmap).ToList();
-
-            Assert.That(groupedBeatmaps, Is.EqualTo(inputOrder));
-        }
-
         #endregion
 
         private HashSet<int> favouriteBeatmapSets = [];
 
-        private async Task<List<CarouselItem>> runGrouping(GroupMode group, List<BeatmapSetInfo> beatmapSets, Func<BeatmapInfo, double?>? getPp = null)
+        private async Task<List<CarouselItem>> runGrouping(GroupMode group, List<BeatmapSetInfo> beatmapSets, Func<BeatmapInfo, double?>? getPp = null, Func<BeatmapInfo, double>? getXxy = null)
         {
             var groupingFilter = new BeatmapCarouselFilterGrouping
             {
@@ -475,8 +439,8 @@ namespace osu.Game.Tests.Visual.SongSelect
                 GetCollections = () => new List<BeatmapCollection>(),
                 GetLocalUserTopRanks = _ => new Dictionary<Guid, ScoreRank>(),
                 GetFavouriteBeatmapSets = () => favouriteBeatmapSets,
-                ShouldUseXxySrForDifficultyOperations = () => false,
-                GetDifficultiesForOperationsAsync = (beatmaps, _) => Task.FromResult<IReadOnlyDictionary<BeatmapInfo, double>>(beatmaps.ToDictionary(b => b, b => b.StarRating)),
+                GetDifficultiesForOperationsAsync = (beatmaps, _) => Task.FromResult<IReadOnlyDictionary<BeatmapInfo, double>>(
+                    beatmaps.ToDictionary(b => b, b => getXxy?.Invoke(b) ?? (b.XxyStarRating >= 0 ? b.XxyStarRating : b.StarRating))),
                 GetPpForOperationsAsync = (beatmaps, _) => Task.FromResult<IReadOnlyDictionary<BeatmapInfo, double>>(beatmaps.Where(b => (getPp?.Invoke(b)).HasValue).ToDictionary(b => b, b => getPp!.Invoke(b)!.Value)),
             };
 

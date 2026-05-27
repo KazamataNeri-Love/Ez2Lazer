@@ -7,7 +7,7 @@ namespace osu.Game.EzOsuGame.Localization
 {
     public static class EzSettingsStrings
     {
-#region 分散设置
+        #region 分散设置
 
         public static readonly EzLocalizationManager.EzLocalisableString SCALING_GAME_MODE = new EzLocalizationManager.EzLocalisableString("缩放游戏模式", "Scaling Game Mode");
 
@@ -31,10 +31,17 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly EzLocalizationManager.EzLocalisableString SAVE_BUTTON = new EzLocalizationManager.EzLocalisableString("保存", "Save");
         public static readonly EzLocalizationManager.EzLocalisableString CANCEL_BUTTON = new EzLocalizationManager.EzLocalisableString("取消", "Cancel");
 
-#endregion
+        #endregion
 
         public static readonly EzLocalizationManager.EzLocalisableString EZ_GAME_SECTION_HEADER = new EzLocalizationManager.EzLocalisableString("Ez游玩设置", "Ez Gameplay");
         public static readonly EzLocalizationManager.EzLocalisableString EZ_UI_SETTINGS_HEADER = new EzLocalizationManager.EzLocalisableString("Ez 界面设置", "Ez UI Settings");
+
+        public static readonly EzLocalizationManager.EzLocalisableString FRAME_LIMITER_BASE =
+            new EzLocalizationManager.EzLocalisableString("帧率基数", "Frame limiter");
+
+        public static readonly EzLocalizationManager.EzLocalisableString FRAME_LIMITER_BASE_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "Update / Draw 帧率限制中 Nx 倍率的基础值。首次使用时会自动填入当前显示器刷新率；之后可自定义（例如设为 200 且选择 2x 时，上限为 400 Hz）。",
+            "Base value for Nx frame limiters on Update and Draw. On first use, the current display refresh rate is applied; afterwards you can customise it (e.g. 200 with 2x gives a 400 Hz cap).");
 
         public static readonly EzLocalizationManager.EzLocalisableString UPDATE_FRAME_LIMITER =
             new EzLocalizationManager.EzLocalisableString("Update 帧率限制", "Update frame limiter");
@@ -78,7 +85,31 @@ namespace osu.Game.EzOsuGame.Localization
             + "\nWhen enabled: Panels read local data directly, and perform warmup queue analysis loading on exe startup (progress will pause when entering gameplay), but Mod conversion results will not be considered."
             + "\nWhen disabled: Do not read SQLite local data, and do not perform warmup.");
 
-#region 机制类
+        public static readonly EzLocalizationManager.EzLocalisableString EZ_REALM_METADATA_BACKFILL =
+            new EzLocalizationManager.EzLocalisableString("补算 Realm 元数据（Tag / XxySR / PP）", "Backfill Realm metadata (Tag / XxySR / PP)");
+
+        public static readonly EzLocalizationManager.EzLocalisableString EZ_REALM_METADATA_BACKFILL_BUTTON =
+            new EzLocalizationManager.EzLocalisableString("立即补算", "Backfill now");
+
+        public static readonly EzLocalizationManager.EzLocalisableString EZ_REALM_METADATA_BACKFILL_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "在后台补算选歌面板所需的 Realm 字段：谱面 Tag（视频/Storyboard）、Xxy 星级、PP。"
+            + "\n启动时也会自动执行；若看不到进度通知，可点此手动触发。",
+            "Backfill Realm fields used by song select: beatmap tags (video/storyboard), Xxy star rating, and PP."
+            + "\nAlso runs automatically at startup; use this if progress notifications did not appear.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString EZ_REALM_METADATA_BACKFILL_FORCE =
+            new EzLocalizationManager.EzLocalisableString("强制全部重算 Realm 元数据", "Force full Realm metadata recalculation");
+
+        public static readonly EzLocalizationManager.EzLocalisableString EZ_REALM_METADATA_BACKFILL_FORCE_BUTTON =
+            new EzLocalizationManager.EzLocalisableString("强制重算", "Force recalculate");
+
+        public static readonly EzLocalizationManager.EzLocalisableString EZ_REALM_METADATA_BACKFILL_FORCE_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "先将所有谱面的 Tag / XxySR / PP 标记为未计算，再执行完整补算。"
+            + "\n谱面较多时耗时较长，请留意右下角进度通知。",
+            "Marks all beatmaps' Tag / XxySR / PP as uncomputed, then runs a full backfill."
+            + "\nMay take a long time for large libraries; watch the progress notification.");
+
+        #region 机制类
 
         public static readonly EzLocalizationManager.EzLocalisableString EZ_GAME_SETTINGS_HEADER = new EzLocalizationManager.EzLocalisableString("Ez Mania 设置", "Ez Mania Settings");
 
@@ -183,39 +214,53 @@ namespace osu.Game.EzOsuGame.Localization
             + "\n Duration Priority (Raja Style): Select the note closest to the key press time; "
             + "\n Earliest Note Priority (osu Style): Select the note with the earliest overlap time. (Note: This may result in a large number of poor judgments due to consecutive late notes, leading to a quick loss.)");
 
-#endregion
+        #endregion
 
-#region 音频设备设置
+        #region 音频设备设置
 
         public static readonly EzLocalizationManager.EzLocalisableString AUDIO_DEVICE_OUTPUT_HINT = new EzLocalizationManager.EzLocalisableString(
             "ASIO 处于测试阶段！"
-            + "\n对于虚拟声卡，如VoiceMeeter，可能需要先切换到物理输出设备，之后再切换回VM。"
-            + "\n请不要以为ASIO4All这类虚拟ASIO比WASAPI更好，软件桥接并不提供真正的ASIO低延迟。"
-            + "\n硬件ASIO在 wasapi/VM 下，低延迟也依然是更好的。",
+            + "\n对于虚拟音频驱动，如VoiceMeeter，可能需要先切换到物理输出设备，激活驱动后，之后再切换回VM。"
+            + "\n请不要认为虚拟ASIO比WASAPI更好，如果没有声音请尝试重启。",
             "ASIO is testing! "
-            + "\nFor virtual sound cards like VoiceMeeter, you may need to switch to a physical output device first, and then switch back to VM."
-            + "\nPlease don't assume that virtual ASIO like ASIO4All is better than WASAPI, software bridging does not provide true ASIO low latency."
-            + "\nHardware ASIO under wasapi/VM, low latency is still better.");
+            + "\nFor virtual audio drivers like VoiceMeeter, you may need to switch to a physical output device first, activate the driver, and then switch back to VM."
+            + "\nPlease do not assume virtual ASIO is better than WASAPI, and try restarting if there is no sound.");
 
         public static readonly EzLocalizationManager.EzLocalisableString ASIO_SAMPLE_RATE_LABEL = new EzLocalizationManager.EzLocalisableString(
-            "ASIO 采样率（测试）",
-            "ASIO Sample Rate (Testing)");
+            "ASIO 输出格式（期望值）",
+            "ASIO Output Format (Desired)");
 
         public static readonly EzLocalizationManager.EzLocalisableString ASIO_SAMPLE_RATE_HINT = new EzLocalizationManager.EzLocalisableString(
-            "48k 更佳，过高的值会导致延迟和时钟同步错误。",
-            "48k is better, too high a value will cause delays and clock synchronization errors.");
+            "选项由系统或 ASIO 驱动提供，显示与系统声音设置一致，但驱动可能不会接受所选值。"
+            + "\n数值越高延迟越高，推荐48000Hz，次选441000Hz。",
+            "Options are provided by the system or the ASIO driver, shown consistent with the system sound settings, but the driver may not accept the selected value."
+            + "\nHigher values mean higher latency, 48000Hz is recommended, followed by 44100Hz.");
 
         public static readonly EzLocalizationManager.EzLocalisableString ASIO_BUFFER_SIZE_LABEL = new EzLocalizationManager.EzLocalisableString(
-            "ASIO 缓冲区大小（测试）",
-            "ASIO Buffer Size (Testing)");
+            "ASIO 缓冲区大小（期望值）",
+            "ASIO Buffer Size (Desired)");
 
         public static readonly EzLocalizationManager.EzLocalisableString ASIO_BUFFER_SIZE_HINT = new EzLocalizationManager.EzLocalisableString(
-            "数值越低延迟越低，但过低可能会导致爆音或无法启动。默认为 128。",
-            "Lower is lower latency, but too low may crackle or fail to start. Default is 128.");
+            "选项由系统或 ASIO 驱动提供，显示与系统声音设置一致，但驱动可能不会接受所选值。"
+            + "\n数值越低延迟越低，但过低可能会导致爆音或无法启动。默认为 128。",
+            "Options are provided by the system or the ASIO driver, shown consistent with the system sound settings, but the driver may not accept the selected value."
+            + "\nLower values mean lower latency, but too low may cause crackling or failure to start. Default is 128.");
 
-#endregion
+        public static readonly EzLocalizationManager.EzLocalisableString ASIO_PASSTHROUGH_LABEL = new EzLocalizationManager.EzLocalisableString(
+            "ASIO 直通（原生格式）",
+            "ASIO Pass-through (Native Format)");
 
-#region 实验性功能
+        public static readonly EzLocalizationManager.EzLocalisableString ASIO_PASSTHROUGH_HINT = new EzLocalizationManager.EzLocalisableString(
+            "开启后绕过采样率/位深设置，完全使用驱动当前原生输出格式。关闭后按上方输出格式设置进行播放。",
+            "When enabled, bypasses sample-rate/bit-depth output settings and uses the driver's current native output format. When disabled, playback follows the output format settings above.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString ASIO_OUTPUT_UNAVAILABLE_NOTIFICATION = new EzLocalizationManager.EzLocalisableString(
+            "ASIO 输出未能启动，当前没有声音。请尝试重启游戏；若仍失败，请关闭占用该 ASIO 驱动的其他程序，或切换到其他音频设备。",
+            "ASIO output failed to start; there is no audio. Try restarting the game. If it still fails, close other apps using this ASIO driver or switch to another audio device.");
+
+        #endregion
+
+        #region 实验性功能
 
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_ACCOUNT = new EzLocalizationManager.EzLocalisableString(
             "本地账户（实验性）", "Local Account (Testing)");
@@ -224,6 +269,6 @@ namespace osu.Game.EzOsuGame.Localization
             "允许无密码登录本地账户。跳过一切成绩上传、网络账户检查。",
             "Allows local account login without password. Skip all score submissions and online account checks.");
 
-#endregion
+        #endregion
     }
 }

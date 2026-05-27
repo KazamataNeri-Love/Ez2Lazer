@@ -81,14 +81,13 @@ namespace osu.Game.EzOsuGame.Analysis
         {
             xxySr = 0;
 
-            if (!TryGetStoredAnalysis(beatmapInfo, rulesetInfo, out var result))
-                return false;
+            if (beatmapInfo is BeatmapInfo beatmap && beatmap.XxyStarRating >= 0)
+            {
+                xxySr = beatmap.XxyStarRating;
+                return true;
+            }
 
-            if (result.ManiaSummary?.XxySr is not double storedXxySr)
-                return false;
-
-            xxySr = storedXxySr;
-            return true;
+            return false;
         }
 
         public IBindable<string?> ActiveSongsBranchDisplayName => activeSongsBranchDisplayName;
@@ -160,26 +159,29 @@ namespace osu.Game.EzOsuGame.Analysis
 
         public IReadOnlyDictionary<Guid, double> GetStoredPpValues(IEnumerable<BeatmapInfo> beatmaps, IRulesetInfo? rulesetInfo, IReadOnlyList<Mod>? mods = null)
         {
-            if (!sqliteAnalysisEnabled.Value || !EzAnalysisPersistentStore.Enabled)
-                return empty_pp_values;
-
             var beatmapList = beatmaps.Distinct().ToList();
 
             if (beatmapList.Count == 0)
                 return empty_pp_values;
 
-            if (IsActiveSongsBranchFor(rulesetInfo, mods))
+            if (IsActiveSongsBranchFor(rulesetInfo, mods)
+                && sqliteAnalysisEnabled.Value
+                && EzAnalysisPersistentStore.Enabled)
+            {
                 return getResolvedActiveBranchValues(beatmapList, rulesetInfo, createModsProfileFingerprint(mods), persistentStore.GetSongsBranchPpValues, empty_pp_values);
+            }
 
             if (mods?.Any() == true)
                 return empty_pp_values;
 
-            var eligibleBeatmaps = beatmapList.Where(b => CanUseStoredAnalysis(b, rulesetInfo, mods)).ToList();
+            var resolvedValues = new Dictionary<Guid, double>();
 
-            if (eligibleBeatmaps.Count == 0)
-                return empty_pp_values;
+            foreach (var beatmap in beatmapList)
+            {
+                if (beatmap.PerformancePoints >= 0)
+                    resolvedValues[beatmap.ID] = beatmap.PerformancePoints;
+            }
 
-            var resolvedValues = persistentStore.GetStoredPpValues(eligibleBeatmaps);
             return resolvedValues.Count == 0 ? empty_pp_values : resolvedValues;
         }
 
@@ -466,8 +468,7 @@ namespace osu.Game.EzOsuGame.Analysis
             return beatmapInfo is BeatmapInfo localBeatmapInfo && persistentStore.NeedsOnDemandBackfill(localBeatmapInfo);
         }
 
-        public Task<EzAnalysisResult?> BackfillStoredDataAsync(BeatmapInfo beatmapInfo, bool includeTagData = false, bool skipExistingComparison = false,
-                                                               CancellationToken cancellationToken = default)
+        public Task<EzAnalysisResult?> BackfillStoredDataAsync(BeatmapInfo beatmapInfo, bool skipExistingComparison = false, CancellationToken cancellationToken = default)
         {
             if (!sqliteAnalysisEnabled.Value || !EzAnalysisPersistentStore.Enabled)
                 return Task.FromResult<EzAnalysisResult?>(null);
@@ -475,11 +476,11 @@ namespace osu.Game.EzOsuGame.Analysis
             if (!tryCreateStoredLookup(beatmapInfo, beatmapInfo.Ruleset, mods: null, out var lookup))
                 return Task.FromResult<EzAnalysisResult?>(null);
 
-            return Task.Run(() => backfillStoredData(beatmapInfo, lookup, includeTagData, skipExistingComparison, cancellationToken), cancellationToken);
+            return Task.Run(() => backfillStoredData(beatmapInfo, lookup, skipExistingComparison, cancellationToken), cancellationToken);
         }
 
         public Task<EzAnalysisResult?> RecomputeStoredAnalysisAsync(BeatmapInfo beatmapInfo, CancellationToken cancellationToken = default)
-            => BackfillStoredDataAsync(beatmapInfo, includeTagData: false, skipExistingComparison: false, cancellationToken);
+            => BackfillStoredDataAsync(beatmapInfo, skipExistingComparison: false, cancellationToken);
 
         internal static bool CanUseStoredAnalysis(BeatmapInfo beatmapInfo, IRulesetInfo? rulesetInfo, IEnumerable<Mod>? mods)
         {
@@ -494,8 +495,7 @@ namespace osu.Game.EzOsuGame.Analysis
             return mods == null || !mods.Any();
         }
 
-        private EzAnalysisResult? backfillStoredData(BeatmapInfo beatmapInfo, EzAnalysisLookupCache lookup, bool includeTagData, bool skipExistingComparison,
-                                                     CancellationToken cancellationToken)
+        private EzAnalysisResult? backfillStoredData(BeatmapInfo beatmapInfo, EzAnalysisLookupCache lookup, bool skipExistingComparison, CancellationToken cancellationToken)
         {
             try
             {
@@ -503,24 +503,15 @@ namespace osu.Game.EzOsuGame.Analysis
                     ? existingAnalysis
                     : null;
 
-                var missingData = EzAnalysisPersistentStore.GetMissingData(storedAnalysis, beatmapInfo.Ruleset.OnlineID, includeTagData);
+                var missingData = EzAnalysisPersistentStore.GetMissingData(storedAnalysis, beatmapInfo.Ruleset.OnlineID);
                 bool needsAnalysis = EzAnalysisPersistentStore.RequiresAnalysisComputation(missingData);
-                bool needsTag = includeTagData && (missingData & EzAnalysisPersistentStore.MissingDataKind.Tag) != 0;
 
-                if (!needsAnalysis && !needsTag)
+                if (!needsAnalysis)
                     return storedAnalysis;
 
                 var workingBeatmap = beatmapManager.GetWorkingBeatmap(lookup.BeatmapInfo);
 
-                EzAnalysisResult result = needsAnalysis
-                    ? EzAnalysisComputation.Compute(workingBeatmap, lookup, cancellationToken)
-                    : storedAnalysis!.Value;
-
-                if (includeTagData && (needsAnalysis || needsTag))
-                    result = result.WithTagSummary(EzBeatmapTagParser.Parse(workingBeatmap));
-
-                if (!includeTagData && storedAnalysis?.TagSummary != null && result.TagSummary == null)
-                    result = result.WithTagSummary(storedAnalysis.Value.TagSummary);
+                EzAnalysisResult result = EzAnalysisComputation.Compute(workingBeatmap, lookup, cancellationToken);
 
                 if (skipExistingComparison)
                     persistentStore.Store(beatmapInfo, result);
