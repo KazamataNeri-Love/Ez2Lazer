@@ -106,15 +106,16 @@ namespace osu.Game.Skinning
         /// <exception cref="ArgumentException">Thrown if the provided instance is not a <see cref="Drawable"/>.</exception>
         public void Add(ISerialisableDrawable component)
         {
-            Container? target = ExternalTarget ?? content;
-
-            if (target == null)
+            if (content == null)
                 throw new NotSupportedException("Attempting to add a new component to a target container which is not supported by the current skin.");
 
             if (!(component is Drawable drawable))
                 throw new ArgumentException($"Provided argument must be of type {nameof(Drawable)}.", nameof(component));
 
-            target.Add(drawable);
+            // Always add to content (the wrapper), not to ExternalTarget.
+            // When ExternalTarget is set, components are children of content,
+            // which itself is a child of ExternalTarget.
+            content.Add(drawable);
             components.Add(component);
         }
 
@@ -123,15 +124,17 @@ namespace osu.Game.Skinning
         /// <exception cref="ArgumentException">Thrown if the provided instance is not a <see cref="Drawable"/>.</exception>
         public void Remove(ISerialisableDrawable component, bool disposeImmediately)
         {
-            Container? target = ExternalTarget ?? content;
-
-            if (target == null)
+            if (content == null)
                 throw new NotSupportedException("Attempting to remove a new component from a target container which is not supported by the current skin.");
 
             if (!(component is Drawable drawable))
                 throw new ArgumentException($"Provided argument must be of type {nameof(Drawable)}.", nameof(component));
 
-            target.Remove(drawable, disposeImmediately);
+            // Always remove from content (the wrapper), not from ExternalTarget.
+            // When ExternalTarget is set, components are children of content,
+            // which itself is a child of ExternalTarget. Removing from ExternalTarget
+            // directly would fail because the drawable's parent is content.
+            content.Remove(drawable, disposeImmediately);
             components.Remove(component);
         }
 
