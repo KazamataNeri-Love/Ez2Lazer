@@ -263,6 +263,19 @@ namespace osu.Game.Rulesets.Mania
         {
             switch (type)
             {
+                case ModType.NeriMod:
+                    return new Mod[]
+                    {
+                        new ManiaModPatternShiftSpaceMix(),
+                        new ManiaModPatternShiftSpaceMixBracket(),
+                        new ManiaModPatternShiftSpaceMixChord(),
+                        new ManiaModPatternShiftSpaceMixDelay(),
+                        new ManiaModPatternShiftSpaceMixDump(),
+                        new ManiaModPatternShiftSpaceMixJack(),
+                        new ManiaModNeriSPRefiner(),
+                        new ManiaModNeriBarrelRoll(),
+                    };
+
                 case ModType.LA_Mod:
                     return new Mod[]
                     {

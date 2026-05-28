@@ -1,0 +1,174 @@
+{
+  "Version": 1,
+  "DrawableInfo": {
+    "mania": [
+      {
+        "Type": "osu.Game.Rulesets.Mania.EzMania.HUD.EzHUDComboCounter, osu.Game.Rulesets.Mania, Version=2026.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "Position": {
+          "x": 0.0,
+          "y": -300.0
+        },
+        "Rotation": 0.0,
+        "Scale": {
+          "x": 2.552373,
+          "y": 2.552373
+        },
+        "Width": null,
+        "Height": null,
+        "Anchor": 18,
+        "Origin": 17,
+        "UsesFixedAnchor": true,
+        "Settings": {
+          "theme_name": 35,
+          "effect_type": 0,
+          "effect_start_factor": 1.5,
+          "effect_end_factor": 1.0,
+          "effect_start_time": 10.0,
+          "effect_end_duration": 300.0,
+          "accent_alpha": 0.7,
+          "accent_colour": "#FFFFFF"
+        },
+        "Children": []
+      },
+      {
+        "Type": "osu.Game.Rulesets.Mania.EzMania.HUD.EzHUDHitTiming, osu.Game.Rulesets.Mania, Version=2026.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "Position": {
+          "x": 0.0,
+          "y": 24.0
+        },
+        "Rotation": 0.0,
+        "Scale": {
+          "x": 1.0913806,
+          "y": 1.0913806
+        },
+        "Width": 300.0,
+        "Height": 80.0,
+        "Anchor": 17,
+        "Origin": 17,
+        "UsesFixedAnchor": false,
+        "Settings": {
+          "number_font": 35,
+          "text_font": 34,
+          "alone_show": 2,
+          "threshold": 22.0,
+          "display_duration": 300.0,
+          "symmetry_offset": 60.0,
+          "text_alpha": 0.0,
+          "number_alpha": 0.7,
+          "accent_colour": "#FFFFFF",
+          "test_mode": true
+        },
+        "Children": []
+      },
+      {
+        "Type": "osu.Game.EzOsuGame.HUD.EzHUDHitResultScore, osu.Game, Version=2026.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "Position": {
+          "x": 0.0,
+          "y": 75.0
+        },
+        "Rotation": 0.0,
+        "Scale": {
+          "x": 2.2658894,
+          "y": 2.2658894
+        },
+        "Width": 200.0,
+        "Height": 50.0,
+        "Anchor": 18,
+        "Origin": 18,
+        "UsesFixedAnchor": true,
+        "Settings": {
+          "theme_name": 33,
+          "auto_map_hit_mode": false,
+          "hit_mode_template": 1,
+          "skip_better_judgement": 0,
+          "fps": 60.0,
+          "animation_frame_template": "{result}/frame_{0}",
+          "accent_colour": "#FFFFFF",
+          "hit_result_blend_mode_setting": 0,
+          "full_combo_effect_enabled": true
+        },
+        "Children": []
+      },
+      {
+        "Type": "osu.Game.Rulesets.Mania.EzMania.HUD.EzHUDHitTiming, osu.Game.Rulesets.Mania, Version=2026.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "Position": {
+          "x": -2.0,
+          "y": -19.0
+        },
+        "Rotation": 0.0,
+        "Scale": {
+          "x": 2.1422572,
+          "y": 2.1422572
+        },
+        "Width": 300.0,
+        "Height": 80.0,
+        "Anchor": 17,
+        "Origin": 17,
+        "UsesFixedAnchor": true,
+        "Settings": {
+          "number_font": 9,
+          "text_font": 33,
+          "alone_show": 2,
+          "threshold": 16.0,
+          "display_duration": 300.0,
+          "symmetry_offset": 26.0,
+          "text_alpha": 0.65,
+          "number_alpha": 0.0,
+          "accent_colour": "#FFFFFF",
+          "test_mode": true
+        },
+        "Children": []
+      },
+      {
+        "Type": "osu.Game.Rulesets.Mania.EzMania.HUD.EzHUDComboTitle, osu.Game.Rulesets.Mania, Version=2026.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "Position": {
+          "x": 0.0,
+          "y": 134.0
+        },
+        "Rotation": 0.0,
+        "Scale": {
+          "x": 1.8062992,
+          "y": 1.8062992
+        },
+        "Width": 120.0,
+        "Height": 30.0,
+        "Anchor": 17,
+        "Origin": 17,
+        "UsesFixedAnchor": false,
+        "Settings": {
+          "font": 33,
+          "effect": 0,
+          "effect_origin": 17,
+          "effect_start_factor": 2.0,
+          "effect_start_time": 10.0,
+          "effect_end_duration": 300.0,
+          "box_alpha": 1.0,
+          "accent_colour": "#A2FF00"
+        },
+        "Children": []
+      },
+      {
+        "Type": "osu.Game.Skinning.SkinnableSprite, osu.Game, Version=2026.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "Position": {
+          "x": -137.07092,
+          "y": 36.283478
+        },
+        "Rotation": 0.0,
+        "Scale": {
+          "x": 1.2578765,
+          "y": 1.2578765
+        },
+        "Width": null,
+        "Height": null,
+        "Anchor": 33,
+        "Origin": 9,
+        "UsesFixedAnchor": true,
+        "Settings": {
+          "sprite_name": "0100.png"
+        },
+        "Children": []
+      }
+    ],
+    "osu": []
+  }
+}

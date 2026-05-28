@@ -197,6 +197,9 @@ namespace osu.Game.Graphics
         {
             switch (modType)
             {
+                case ModType.NeriMod:
+                    return Cyan;
+
                 case ModType.LA_Mod:
                     return BlueLight;
 

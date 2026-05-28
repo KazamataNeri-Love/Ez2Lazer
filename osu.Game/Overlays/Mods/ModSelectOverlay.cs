@@ -327,6 +327,7 @@ namespace osu.Game.Overlays.Mods
                 });
             }
 
+            yield return createModColumnContent(ModType.NeriMod);
             yield return createModColumnContent(ModType.LA_Mod);
             yield return createModColumnContent(ModType.CommunityMod);
             yield return createModColumnContent(ModType.DifficultyReduction);

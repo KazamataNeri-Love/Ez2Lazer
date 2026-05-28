@@ -680,7 +680,13 @@ namespace osu.Game.Skinning
         public bool Save(Skin skin)
         {
             if (!skin.SkinInfo.IsManaged)
+            {
+                // 脚本皮肤等非受管皮肤无法通过编辑器保存，静默跳过。
+                if (skin is ScriptedSkinWrapper)
+                    return false;
+
                 throw new InvalidOperationException($"Attempting to save a skin which is not yet tracked. Call {nameof(EnsureMutableSkin)} first.");
+            }
 
             return skinImporter.Save(skin);
         }

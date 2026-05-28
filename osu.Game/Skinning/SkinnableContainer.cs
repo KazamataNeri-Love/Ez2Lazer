@@ -43,6 +43,14 @@ namespace osu.Game.Skinning
 
         private CancellationTokenSource? cancellationSource;
 
+        /// <summary>
+        /// Optional external container. When set, <see cref="Reload(Container?)"/> will
+        /// proxy visual output to this target instead of adding children to this instance.
+        /// Order of internal cleanup (ClearInternal → components.Clear → ComponentsLoaded → content → cancel)
+        /// is identical to the default path to preserve pipeline stability.
+        /// </summary>
+        public Container? ExternalTarget { get; set; }
+
         public SkinnableContainer(GlobalSkinnableContainerLookup lookup)
         {
             Lookup = lookup;
@@ -67,13 +75,30 @@ namespace osu.Game.Skinning
             cancellationSource?.Cancel();
             cancellationSource = null;
 
-            LoadComponentAsync(content, wrapper =>
+            if (ExternalTarget != null)
             {
-                AddInternal(wrapper);
-                components.AddRange(wrapper.Children.OfType<ISerialisableDrawable>());
-                ComponentsLoaded = true;
-                OnComponentsLoaded?.Invoke(this);
-            }, (cancellationSource = new CancellationTokenSource()).Token);
+                LoadComponentAsync(content, wrapper =>
+                {
+                    ExternalTarget.Clear();
+                    // Add the wrapper itself rather than re-parenting its children,
+                    // to avoid "May not add a drawable to multiple containers" errors
+                    // when children are already parented by the async loading pipeline.
+                    ExternalTarget.Add(wrapper);
+                    components.AddRange(wrapper.Children.OfType<ISerialisableDrawable>());
+                    ComponentsLoaded = true;
+                    OnComponentsLoaded?.Invoke(this);
+                }, (cancellationSource = new CancellationTokenSource()).Token);
+            }
+            else
+            {
+                LoadComponentAsync(content, wrapper =>
+                {
+                    AddInternal(wrapper);
+                    components.AddRange(wrapper.Children.OfType<ISerialisableDrawable>());
+                    ComponentsLoaded = true;
+                    OnComponentsLoaded?.Invoke(this);
+                }, (cancellationSource = new CancellationTokenSource()).Token);
+            }
         }
 
         /// <inheritdoc cref="ISerialisableDrawableContainer"/>
@@ -81,13 +106,15 @@ namespace osu.Game.Skinning
         /// <exception cref="ArgumentException">Thrown if the provided instance is not a <see cref="Drawable"/>.</exception>
         public void Add(ISerialisableDrawable component)
         {
-            if (content == null)
+            Container? target = ExternalTarget ?? content;
+
+            if (target == null)
                 throw new NotSupportedException("Attempting to add a new component to a target container which is not supported by the current skin.");
 
             if (!(component is Drawable drawable))
                 throw new ArgumentException($"Provided argument must be of type {nameof(Drawable)}.", nameof(component));
 
-            content.Add(drawable);
+            target.Add(drawable);
             components.Add(component);
         }
 
@@ -96,13 +123,15 @@ namespace osu.Game.Skinning
         /// <exception cref="ArgumentException">Thrown if the provided instance is not a <see cref="Drawable"/>.</exception>
         public void Remove(ISerialisableDrawable component, bool disposeImmediately)
         {
-            if (content == null)
+            Container? target = ExternalTarget ?? content;
+
+            if (target == null)
                 throw new NotSupportedException("Attempting to remove a new component from a target container which is not supported by the current skin.");
 
             if (!(component is Drawable drawable))
                 throw new ArgumentException($"Provided argument must be of type {nameof(Drawable)}.", nameof(component));
 
-            content.Remove(drawable, disposeImmediately);
+            target.Remove(drawable, disposeImmediately);
             components.Remove(component);
         }
 
