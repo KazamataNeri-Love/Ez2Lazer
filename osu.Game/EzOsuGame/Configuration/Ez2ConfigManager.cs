@@ -71,6 +71,10 @@ namespace osu.Game.EzOsuGame.Configuration
             : base(storage)
         {
             this.storage = storage;
+
+            // PerformLoad 中无法访问 this.storage（base() 在字段赋值前触发 Load()），
+            // 因此迁移逻辑放在构造函数末尾执行。
+            migrateLegacyAsioPassThroughSetting();
         }
 
         protected override void PerformLoad()
@@ -79,7 +83,6 @@ namespace osu.Game.EzOsuGame.Configuration
                 return;
 
             base.PerformLoad();
-            migrateLegacyAsioPassThroughSetting();
         }
 
         private void migrateLegacyAsioPassThroughSetting()
