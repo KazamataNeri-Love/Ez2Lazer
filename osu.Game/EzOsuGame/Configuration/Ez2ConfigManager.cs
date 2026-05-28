@@ -4,7 +4,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
-using System.IO;
 using System.Text;
 using JetBrains.Annotations;
 using osu.Framework.Bindables;
@@ -63,19 +62,12 @@ namespace osu.Game.EzOsuGame.Configuration
         private readonly Dictionary<EzColumnType, Bindable<Colour4>> columnColorBindables = new Dictionary<EzColumnType, Bindable<Colour4>>();
         private readonly Dictionary<(int keyMode, int columnIndex), ColumnBindings> columnBindings = new Dictionary<(int keyMode, int columnIndex), ColumnBindings>();
         private readonly object columnBindingsLock = new object();
-        private readonly Storage storage;
 
         public event Action<int, int, EzColumnType>? ColumnTypeChanged;
 
         public Ez2ConfigManager(Storage storage)
             : base(storage)
-        {
-            this.storage = storage;
-
-            // PerformLoad 中无法访问 this.storage（base() 在字段赋值前触发 Load()），
-            // 因此迁移逻辑放在构造函数末尾执行。
-            migrateLegacyAsioPassThroughSetting();
-        }
+        { }
 
         protected override void PerformLoad()
         {
@@ -83,44 +75,6 @@ namespace osu.Game.EzOsuGame.Configuration
                 return;
 
             base.PerformLoad();
-        }
-
-        private void migrateLegacyAsioPassThroughSetting()
-        {
-            if (string.IsNullOrEmpty(Filename))
-                return;
-
-            using var stream = storage.GetStream(Filename);
-
-            if (stream == null)
-                return;
-
-            bool foundNewKey = false;
-            bool? legacyValue = null;
-
-            using (var reader = new StreamReader(stream))
-            {
-                string? line;
-
-                while ((line = reader.ReadLine()) != null)
-                {
-                    int equalsIndex = line.IndexOf('=');
-
-                    if (equalsIndex < 0)
-                        continue;
-
-                    string key = line.AsSpan(0, equalsIndex).Trim().ToString();
-
-                    if (key == nameof(Ez2Setting.AsioUseExternalPCM))
-                        foundNewKey = true;
-
-                    if (key == "AsioPassThrough" && bool.TryParse(line.AsSpan(equalsIndex + 1).Trim(), out bool parsed))
-                        legacyValue = parsed;
-                }
-            }
-
-            if (!foundNewKey && legacyValue.HasValue)
-                GetBindable<bool>(Ez2Setting.AsioUseExternalPCM).Value = legacyValue.Value;
         }
 
         protected override void InitialiseDefaults()
