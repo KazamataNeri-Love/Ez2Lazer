@@ -460,6 +460,7 @@ namespace osu.Game.Skinning
                                 {
                                     new LegacyScoreCounter(),
                                     new LegacyAccuracyCounter(),
+                                    new Legacy300GRateCounter(),
                                     new LegacySongProgress(),
                                     new LegacyHealthDisplay(),
                                     new BarHitErrorMeter(),

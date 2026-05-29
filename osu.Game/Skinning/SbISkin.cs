@@ -177,6 +177,7 @@ namespace osu.Game.Skinning
                                         WireframeOpacity = { Value = 0 },
                                     },
                                     new DefaultHealthDisplay(),
+                                    new Legacy300GRateCounter(),
                                     new ArgonAccuracyCounter
                                     {
                                         WireframeOpacity = { Value = 0 },

@@ -218,6 +218,7 @@ namespace osu.Game.Skinning
                                     new BeatmapAttributeText(),
 
                                     new DefaultHealthDisplay(),
+                                    new Legacy300GRateCounter(),
                                     new EzHUDAccuracyCounter(),
                                     new ArgonPerformancePointsCounter
                                     {

@@ -182,6 +182,7 @@ namespace osu.Game.Skinning
                                     new BeatmapAttributeText(),
 
                                     new DefaultHealthDisplay(),
+                                    new Legacy300GRateCounter(),
                                     new ArgonAccuracyCounter
                                     {
                                         WireframeOpacity = { Value = 0 },

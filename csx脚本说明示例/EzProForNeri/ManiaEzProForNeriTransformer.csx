@@ -432,120 +432,6 @@ public partial class EzProNeriFeverLight : CompositeDrawable
     }
 }
 // ═══════════════════════════════════════════════════════════════════════════
-// EzProNeriKCRatioDisplay — KC 比计算器（Kool / Cool 数量比）
-// ═══════════════════════════════════════════════════════════════════════════
-// 计算 Perfect(Kool) / Great(Cool) 比值，用 Number_Combo/ 下的数字纹理渲染。
-// 格式：X.XX（如 1.50），素材：combo-0~9、combo-dot
-// ═══════════════════════════════════════════════════════════════════════════
-
-public partial class EzProNeriKCRatioDisplay : CompositeDrawable
-{
-    [Resolved(canBeNull: true)]
-    private JudgementCountController? judgementCountController { get; set; }
-
-    [Resolved]
-    private ISkinSource skin { get; set; } = null!;
-
-    private BindableInt? perfectCounter;
-    private BindableInt? greatCounter;
-    private string lastDisplay = string.Empty;
-
-    private readonly Texture[] digitTextures = new Texture[10];
-    private Texture? dotTexture;
-    private readonly List<Sprite> displaySprites = new List<Sprite>();
-
-    [BackgroundDependencyLoader]
-    private void load()
-    {
-        AutoSizeAxes = Axes.Both;
-
-        for (int i = 0; i <= 9; i++)
-            digitTextures[i] = skin.GetTexture($"Number_Combo/combo-{i}");
-
-        dotTexture = skin.GetTexture("Number_Combo/combo-dot");
-
-        int loaded = digitTextures.Count(t => t != null);
-        Logger.Log($"[KCRatio] loaded {loaded}/10 digit tex, dot={(dotTexture != null)}");
-    }
-
-    protected override void LoadComplete()
-    {
-        base.LoadComplete();
-
-        if (judgementCountController == null)
-        {
-            Logger.Log("[KCRatio] ⚠ no JudgementCountController");
-            return;
-        }
-
-        foreach (var counter in judgementCountController.Counters)
-        {
-            if (counter.Types.Length == 0) continue;
-            var key = counter.Types.First();
-
-            if (key == HitResult.Perfect)
-                perfectCounter = counter.ResultCount;
-            else if (key == HitResult.Great)
-                greatCounter = counter.ResultCount;
-        }
-
-        Logger.Log($"[KCRatio] P={(perfectCounter != null)} G={(greatCounter != null)}");
-    }
-
-    protected override void Update()
-    {
-        base.Update();
-
-        int p = perfectCounter?.Value ?? 0;
-        int g = greatCounter?.Value ?? 0;
-
-        if (g == 0) return;
-
-        string text = $"{(p / (double)g):F2}";
-        if (text == lastDisplay) return;
-        lastDisplay = text;
-
-        Logger.Log($"[KCRatio] P={p} G={g} → {text}");
-
-        foreach (var s in displaySprites)
-            RemoveInternal(s, false);
-        displaySprites.Clear();
-
-        float x = 0;
-        foreach (char c in text)
-        {
-            Sprite sprite;
-            if (c == '.')
-            {
-                if (dotTexture == null) { x += dotTexture?.Width ?? 2; continue; }
-                sprite = new Sprite { Texture = dotTexture, Anchor = Anchor.TopLeft, Origin = Anchor.TopLeft, Position = new Vector2(x, 0) };
-                AddInternal(sprite);
-                displaySprites.Add(sprite);
-                x += dotTexture.Width;
-                continue;
-            }
-
-            int idx = c - '0';
-            if (idx < 0 || idx > 9) continue;
-
-            var tex = digitTextures[idx];
-            if (tex == null) continue;
-
-            sprite = new Sprite
-            {
-                Texture = tex,
-                Anchor = Anchor.TopLeft,
-                Origin = Anchor.TopLeft,
-                Position = new Vector2(x, 0),
-            };
-            AddInternal(sprite);
-            displaySprites.Add(sprite);
-            x += tex.Width;
-        }
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // EzProNeriBoxlightAnimator — 全屏 BPM 同步帧动画（Background 层）
 // ═══════════════════════════════════════════════════════════════════════════
 // 加载 boxlight-0.png … boxlight-N.png 序列。
@@ -1061,14 +947,6 @@ public class ManiaEzProForNeriTransformer : SkinTransformer
                                 energyGauge.Position = new Vector2(-8f, -10f);
                             }
 
-                            var kcRatio = container.OfType<EzProNeriKCRatioDisplay>().FirstOrDefault();
-                            if (kcRatio != null)
-                            {
-                                kcRatio.Anchor = Anchor.TopLeft;
-                                kcRatio.Origin = Anchor.TopLeft;
-                                kcRatio.Position = new Vector2(10f, 50f);
-                            }
-
                             // FeverUp 特效绑定：EnergyS 满 1000 时触发，SuperTime 结束时复位
                             var feverUp = container.OfType<EzProNeriFeverUp>().FirstOrDefault();
                             if (energyGauge?.EnergySystem != null && feverUp != null)
@@ -1146,7 +1024,6 @@ public class ManiaEzProForNeriTransformer : SkinTransformer
                             new EzProNeriFeverLight(),
                             new EzProNeriFeverLight(),
                             new ComboMilestoneSwitcher(),
-                            new EzProNeriKCRatioDisplay(),
                         };
 
                 }

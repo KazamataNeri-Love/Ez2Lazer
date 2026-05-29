@@ -25,8 +25,8 @@ namespace osu.Game.Rulesets.Mania.EzMania.Mods.LAsMods
     /// </summary>
     public class ManiaModNeriBarrelRoll : ModBarrelRoll<ManiaHitObject>
     {
-        public override string Name => "Mania Barrel Roll";
-        public override string Acronym => "MBR";
+        public override string Name => "Barrel Roll";
+        public override string Acronym => "BR";
         public override LocalisableString Description => "The whole playfield is on a wheel!";
         public override ModType Type => ModType.NeriMod;
         public override bool Ranked => false;

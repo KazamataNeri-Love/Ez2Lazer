@@ -274,6 +274,9 @@ namespace osu.Game.Rulesets.Mania
                         new ManiaModPatternShiftSpaceMixJack(),
                         new ManiaModNeriSPRefiner(),
                         new ManiaModNeriBarrelRoll(),
+                        new ManiaModNeriFasterBarrelRoll(),
+                        new ManiaModNeriDance(),
+                        new ManiaModNeriNewDance(),
                     };
 
                 case ModType.LA_Mod:
