@@ -4,6 +4,7 @@
 #nullable disable
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -19,8 +20,10 @@ using osu.Framework.Lists;
 using osu.Framework.Logging;
 using osu.Framework.Platform;
 using osu.Framework.Statistics;
+using osu.Game.Beatmaps.ExternalLibraries;
 using osu.Game.Beatmaps.Formats;
 using osu.Game.Database;
+using osu.Game.Models;
 using osu.Game.Extensions;
 using osu.Game.IO;
 using osu.Game.Skinning;
@@ -143,10 +146,106 @@ namespace osu.Game.Beatmaps
             [NotNull]
             private readonly IBeatmapResourceProvider resources;
 
+            private readonly IResourceStore<byte[]> beatmapFileStore;
+
             public BeatmapManagerWorkingBeatmap(BeatmapInfo beatmapInfo, [NotNull] IBeatmapResourceProvider resources)
                 : base(beatmapInfo, resources.AudioManager)
             {
                 this.resources = resources;
+                beatmapFileStore = createBeatmapFileStore(beatmapInfo, resources);
+            }
+
+            private static IResourceStore<byte[]> createBeatmapFileStore(BeatmapInfo beatmapInfo, IBeatmapResourceProvider resources)
+            {
+                var beatmapSet = beatmapInfo.BeatmapSet;
+
+                if (beatmapSet == null)
+                    return resources.Files;
+
+                refreshExternalHostingFromRealm(beatmapSet, resources.RealmAccess);
+
+                if (!ExternalBeatmapPathEncoding.TryResolveContentRoot(beatmapSet, out string contentRoot))
+                {
+                    if (ExternalBeatmapPathEncoding.IsExternalSetHash(beatmapSet.Hash))
+                        ExternalBeatmapPathEncoding.TryPopulateExternalHosting(beatmapSet);
+
+                    if (!ExternalBeatmapPathEncoding.TryResolveContentRoot(beatmapSet, out contentRoot))
+                        return resources.Files;
+                }
+
+                return new ExternalBeatmapCompositeFileStore(resources.Files, contentRoot, buildExternalFileMappings(beatmapInfo, resources.RealmAccess));
+            }
+
+            private static void refreshExternalHostingFromRealm(BeatmapSetInfo beatmapSet, RealmAccess realmAccess)
+            {
+                realmAccess?.Run(r =>
+                {
+                    var freshSet = r.Find<BeatmapSetInfo>(beatmapSet.ID);
+
+                    if (freshSet == null)
+                        return;
+
+                    beatmapSet.HostingKind = freshSet.HostingKind;
+                    beatmapSet.ExternalContentRoot = freshSet.ExternalContentRoot;
+                    beatmapSet.Hash = freshSet.Hash;
+
+                    // Carousel detach omits Files (see RealmObjectExtensions.beatmap_set_mapper); copy for external lookups.
+                    if (beatmapSet.Files.Count == 0 && freshSet.Files.Count > 0)
+                    {
+                        foreach (var file in freshSet.Files)
+                            beatmapSet.Files.Add(new RealmNamedFileUsage(new RealmFile { Hash = file.File.Hash }, file.Filename));
+                    }
+                });
+            }
+
+            private static IEnumerable<(string storagePath, string relativeFilename)> buildExternalFileMappings(BeatmapInfo beatmapInfo, RealmAccess realmAccess)
+            {
+                var mappings = new List<(string storagePath, string relativeFilename)>();
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                void add(string storagePath, string relativeFilename)
+                {
+                    if (string.IsNullOrEmpty(storagePath) || string.IsNullOrEmpty(relativeFilename))
+                        return;
+
+                    if (seen.Add(storagePath))
+                        mappings.Add((storagePath, relativeFilename));
+                }
+
+                if (beatmapInfo.BeatmapSet != null)
+                {
+                    foreach (var file in beatmapInfo.BeatmapSet.Files)
+                        add(file.File.GetStoragePath(), file.Filename);
+                }
+
+                if (beatmapInfo.File is RealmNamedFileUsage usage)
+                    add(usage.File.GetStoragePath(), usage.Filename);
+
+                realmAccess?.Run(r =>
+                {
+                    var freshBeatmap = r.Find<BeatmapInfo>(beatmapInfo.ID);
+
+                    if (freshBeatmap?.File is RealmNamedFileUsage freshFile)
+                        add(freshFile.File.GetStoragePath(), freshFile.Filename);
+
+                    if (freshBeatmap?.BeatmapSet is BeatmapSetInfo freshSet)
+                    {
+                        foreach (var file in freshSet.Files)
+                            add(file.File.GetStoragePath(), file.Filename);
+                    }
+                });
+
+                string chartPath = beatmapInfo.Path;
+
+                if (!string.IsNullOrEmpty(chartPath) && beatmapInfo.BeatmapSet != null)
+                {
+                    string storagePath = beatmapInfo.BeatmapSet.GetPathForFile(chartPath);
+
+                    if (!string.IsNullOrEmpty(storagePath))
+                        add(storagePath, chartPath);
+                }
+
+                return mappings;
             }
 
             protected override IBeatmap GetBeatmap()
@@ -156,15 +255,20 @@ namespace osu.Game.Beatmaps
 
                 try
                 {
-                    string fileStorePath = BeatmapSetInfo.GetPathForFile(BeatmapInfo.Path);
-
-                    var stream = GetStream(fileStorePath);
+                    string chartPath = BeatmapInfo.Path;
+                    string fileStorePath = BeatmapSetInfo.GetPathForFile(chartPath);
+                    var stream = openChartStream(chartPath, fileStorePath);
 
                     if (stream == null)
                     {
-                        Logger.Log($"Beatmap failed to load (file {BeatmapInfo.Path} not found on disk at expected location {fileStorePath}).", level: LogLevel.Error);
-                        return null;
+                        // Carousel prefetches many panels; external sets log at Debug to avoid spamming errors during scroll.
+                        var logLevel = isExternalChartSet() ? LogLevel.Debug : LogLevel.Error;
+                        Logger.Log($"Beatmap failed to load (file {chartPath} not found on disk at expected location {fileStorePath}).", level: logLevel);
+                        return new Beatmap { BeatmapInfo = BeatmapInfo };
                     }
+
+                    if (isExternalChartSet())
+                        return decodeExternalBeatmap(stream);
 
                     string streamMD5 = stream.ComputeMD5Hash();
                     string streamSHA2 = stream.ComputeSHA2Hash();
@@ -190,6 +294,51 @@ namespace osu.Game.Beatmaps
                 {
                     Logger.Error(e, "Beatmap failed to load");
                     return null;
+                }
+            }
+
+            private Stream openChartStream(string chartPath, string fileStorePath)
+            {
+                if (!string.IsNullOrEmpty(fileStorePath))
+                {
+                    var stream = GetStream(fileStorePath);
+
+                    if (stream != null)
+                        return stream;
+                }
+
+                var streamByName = GetStream(chartPath);
+
+                if (streamByName != null)
+                    return streamByName;
+
+                return tryOpenExternalChartOnDisk(chartPath);
+            }
+
+            private Stream tryOpenExternalChartOnDisk(string chartPath)
+            {
+                if (!isExternalChartSet())
+                    return null;
+
+                if (!ExternalBeatmapPathEncoding.TryResolveContentRoot(BeatmapSetInfo, out string contentRoot))
+                    return null;
+
+                string fullPath = Path.Combine(contentRoot, chartPath.Replace('/', Path.DirectorySeparatorChar));
+
+                return File.Exists(fullPath) ? File.OpenRead(fullPath) : null;
+            }
+
+            private bool isExternalChartSet()
+                => BeatmapSetInfo.IsExternallyHosted || ExternalBeatmapPathEncoding.IsExternalSetHash(BeatmapSetInfo.Hash);
+
+            private IBeatmap decodeExternalBeatmap(Stream stream)
+            {
+                using (var reader = new LineBufferedReader(stream))
+                {
+                    var beatmap = Decoder.GetDecoder<Beatmap>(reader).Decode(reader);
+                    beatmap.BeatmapInfo = BeatmapInfo;
+                    beatmap.BeatmapInfo.UpdateStatisticsFromBeatmap(beatmap);
+                    return beatmap;
                 }
             }
 
@@ -289,17 +438,24 @@ namespace osu.Game.Beatmaps
                 try
                 {
                     string fileStorePath = BeatmapSetInfo.GetPathForFile(BeatmapInfo.Path);
-                    var beatmapFileStream = GetStream(fileStorePath);
+                    var beatmapFileStream = !string.IsNullOrEmpty(fileStorePath) ? GetStream(fileStorePath) : null;
 
                     if (beatmapFileStream == null)
-                    {
-                        Logger.Log($"Beatmap failed to load (file {BeatmapInfo.Path} not found on disk at expected location {fileStorePath})", level: LogLevel.Error);
-                        return new Storyboard();
-                    }
+                        return new Storyboard { BeatmapInfo = BeatmapInfo };
 
                     using (var reader = new LineBufferedReader(beatmapFileStream))
                     {
-                        var decoder = Decoder.GetDecoder<Storyboard>(reader);
+                        Decoder<Storyboard> decoder;
+
+                        try
+                        {
+                            decoder = Decoder.GetDecoder<Storyboard>(reader);
+                        }
+                        catch (IOException)
+                        {
+                            // Non-osu chart files (e.g. BMS) have no storyboard section in osu format.
+                            return new Storyboard { BeatmapInfo = BeatmapInfo };
+                        }
 
                         Stream storyboardFileStream = null;
 
@@ -349,7 +505,7 @@ namespace osu.Game.Beatmaps
                 }
             }
 
-            public override Stream GetStream(string storagePath) => resources.Files.GetStream(storagePath);
+            public override Stream GetStream(string storagePath) => beatmapFileStore.GetStream(storagePath);
 
             private string getMainStoryboardFilename(IBeatmapMetadataInfo metadata)
             {

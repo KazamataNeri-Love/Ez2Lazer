@@ -20,6 +20,7 @@ using osu.Framework.Platform;
 using osu.Framework.Statistics;
 using osu.Framework.Threading;
 using osu.Game.Beatmaps;
+using osu.Game.Beatmaps.ExternalLibraries;
 using osu.Game.Beatmaps.Legacy;
 using osu.Game.Configuration;
 using osu.Game.Extensions;
@@ -116,9 +117,20 @@ namespace osu.Game.Database
         /// <summary>
         /// Ez2Lazer schema revision. Bump when adding Ez-persisted fields; do not change <see cref="schema_version"/> for Ez-only work.
         /// </summary>
-        public const int EZ_REALM_SCHEMA_VERSION = 6;
+        public const int EZ_REALM_SCHEMA_VERSION = 7;
 
         private const int file_schema_version = schema_version * 1000 + EZ_REALM_SCHEMA_VERSION;
+
+        private readonly IRealmSchemaProfile schemaProfile;
+
+        private readonly bool useDevelopmentVersionedFilenames;
+
+        private readonly bool allowDestructiveRecoveryOnSchemaMismatch;
+
+        /// <summary>为 true 时按 <see cref="IRealmSchemaProfile.FileSchemaVersion"/> 迁移；外部工具应设为 false 并指定 <see cref="pinnedDiskSchemaVersion"/>。</summary>
+        private readonly bool performSchemaMigration;
+
+        private readonly ulong? pinnedDiskSchemaVersion;
 
         /// <summary>
         /// Lock object which is held during <see cref="BlockAllOperations"/> sections, blocking realm retrieval during blocking periods.
@@ -211,9 +223,53 @@ namespace osu.Game.Database
         /// <param name="storage">The game storage which will be used to create the realm backing file.</param>
         /// <param name="filename">The filename to use for the realm backing file. A ".realm" extension will be added automatically if not specified.</param>
         /// <param name="updateThread">The game update thread, used to post realm operations into a thread-safe context.</param>
-        public RealmAccess(Storage storage, string filename, GameThread? updateThread = null)
+        /// <param name="useDevelopmentVersionedFilenames">When <c>true</c>, use <c>client_{schema}.realm</c> sidecar copies for migration (game dev default). External tools should pass <c>false</c>.</param>
+        /// <param name="allowDestructiveRecoveryOnSchemaMismatch">When <c>false</c>, schema downgrade errors are thrown instead of backing up and recreating the database (for external tools).</param>
+        /// <param name="performSchemaMigration">When <c>false</c>, opens at <paramref name="pinnedDiskSchemaVersion"/> without running migrations (EzRealmSync 等工具).</param>
+        /// <param name="pinnedDiskSchemaVersion">磁盘上已有的 schema 版本；<paramref name="performSchemaMigration"/> 为 false 时必填。</param>
+        public RealmAccess(Storage storage, string filename, GameThread? updateThread = null, bool useDevelopmentVersionedFilenames = true, bool allowDestructiveRecoveryOnSchemaMismatch = true, bool performSchemaMigration = true, ulong? pinnedDiskSchemaVersion = null)
+            : this(storage, filename, EzRealmSchemaProfile.Instance, updateThread, useDevelopmentVersionedFilenames, allowDestructiveRecoveryOnSchemaMismatch, performSchemaMigration, pinnedDiskSchemaVersion)
+        {
+        }
+
+        /// <summary>
+        /// 以磁盘已有 schema 打开 Ez 库，不执行任何迁移（供 EzRealmSync 等外部工具）。
+        /// </summary>
+        public static RealmAccess OpenWithoutMigration(Storage storage, string filename, int pinnedDiskSchemaVersion, GameThread? updateThread = null)
+        {
+            return new RealmAccess(storage, filename, updateThread, useDevelopmentVersionedFilenames: false, allowDestructiveRecoveryOnSchemaMismatch: false, performSchemaMigration: false, pinnedDiskSchemaVersion: (ulong)pinnedDiskSchemaVersion);
+        }
+
+        /// <summary>
+        /// Construct a new instance with an explicit schema profile (Ez or official).
+        /// </summary>
+        /// <param name="storage">The game storage which will be used to create the realm backing file.</param>
+        /// <param name="filename">The filename to use for the realm backing file.</param>
+        /// <param name="schemaProfile">Schema encoding and migration set (Ez vs official).</param>
+        /// <param name="updateThread">The game update thread, used to post realm operations into a thread-safe context.</param>
+        /// <param name="useDevelopmentVersionedFilenames">When <c>true</c>, DEBUG builds use <c>client_{version}.realm</c> filenames.</param>
+        /// <param name="allowDestructiveRecoveryOnSchemaMismatch">When <c>false</c>, do not delete/recreate the realm file on schema downgrade.</param>
+        /// <param name="performSchemaMigration">When <c>false</c>, do not migrate — open exactly at <paramref name="pinnedDiskSchemaVersion"/>.</param>
+        /// <param name="pinnedDiskSchemaVersion">Required when <paramref name="performSchemaMigration"/> is <c>false</c>.</param>
+        protected RealmAccess(
+            Storage storage,
+            string filename,
+            IRealmSchemaProfile schemaProfile,
+            GameThread? updateThread = null,
+            bool? useDevelopmentVersionedFilenames = null,
+            bool allowDestructiveRecoveryOnSchemaMismatch = true,
+            bool performSchemaMigration = true,
+            ulong? pinnedDiskSchemaVersion = null)
         {
             this.storage = storage;
+            this.schemaProfile = schemaProfile;
+            this.useDevelopmentVersionedFilenames = useDevelopmentVersionedFilenames ?? schemaProfile is EzRealmSchemaProfile;
+            this.allowDestructiveRecoveryOnSchemaMismatch = allowDestructiveRecoveryOnSchemaMismatch;
+            this.performSchemaMigration = performSchemaMigration;
+            this.pinnedDiskSchemaVersion = pinnedDiskSchemaVersion;
+
+            if (!performSchemaMigration && pinnedDiskSchemaVersion == null)
+                throw new ArgumentException($"{nameof(pinnedDiskSchemaVersion)} is required when {nameof(performSchemaMigration)} is false.", nameof(pinnedDiskSchemaVersion));
 
             updateThreadSyncContext = updateThread?.SynchronizationContext ?? SynchronizationContext.Current;
 
@@ -223,13 +279,16 @@ namespace osu.Game.Database
                 Filename += realm_extension;
 
 // #if DEBUG
-            if (!DebugUtils.IsNUnitRunning)
+            if (this.useDevelopmentVersionedFilenames && !DebugUtils.IsNUnitRunning)
                 applyFilenameSchemaSuffix(ref Filename);
 // #endif
 
-            // `prepareFirstRealmAccess()` triggers the first `getRealmInstance` call, which will implicitly run realm migrations and bring the schema up-to-date.
+            // `prepareFirstRealmAccess()` triggers the first `getRealmInstance` call (and migrations when enabled).
             using (var realm = prepareFirstRealmAccess())
-                cleanupPendingDeletions(realm);
+            {
+                if (performSchemaMigration)
+                    cleanupPendingDeletions(realm);
+            }
         }
 
         /// <summary>
@@ -242,14 +301,14 @@ namespace osu.Game.Database
         {
             string originalFilename = filename;
 
-            filename = getVersionedFilename(schema_version);
+            filename = getVersionedFilename(schemaProfile.UpstreamSchemaVersion);
 
             // First check if the current realm version already exists...
             if (storage.Exists(filename))
                 return;
 
             // Check for a previous version we can use as a base database to migrate from...
-            for (int i = schema_version - 1; i >= 0; i--)
+            for (int i = schemaProfile.UpstreamSchemaVersion - 1; i >= 0; i--)
             {
                 string previousFilename = getVersionedFilename(i);
 
@@ -269,7 +328,7 @@ namespace osu.Game.Database
                 using (var previous = storage.GetStream(previousFilename))
                 using (var current = storage.CreateFileSafely(newFilename))
                 {
-                    Logger.Log(@$"Copying previous realm database {previousFilename} to {newFilename} for migration to schema version {schema_version}");
+                    Logger.Log(@$"Copying previous realm database {previousFilename} to {newFilename} for migration to schema version {schemaProfile.UpstreamSchemaVersion}");
                     previous.CopyTo(current);
                 }
             }
@@ -328,6 +387,9 @@ namespace osu.Game.Database
 
         private Realm prepareFirstRealmAccess()
         {
+            if (!performSchemaMigration)
+                return getRealmInstance();
+
             string newerVersionFilename = $"{Filename.Replace(realm_extension, string.Empty)}_newer_version{realm_extension}";
 
             // Attempt to recover a newer database version if available.
@@ -359,6 +421,13 @@ namespace osu.Game.Database
                 if (e.Message.StartsWith(@"Provided schema version", StringComparison.Ordinal))
                 {
                     Logger.Error(e, "Your local database is too new to work with this version of osu!. Please close osu! and install the latest release to recover your data.");
+
+                    if (!allowDestructiveRecoveryOnSchemaMismatch)
+                    {
+                        throw new InvalidOperationException(
+                            "Realm 文件的 schema 版本高于当前访问器可打开的版本。请使用匹配的 Ez/官方访问器，或从备份恢复 client.realm。",
+                            e);
+                    }
 
                     // If a newer version database already exists, don't create another backup. We can presume that the first backup is the one we care about.
                     if (!storage.Exists(newerVersionFilename))
@@ -497,15 +566,18 @@ namespace osu.Game.Database
             if (!ThreadSafety.IsUpdateThread)
                 throw new InvalidOperationException($@"{nameof(RunAsync)} must be called from the update thread.");
 
-            // CountdownEvent will fail if already at zero.
-            if (!pendingAsyncOperations.TryAddCount())
-                pendingAsyncOperations.Reset(1);
+            beginPendingAsyncOperation();
 
             return Task.Run(() =>
             {
-                var result = Run(action);
-                pendingAsyncOperations.Signal();
-                return result;
+                try
+                {
+                    return Run(action);
+                }
+                finally
+                {
+                    endPendingAsyncOperation();
+                }
             }, token);
         }
 
@@ -562,27 +634,28 @@ namespace osu.Game.Database
             if (!ThreadSafety.IsUpdateThread)
                 throw new InvalidOperationException(@$"{nameof(WriteAsync)} must be called from the update thread.");
 
-            // CountdownEvent will fail if already at zero.
-            if (!pendingAsyncOperations.TryAddCount())
-                pendingAsyncOperations.Reset(1);
+            beginPendingAsyncOperation();
 
             // Regardless of calling Realm.GetInstance or Realm.GetInstanceAsync, there is a blocking overhead on retrieval.
             // Adding a forced Task.Run resolves this.
-            var writeTask = Task.Run(async () =>
+            return Task.Run(async () =>
             {
-                total_writes_async.Value++;
+                try
+                {
+                    total_writes_async.Value++;
 
-                // Not attempting to use Realm.GetInstanceAsync as there's seemingly no benefit to us (for now) and it adds complexity due to locking
-                // concerns in getRealmInstance(). On a quick check, it looks to be more suited to cases where realm is connecting to an online sync
-                // server, which we don't use. May want to report upstream or revisit in the future.
-                using (var realm = getRealmInstance())
-                    // ReSharper disable once AccessToDisposedClosure (WriteAsync should be marked as [InstantHandle]).
-                    await realm.WriteAsync(() => action(realm)).ConfigureAwait(false);
-
-                pendingAsyncOperations.Signal();
+                    // Not attempting to use Realm.GetInstanceAsync as there's seemingly no benefit to us (for now) and it adds complexity due to locking
+                    // concerns in getRealmInstance(). On a quick check, it looks to be more suited to cases where realm is connecting to an online sync
+                    // server, which we don't use. May want to report upstream or revisit in the future.
+                    using (var realm = getRealmInstance())
+                        // ReSharper disable once AccessToDisposedClosure (WriteAsync should be marked as [InstantHandle]).
+                        await realm.WriteAsync(() => action(realm)).ConfigureAwait(false);
+                }
+                finally
+                {
+                    endPendingAsyncOperation();
+                }
             });
-
-            return writeTask;
         }
 
         /// <summary>
@@ -598,29 +671,28 @@ namespace osu.Game.Database
             if (!ThreadSafety.IsUpdateThread)
                 throw new InvalidOperationException(@$"{nameof(WriteAsync)} must be called from the update thread.");
 
-            // CountdownEvent will fail if already at zero.
-            if (!pendingAsyncOperations.TryAddCount())
-                pendingAsyncOperations.Reset(1);
+            beginPendingAsyncOperation();
 
             // Regardless of calling Realm.GetInstance or Realm.GetInstanceAsync, there is a blocking overhead on retrieval.
             // Adding a forced Task.Run resolves this.
-            var writeTask = Task.Run(async () =>
+            return Task.Run(async () =>
             {
-                T result;
-                total_writes_async.Value++;
+                try
+                {
+                    total_writes_async.Value++;
 
-                // Not attempting to use Realm.GetInstanceAsync as there's seemingly no benefit to us (for now) and it adds complexity due to locking
-                // concerns in getRealmInstance(). On a quick check, it looks to be more suited to cases where realm is connecting to an online sync
-                // server, which we don't use. May want to report upstream or revisit in the future.
-                using (var realm = getRealmInstance())
-                    // ReSharper disable once AccessToDisposedClosure (WriteAsync should be marked as [InstantHandle]).
-                    result = await realm.WriteAsync(() => action(realm)).ConfigureAwait(false);
-
-                pendingAsyncOperations.Signal();
-                return result;
+                    // Not attempting to use Realm.GetInstanceAsync as there's seemingly no benefit to us (for now) and it adds complexity due to locking
+                    // concerns in getRealmInstance(). On a quick check, it looks to be more suited to cases where realm is connecting to an online sync
+                    // server, which we don't use. May want to report upstream or revisit in the future.
+                    using (var realm = getRealmInstance())
+                        // ReSharper disable once AccessToDisposedClosure (WriteAsync should be marked as [InstantHandle]).
+                        return await realm.WriteAsync(() => action(realm)).ConfigureAwait(false);
+                }
+                finally
+                {
+                    endPendingAsyncOperation();
+                }
             });
-
-            return writeTask;
         }
 
         /// <summary>
@@ -822,25 +894,30 @@ namespace osu.Game.Database
 
             return new RealmConfiguration(storage.GetFullPath(filename ?? Filename, true))
             {
-                SchemaVersion = file_schema_version,
-                MigrationCallback = onMigration,
+                SchemaVersion = pinnedDiskSchemaVersion ?? (ulong)schemaProfile.FileSchemaVersion,
+                MigrationCallback = performSchemaMigration ? onMigration : null,
                 FallbackPipePath = tempPathLocation,
             };
         }
 
         private void onMigration(Migration migration, ulong lastSchemaVersion)
         {
-            if (lastSchemaVersion < schema_version)
+            int upstreamVersion = schemaProfile.UpstreamSchemaVersion;
+
+            if (lastSchemaVersion < (ulong)upstreamVersion)
             {
-                for (ulong i = lastSchemaVersion + 1; i <= schema_version; i++)
+                for (ulong i = lastSchemaVersion + 1; i <= (ulong)upstreamVersion; i++)
                     applyMigrationsForVersion(migration, i);
             }
 
-            int startingEzVersion = lastSchemaVersion >= (ulong)file_schema_version - EZ_REALM_SCHEMA_VERSION
-                ? (int)(lastSchemaVersion - schema_version * 1000)
+            if (schemaProfile.EzRealmSchemaVersion <= 0)
+                return;
+
+            int startingEzVersion = lastSchemaVersion >= (ulong)schemaProfile.FileSchemaVersion - (ulong)schemaProfile.EzRealmSchemaVersion
+                ? (int)(lastSchemaVersion - (ulong)upstreamVersion * 1000)
                 : 0;
 
-            for (int ez = startingEzVersion + 1; ez <= EZ_REALM_SCHEMA_VERSION; ez++)
+            for (int ez = startingEzVersion + 1; ez <= schemaProfile.EzRealmSchemaVersion; ez++)
                 applyEzMigrationsForVersion(migration, ez);
         }
 
@@ -1359,7 +1436,7 @@ namespace osu.Game.Database
 
         private void applyEzMigrationsForVersion(Migration migration, int targetEzVersion)
         {
-            Logger.Log($"Running Ez realm migration to ez version {targetEzVersion} (file schema {schema_version * 1000 + targetEzVersion})...");
+            Logger.Log($"Running Ez realm migration to ez version {targetEzVersion} (file schema {schemaProfile.UpstreamSchemaVersion * 1000 + targetEzVersion})...");
             Stopwatch stopwatch = Stopwatch.StartNew();
 
             switch (targetEzVersion)
@@ -1404,7 +1481,21 @@ namespace osu.Game.Database
                         ruleset.LastAppliedXxySrVersion = 0;
 
                     break;
+
+                case 7:
+                    foreach (var set in migration.NewRealm.All<BeatmapSetInfo>())
+                    {
+                        if (ExternalBeatmapPathEncoding.TryPopulateExternalHosting(set))
+                            continue;
+
+                        if (set.HostingKind == BeatmapSetHostingKind.External && !string.IsNullOrWhiteSpace(set.ExternalContentRoot))
+                            set.ExternalContentRoot = Path.GetFullPath(set.ExternalContentRoot);
+                    }
+
+                    break;
             }
+
+            EzRealmMigrationContributorRegistry.ApplyContributors(migration, targetEzVersion);
 
             Logger.Log($"Ez migration completed in {stopwatch.ElapsedMilliseconds}ms");
         }
@@ -1594,21 +1685,60 @@ namespace osu.Game.Database
 
         private bool isDisposed;
 
+        private void beginPendingAsyncOperation()
+        {
+            // CountdownEvent will fail if already at zero.
+            if (!pendingAsyncOperations.TryAddCount())
+                pendingAsyncOperations.Reset(1);
+        }
+
+        private void endPendingAsyncOperation() => pendingAsyncOperations.Signal();
+
+        /// <summary>
+        /// Release the realm retrieval lock if it is currently held, allowing in-flight async operations to complete or fail during disposal.
+        /// </summary>
+        private void unblockRealmRetrievalForDisposal()
+        {
+            while (realmRetrievalLock.CurrentCount == 0)
+            {
+                try
+                {
+                    realmRetrievalLock.Release();
+                }
+                catch (SemaphoreFullException)
+                {
+                    break;
+                }
+            }
+        }
+
+        private void drainPendingAsyncOperations()
+        {
+            while (pendingAsyncOperations.CurrentCount > 0)
+                pendingAsyncOperations.Signal();
+        }
+
         public void Dispose()
         {
+            if (isDisposed)
+                return;
+
+            // Unblock async writes which may be waiting on realm retrieval during host shutdown (e.g. if BlockAllOperations was interrupted).
+            unblockRealmRetrievalForDisposal();
+
             if (!pendingAsyncOperations.Wait(10000))
+            {
                 Logger.Log("Realm took too long waiting on pending async writes", level: LogLevel.Error);
+                drainPendingAsyncOperations();
+            }
 
             updateRealm?.Dispose();
 
-            if (!isDisposed)
-            {
-                // intentionally block realm retrieval indefinitely. this ensures that nothing can start consuming a new instance after disposal.
-                realmRetrievalLock.Wait();
-                realmRetrievalLock.Dispose();
+            // Intentionally block realm retrieval indefinitely. This ensures that nothing can start consuming a new instance after disposal.
+            realmRetrievalLock.Wait();
+            realmRetrievalLock.Dispose();
 
-                isDisposed = true;
-            }
+            isDisposed = true;
         }
     }
 }

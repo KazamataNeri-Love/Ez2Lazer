@@ -76,6 +76,23 @@ namespace osu.Game.EzOsuGame.Overlays
                 {
                     Keywords = new[] { "main menu", "banner", "news", "advertisement", "ui" }
                 },
+                new SettingsItemV2(new FormEnumDropdown<EzNotificationBehaviour>
+                {
+                    Caption = EzSettingsStrings.NOTIFICATION_BEHAVIOUR,
+                    HintText = EzSettingsStrings.NOTIFICATION_BEHAVIOUR_TOOLTIP,
+                    Current = ezConfig.GetBindable<EzNotificationBehaviour>(Ez2Setting.NotificationBehaviour),
+                })
+                {
+                    Keywords = new[] { "notification", "toast", "alert", "sound", "ui", "gameplay" }
+                },
+                new SettingsItemV2(new FormEnumDropdown<EzScreenshotAction>
+                {
+                    Caption = EzSettingsStrings.SCREENSHOT_ACTION,
+                    Current = ezConfig.GetBindable<EzScreenshotAction>(Ez2Setting.ScreenshotAction),
+                })
+                {
+                    Keywords = new[] { "screenshot", "clipboard", "capture", "image", "ui" }
+                },
                 new SettingsItemV2(new FormCheckBox
                 {
                     Caption = EzSettingsStrings.STORYBOARD_VIDEO_AUTO_SIZE,
