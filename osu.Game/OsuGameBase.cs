@@ -147,6 +147,11 @@ namespace osu.Game
 
         public bool IsDeployedBuild => AssemblyVersion.Major > 0;
 
+        /// <summary>
+        /// When true, unhandled errors may be submitted to ppy Sentry. Disabled for Ez2Lazer.
+        /// </summary>
+        public virtual bool SubmitErrorsToSentry => false;
+
         public virtual string Version
         {
             get
@@ -391,7 +396,7 @@ namespace osu.Game
             dependencies.CacheAs<IWorkingBeatmapCache>(BeatmapManager);
 
             ezAnalysisPersistentStore = new EzAnalysisPersistentStore(Storage);
-            var ezAnalysisDatabase = new EzAnalysisDatabase(ezAnalysisPersistentStore, BeatmapManager, Ez2ConfigManager);
+            var ezAnalysisDatabase = new EzAnalysisDatabase(ezAnalysisPersistentStore, BeatmapManager, RulesetStore, Ez2ConfigManager);
             ezAnalysisCache = new EzAnalysisCache(ezAnalysisDatabase, Ez2ConfigManager);
             dependencies.Cache(ezAnalysisPersistentStore);
             dependencies.Cache(ezAnalysisDatabase);
