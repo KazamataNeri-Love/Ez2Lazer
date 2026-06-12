@@ -1,0 +1,28 @@
+{
+  "Version": 1,
+  "DrawableInfo": {
+    "global": [
+      {
+        "Type": "osu.Game.Skinning.SkinnableSprite, osu.Game, Version=2026.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "Position": {
+          "x": -52.812225,
+          "y": 354.86295
+        },
+        "Rotation": 0.0,
+        "Scale": {
+          "x": 1.4194546,
+          "y": 1.4194546
+        },
+        "Width": null,
+        "Height": null,
+        "Anchor": 12,
+        "Origin": 12,
+        "UsesFixedAnchor": false,
+        "Settings": {
+          "sprite_name": "0500.png"
+        },
+        "Children": []
+      }
+    ]
+  }
+}

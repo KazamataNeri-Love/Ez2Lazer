@@ -27,12 +27,12 @@ namespace osu.Game.Rulesets.Mania.EzMania.HUD
         [SettingSource(typeof(EzHUDManiaStrings), nameof(EzHUDManiaStrings.EFFECT_TYPE_LABEL), nameof(EzHUDManiaStrings.EFFECT_TYPE_DESCRIPTION))]
         public Bindable<EzComEffectType> EffectType { get; } = new Bindable<EzComEffectType>(EzComEffectType.Scale);
 
-        [SettingSource(typeof(EzHUDManiaStrings), nameof(EzHUDManiaStrings.EFFECT_ORIGIN_LABEL), nameof(EzHUDManiaStrings.EFFECT_ORIGIN_DESCRIPTION), SettingControlType = typeof(AnchorDropdown))]
-        public Bindable<Anchor> EffectOrigin { get; } = new Bindable<Anchor>(Anchor.TopCentre)
-        {
-            Default = Anchor.TopCentre,
-            Value = Anchor.TopCentre
-        };
+        // [SettingSource(typeof(EzHUDManiaStrings), nameof(EzHUDManiaStrings.EFFECT_ORIGIN_LABEL), nameof(EzHUDManiaStrings.EFFECT_ORIGIN_DESCRIPTION), SettingControlType = typeof(AnchorDropdown))]
+        // public Bindable<Anchor> EffectOrigin { get; } = new Bindable<Anchor>(Anchor.TopCentre)
+        // {
+        //     Default = Anchor.TopCentre,
+        //     Value = Anchor.TopCentre
+        // };
 
         [SettingSource(typeof(EzHUDManiaStrings), nameof(EzHUDManiaStrings.EFFECT_START_FACTOR_LABEL), nameof(EzHUDManiaStrings.EFFECT_START_FACTOR_DESCRIPTION))]
         public BindableNumber<float> EffectStartFactor { get; } = new BindableNumber<float>(1.5f)
@@ -93,11 +93,10 @@ namespace osu.Game.Rulesets.Mania.EzMania.HUD
                 applyAnimation(wasIncrease, wasMiss);
             });
 
-            EffectOrigin.BindValueChanged(e =>
-            {
-                Text.TextContainer.Anchor = e.NewValue;
-                Text.TextContainer.Origin = e.NewValue;
-            }, true);
+            // EffectOrigin.BindValueChanged(e =>
+            // {
+            //     Text.TextPart.Origin = e.NewValue;
+            // }, true);
 
             AccentAlpha.BindValueChanged(alpha => Text.Alpha = alpha.NewValue, true);
             AccentColour.BindValueChanged(_ => Text.Colour = AccentColour.Value, true);

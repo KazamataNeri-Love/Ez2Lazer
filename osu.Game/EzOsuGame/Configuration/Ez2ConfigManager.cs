@@ -100,8 +100,11 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.SkipWithGameplayKeys, true);
 
             SetDefault(Ez2Setting.StoryboardAutoVideoSize, false);
+            SetDefault(Ez2Setting.AcrylicUiEnabled, false);
+            SetDefault(Ez2Setting.AcrylicUiBlurStrength, 16.0, 0.0, 40.0, 1.0);
             SetDefault(Ez2Setting.KeySoundPreviewMode, KeySoundPreviewMode.Off);
             SetDefault(Ez2Setting.BeatmapPreviewMode, EzBeatmapPreviewMode.Static);
+            SetDefault(Ez2Setting.BeatmapPreviewModeMania, EzBeatmapPreviewMode.StaticFullMap);
             SetDefault(Ez2Setting.BeatmapPreviewDensity, 1.0, 0.1, 5.0, 0.05);
             SetDefault(Ez2Setting.EditorSyncTimelineSpacing, true);
 
@@ -137,6 +140,7 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.SpecialFactor, 1.2, 0.5, 2.0, 0.1);
 
             SetDefault(Ez2Setting.HitPositionGlobalEnable, false);
+            SetDefault(Ez2Setting.EzSkinJsonAutoApplyOnSkinChange, false);
             SetDefault(Ez2Setting.HitPosition, DefaultHitPosition, 0, 500, 1.0);
             SetDefault(Ez2Setting.HitTargetFloatFixed, 6, 0, 10, 0.1);
             SetDefault(Ez2Setting.HitTargetAlpha, 0.6, 0, 1, 0.01);
@@ -193,6 +197,13 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.ServerGuToken, string.Empty);
             SetDefault(Ez2Setting.ServerManualUsername, string.Empty);
             SetDefault(Ez2Setting.ServerManualToken, string.Empty);
+            SetDefault(Ez2Setting.PixivAllowR18, false);
+            SetDefault(Ez2Setting.PixivLandscapeOnly, true);
+            SetDefault(Ez2Setting.PixivAccountWhitelist, string.Empty);
+            SetDefault(Ez2Setting.PixivAccountBlacklist, string.Empty);
+            SetDefault(Ez2Setting.PixivTagInclude, string.Empty);
+            SetDefault(Ez2Setting.PixivTagExclude, string.Empty);
+            SetDefault(Ez2Setting.PixivAutoDownloadEnabled, false);
 
             #endregion
 
@@ -768,10 +779,13 @@ namespace osu.Game.EzOsuGame.Configuration
         ManiaSkipEmptyEdgeColumns,
         SkipWithGameplayKeys,
         StoryboardAutoVideoSize,
+        AcrylicUiEnabled,
+        AcrylicUiBlurStrength,
 
         // 界面功能
         KeySoundPreviewMode,
         BeatmapPreviewMode,
+        BeatmapPreviewModeMania,
         BeatmapPreviewDensity,
         EditorSyncTimelineSpacing,
 
@@ -796,6 +810,11 @@ namespace osu.Game.EzOsuGame.Configuration
         // 皮肤与舞台资源
         ColumnWidthStyle,
         HitPositionGlobalEnable, // 未来要考虑，是否统一成，整套系统套用在传统皮肤上，变成切换设置
+
+        /// <summary>
+        /// When enabled, switching skins applies per-skin EzSkin.json to in-memory Ez config only.
+        /// </summary>
+        EzSkinJsonAutoApplyOnSkinChange,
         GlobalTextureName,
         GameThemeName,
 
@@ -868,6 +887,14 @@ namespace osu.Game.EzOsuGame.Configuration
         ServerGuToken,
         ServerManualUsername,
         ServerManualToken,
+
+        PixivAllowR18,
+        PixivLandscapeOnly,
+        PixivAccountWhitelist,
+        PixivAccountBlacklist,
+        PixivTagInclude,
+        PixivTagExclude,
+        PixivAutoDownloadEnabled,
 
         // 实验性功能
         InputAudioLatencyTracker,

@@ -15,6 +15,7 @@ using osu.Game.Graphics;
 using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Extensions;
+using osu.Game.Rulesets.Mania.EzMania.Editor;
 using osu.Game.Localisation;
 using osu.Game.Overlays.Settings;
 using osu.Game.Rulesets.Configuration;
@@ -56,6 +57,12 @@ namespace osu.Game.Rulesets.Mania
 {
     public class ManiaRuleset : Ruleset, ILegacyRuleset
     {
+        static ManiaRuleset()
+        {
+            // Ensure Mania skin editor provider is registered when the ruleset assembly is used.
+            _ = typeof(EzSkinLNEditorProvider);
+        }
+
         /// <summary>
         /// The maximum number of supported keys in a single stage.
         /// </summary>
@@ -178,7 +185,7 @@ namespace osu.Game.Rulesets.Mania
                 yield return new ManiaModKey9();
 
             if (mods.HasFlag(LegacyMods.KeyCoop))
-                yield return new ManiaModDualStages();
+                yield return new ManiaModSplitStages();
 
             if (mods.HasFlag(LegacyMods.NoFail))
                 yield return new ManiaModNoFail();
@@ -237,7 +244,7 @@ namespace osu.Game.Rulesets.Mania
                         value |= LegacyMods.Key9;
                         break;
 
-                    case ManiaModDualStages:
+                    case ManiaModSplitStages:
                         value |= LegacyMods.KeyCoop;
                         break;
 
@@ -266,12 +273,6 @@ namespace osu.Game.Rulesets.Mania
                 case ModType.NeriMod:
                     return new Mod[]
                     {
-                        new ManiaModPatternShiftSpaceMix(),
-                        new ManiaModPatternShiftSpaceMixBracket(),
-                        new ManiaModPatternShiftSpaceMixChord(),
-                        new ManiaModPatternShiftSpaceMixDelay(),
-                        new ManiaModPatternShiftSpaceMixDump(),
-                        new ManiaModPatternShiftSpaceMixJack(),
                         new ManiaModNeriSPRefiner(),
                         new ManiaModNeriBarrelRoll(),
                         new ManiaModNeriFasterBarrelRoll(),
@@ -355,7 +356,7 @@ namespace osu.Game.Rulesets.Mania
                     return new Mod[]
                     {
                         new ManiaModRandom(),
-                        new ManiaModDualStages(),
+                        new ManiaModSplitStages(),
                         new ManiaModMirror(),
                         new ManiaModDifficultyAdjust(),
                         new ManiaModClassic(),

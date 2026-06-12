@@ -63,6 +63,26 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly LocalisableString BACKGROUND_ALPHA_LABEL = new EzLocalizationManager.EzLocalisableString("背景透明度", "Box Element Alpha");
         public static readonly LocalisableString BOX_ELEMENT_ALPHA_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("背景框的透明度值", "The alpha value of background.");
 
+        public static readonly LocalisableString BOX_ELEMENT_WIDTH_LABEL = new EzLocalizationManager.EzLocalisableString("宽度", "Width");
+        public static readonly LocalisableString BOX_ELEMENT_WIDTH_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("背景框的宽度", "The width of the background box.");
+
+        public static readonly LocalisableString BOX_ELEMENT_HEIGHT_LABEL = new EzLocalizationManager.EzLocalisableString("高度", "Height");
+        public static readonly LocalisableString BOX_ELEMENT_HEIGHT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("背景框的高度", "The height of the background box.");
+
+        public static readonly LocalisableString BOX_ELEMENT_BLUR_LABEL = new EzLocalizationManager.EzLocalisableString("背景虚化", "Backdrop Blur");
+
+        public static readonly LocalisableString BOX_ELEMENT_BLUR_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "开启后真穿透虚化框下方 OsuScreenStack 内已绘制内容（壁纸、选歌 UI、游戏 HUD/playfield 等）。"
+            + "\n不含 footer、Logo、设置/通知浮层；关闭或强度为 0 时不声明离屏承载层、无额外 GPU 开销。",
+            "When enabled, acrylic-blurs content already rendered within OsuScreenStack beneath the box (wallpaper, song select UI, gameplay HUD/playfield, etc.)."
+            + "\nExcludes footer, logo, and global settings/notification overlays; no offscreen buffer when disabled or strength is 0.");
+
+        public static readonly LocalisableString BOX_ELEMENT_BLUR_STRENGTH_LABEL = new EzLocalizationManager.EzLocalisableString("虚化强度", "Blur Strength");
+
+        public static readonly LocalisableString BOX_ELEMENT_BLUR_STRENGTH_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "背景虚化的模糊强度。设为 0 等效于关闭虚化。",
+            "Blur strength for the backdrop effect. A value of 0 is equivalent to disabling blur.");
+
         // EzHUDAccuracyCounter
         public static readonly LocalisableString FILL_DIRECTION_LABEL = new EzLocalizationManager.EzLocalisableString("排列方向", "Fill Direction");
         public static readonly LocalisableString FILL_DIRECTION_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("选择组件的排列方向", "Select the arrangement direction of components.");
@@ -141,5 +161,30 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly LocalisableString PAUSE_SETTINGS_PREVIEW_PAUSED = new EzLocalizationManager.EzLocalisableString("暂停中", "Paused");
         public static readonly LocalisableString PAUSE_SETTINGS_PREVIEW_LABEL = new EzLocalizationManager.EzLocalisableString("预览", "Preview");
+
+        // EzHUDDynamicSpeedDisplay
+        public static readonly LocalisableString DYNAMIC_SPEED_SHOW_LINE_LABEL = new EzLocalizationManager.EzLocalisableString("显示速度折线", "Show Speed Line");
+
+        public static readonly LocalisableString DYNAMIC_SPEED_SHOW_LINE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "是否显示速度折线图区域。",
+            "Whether to show the speed line chart area.");
+
+        public static readonly LocalisableString DYNAMIC_SPEED_LINE_WIDTH_LABEL = new EzLocalizationManager.EzLocalisableString("速度折线宽度", "Speed Line Width");
+
+        public static readonly LocalisableString DYNAMIC_SPEED_LINE_WIDTH_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "速度折线图的总绘制宽度（像素）。",
+            "Total draw width of the speed line chart in pixels.");
+
+        public static readonly LocalisableString DYNAMIC_SPEED_LINE_HEIGHT_LABEL = new EzLocalizationManager.EzLocalisableString("速度区间高度", "Speed Range Height");
+
+        public static readonly LocalisableString DYNAMIC_SPEED_LINE_HEIGHT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "速度折线区域的垂直高度。联动 mod 时上下边为 mod 速度区间；否则以进图速度居中，每 0.01x 对应 2px。",
+            "Vertical height of the speed line area. With a linked mod, top/bottom match the mod speed range; otherwise centred on entry speed at 2px per 0.01x.");
+
+        public static readonly LocalisableString DYNAMIC_SPEED_ENDPOINT_BLINK_LABEL = new EzLocalizationManager.EzLocalisableString("端点闪烁", "Endpoint Blink");
+
+        public static readonly LocalisableString DYNAMIC_SPEED_ENDPOINT_BLINK_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "速度变化时在折线右端显示不显眼的闪烁白点。",
+            "Show a subtle blinking white dot at the line endpoint while speed is changing.");
     }
 }

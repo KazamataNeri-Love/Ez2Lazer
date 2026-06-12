@@ -29,7 +29,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.Editor
     {
         private Drawable createStaticPartImpl(ISkin skin)
         {
-            var transformedSkin = createTransformedSkin(skin);
+            var transformedSkin = createTransformedSkin(skin, preview_key_count);
 
             return new SkinProvidingContainer(transformedSkin)
             {
@@ -38,47 +38,44 @@ namespace osu.Game.Rulesets.Mania.EzMania.Editor
                 RelativeSizeAxes = Axes.Both,
                 Child = new FillFlowContainer
                 {
-                    RelativeSizeAxes = Axes.Y,
-                    AutoSizeAxes = Axes.X,
+                    RelativeSizeAxes = Axes.Both,
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
-                    Direction = FillDirection.Horizontal,
-                    Spacing = new Vector2(15, 0),
+                    Direction = FillDirection.Vertical,
+                    Spacing = new Vector2(0, 10),
                     Padding = new MarginPadding(10),
                     Children = new[]
                     {
-                        createColumn(skin, useTransformed: false, "Before"),
-                        createColumn(skin, useTransformed: true, "After"),
+                        createPreviewRow(skin, "Note", isHold: false),
+                        createPreviewRow(skin, "LN", isHold: true),
                     }
                 }
             };
         }
 
-        private SkinProvidingContainer createColumn(ISkin skin, bool useTransformed, string label)
+        private Drawable createPreviewRow(ISkin skin, string label, bool isHold, int columnIndex = 0, bool isSpecial = false)
         {
-            var skinToProvide = useTransformed ? createTransformedSkin(skin) : skin;
-            var hold = new HoldNote { StartTime = 0, Duration = 500, Column = 0 };
-            hold.ApplyDefaults(new ControlPointInfo(), new BeatmapDifficulty());
+            var transformedSkin = createTransformedSkin(skin, preview_key_count);
 
-            return new SkinProvidingContainer(skinToProvide)
+            ManiaHitObject hitObject = isHold
+                ? new HoldNote { StartTime = 0, Duration = 500, Column = columnIndex }
+                : new Note { StartTime = 0, Column = columnIndex };
+
+            hitObject.ApplyDefaults(new ControlPointInfo(), new BeatmapDifficulty());
+
+            DrawableHitObject drawable = isHold
+                ? new DrawableHoldNote((HoldNote)hitObject)
+                : new DrawableNote((Note)hitObject);
+
+            return new SkinProvidingContainer(transformedSkin)
             {
-                RelativeSizeAxes = Axes.Y,
-                Width = preview_column_width + 10,
-                Child = new Container
+                RelativeSizeAxes = Axes.X,
+                Height = 260,
+                Child = new PreviewDependencyContainer(preview_key_count, columnIndex, ManiaAction.Key1, isSpecial)
                 {
-                    RelativeSizeAxes = Axes.Both,
-                    Children = new Drawable[]
+                    Child = new EzNoteContainer(ScrollingDirection.Down, label)
                     {
-                        new PreviewDependencyContainer(preview_key_count, 0, ManiaAction.Key1)
-                        {
-                            Child = new EzNoteContainer(ScrollingDirection.Down, label)
-                            {
-                                Child = new DrawableHoldNote(hold)
-                                {
-                                    RelativeSizeAxes = Axes.Both,
-                                }
-                            }
-                        },
+                        Child = drawable,
                     }
                 }
             };
@@ -184,14 +181,14 @@ namespace osu.Game.Rulesets.Mania.EzMania.Editor
             private readonly PreviewGameplayClock gameplayClockDependency = new PreviewGameplayClock();
             private readonly ManualClock previewClock = new ManualClock();
 
-            public PreviewDependencyContainer(int keyCount, int column, ManiaAction action)
+            public PreviewDependencyContainer(int keyCount, int column, ManiaAction action, bool isSpecial = false)
             {
                 RelativeSizeAxes = Axes.Both;
                 Clock = new FramedClock(previewClock);
 
                 stageDefinition = new StageDefinition(keyCount);
                 beatmapDependency = new ManiaBeatmap(stageDefinition);
-                columnDependency = new Column(column, isSpecial: false);
+                columnDependency = new Column(column, isSpecial: isSpecial);
                 columnDependency.Action.Value = action;
 
                 InternalChildren = new Drawable[]

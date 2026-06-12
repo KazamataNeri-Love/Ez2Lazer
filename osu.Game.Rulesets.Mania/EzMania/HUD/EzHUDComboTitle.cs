@@ -128,7 +128,6 @@ namespace osu.Game.Rulesets.Mania.EzMania.HUD
                 // }
 
                 Text.TextContainer.Anchor = EffectOrigin.Value;
-                Text.TextContainer.Origin = EffectOrigin.Value;
             }, true);
             Font.BindValueChanged(e =>
             {

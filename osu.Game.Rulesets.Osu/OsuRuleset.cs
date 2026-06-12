@@ -15,7 +15,8 @@ using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.Legacy;
 using osu.Game.Configuration;
 using osu.Game.Graphics;
-using osu.Game.EzOsuGame.Mods;
+using osu.Game.EzOsuGame.Mods.LAsMods;
+using osu.Game.EzOsuGame.Mods.CommunityMod;
 using osu.Game.EzOsuGame.Statistics;
 using osu.Game.Localisation;
 using osu.Game.Overlays.Settings;
@@ -171,6 +172,13 @@ namespace osu.Game.Rulesets.Osu
                         new UniversalLoopPlayClip(),
                     };
 
+                case ModType.CommunityMod:
+                    return new Mod[]
+                    {
+                        new ModHealthAdaptive(),
+                        new ModAccuracyAdaptive(),
+                    };
+
                 case ModType.DifficultyReduction:
                     return new Mod[]
                     {
@@ -250,7 +258,13 @@ namespace osu.Game.Rulesets.Osu
             }
         }
 
-        public override ScoreMultiplierCalculator CreateScoreMultiplierCalculator(ScoreMultiplierContext context) => new OsuScoreMultiplierCalculator(context);
+        public override ScoreMultiplierCalculator CreateScoreMultiplierCalculator(ScoreMultiplierContext context)
+        {
+            if (context.Score != null && context.Score.TotalScoreVersion < 30000017)
+                return new OsuScoreMultiplierCalculatorV1(context);
+
+            return new OsuScoreMultiplierCalculatorV2(context);
+        }
 
         public override Drawable CreateIcon() => new SpriteIcon { Icon = OsuIcon.RulesetOsu };
 
