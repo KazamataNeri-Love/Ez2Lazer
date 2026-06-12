@@ -2,231 +2,1300 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
+using osu.Framework.Extensions;
+using osu.Framework.Testing;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using osu.Framework;
 using osu.Framework.Allocation;
+using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
-using osu.Framework.Logging;
+using osu.Framework.Graphics.Cursor;
+using osu.Framework.Localisation;
+using osu.Framework.Platform;
 using osu.Framework.Screens;
 using osu.Game.Beatmaps;
-using osu.Game.Configuration;
+using osu.Game.Database;
+using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.ScriptedSkin;
-using osu.Game.Graphics;
-using osu.Game.Graphics.Containers;
-using osu.Game.Graphics.Sprites;
-using osu.Game.Graphics.UserInterface;
+using osu.Game.EzOsuGame.Edit.Components;
+using osu.Game.EzOsuGame.Edit.Note;
+using osu.Game.EzOsuGame.Localization;
+using osu.Game.Graphics.Cursor;
+using osu.Game.IO;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Dialog;
+using osu.Game.Overlays.Notifications;
+using osu.Game.Overlays.SkinEditor;
+using osu.Game.Rulesets;
 using osu.Game.Screens;
 using osu.Game.Skinning;
-using osuTK;
-using osuTK.Graphics;
 
 namespace osu.Game.EzOsuGame.Edit
 {
-    //TODO: 重排布局，增加普通note的前后对比
-    // 1.游戏内完整Skin.ini编辑
-    // 2.实现完整Ez特有皮肤设置，并可覆写进Skin.ini
-    // 3.游戏内PS、图片导出(包括渐变动画)
-    // 4.设计原则 & 禁止：
-    // 4.1 多参数设置使用string?类型，mania的多列用","分隔符, 输入时自动替换到英文字符。
-    // 4.2 包裹导出方法，覆写前备份，所有皮肤源文件备份到皮肤文件夹SkinName/Backup/路径下。
-    // 4.3 禁止使用自定义的Skin.ini，使用系统自带的。
-    // 4.4 未来考虑在皮肤中增加EzSkin.json或ini，自定义映射不同的Skin{#}.ini
-    // 4.5 note编辑，等待着色功能，导出使用文件名模版，悬浮时提示note1优先用白色，可以提供按小节线染色功能。
-    // 4.6 这个场景中，未来可以考虑按谱面编辑器的皮肤面板绘制，然后在EzSkin.json中自定义各种颜色模版，小节线颜色，UI组件显示等。
+    // Milestone index — see EzSkinEditor refactor plan:
+    // M1: layout shell + scene strategies + sidebar groups
+    // M2: live vs snapshot comparison + Note/LN preview (skin.ini keeps Saved/Draft)
+    // M3: Skin.ini editor + backup + save footer
+    // M4: top-bar preview controls + static/beatmap scene backends
+    // M5: EzSkin.json + advanced colouring + config menu (json/colour→ini)
+    // M6: size→ini, .osk export
+    // M7: preview toolbar + skin popover + virtual comparison on size/colour scenes
+    // M8: size/colour virtual provider registration fix
+    // M9: config snapshot comparison + create/restore snapshot + auto-save on navigate
+    // M10: Note scene with independent note-edit snapshot comparison + export
 
     /// <summary>
-    /// Ez皮肤编辑界面，提供预览和参数调整功能。通过按钮打开，该场景应与GameplayScreen和SongSelect并列存在，以同样的形式进行切换。
-    /// <para>分为三个区域：</para>
-    /// 1.左侧, 虚拟播放场景（循环连续播放note下落，包含循环命中，和循环Miss）;
-    /// 2.中间, 当前皮肤note显示 vs 编辑中note显示对比（LN的Head, Body, Tail显示容器着色边框）;
-    /// 3.右侧, 设置面板, 放置相关设置，投皮面尾编辑一类。
+    /// Ez skin editor screen with menu bar, scene bar, scene content and toolbox-style settings sidebar.
+    /// Scene switching is driven by <see cref="IEzSkinEditorSceneStrategy"/> — not by sidebar groups.
     /// </summary>
     public partial class EzSkinEditorScreen : OsuScreen
     {
+        [Cached]
+        private readonly OverlayColourProvider colourProvider = new OverlayColourProvider(OverlayColourScheme.Blue);
+
         [Resolved]
         private SkinManager skinManager { get; set; } = null!;
 
-        // 必须这样，否则会构建失败
+        [Resolved]
+        private Ez2ConfigManager ezSkinConfig { get; set; } = null!;
+
+        [Resolved]
+        private BeatmapManager beatmapManager { get; set; } = null!;
+
+        [Resolved]
+        private IBindable<WorkingBeatmap> gameBeatmap { get; set; } = null!;
+
+        [Resolved]
+        private RealmAccess realm { get; set; } = null!;
+
+        [Resolved]
+        private GameHost host { get; set; } = null!;
+
+        [Resolved]
+        private Storage storage { get; set; } = null!;
+
         [Resolved(canBeNull: true)]
         private IDialogOverlay? dialogOverlay { get; set; }
 
-        private ISkinEditorVirtualProvider? provider;
+        [Resolved(canBeNull: true)]
+        private INotificationOverlay? notifications { get; set; }
+
+        [Resolved]
+        private MusicController musicController { get; set; } = null!;
 
         private Container? backgroundContainer;
-        private Container? leftPlaybackContainer;
-        private Container? centerNoteDisplayContainer;
-        private OsuScrollContainer? settingsScrollContainer;
+        private Container sceneContentHost = null!;
+        private EzSkinEditorMenuBar menuBar = null!;
+        private EzSkinEditorSceneBar sceneBar = null!;
+        private EzSkinEditorSidebar sidebar = null!;
+        private EzSkinEditorTopToolbar topToolbar = null!;
+
+        private EzSkinEditorBeatmapPicker? beatmapPicker;
+
+        private bool attemptedGlobalBeatmapPreview;
+        private bool comparisonSnapshotInitialized;
+        private Guid comparisonSnapshotSkinId;
+        private bool noteSnapshotInitialized;
+        private Guid noteSnapshotSkinId;
+        private bool configPreviewRefreshBound;
+
+        private ISkinEditorVirtualProvider? provider;
+        private EzSkinEditorSceneContext? sceneContext;
+
+        private EzSkinEditorEmbeddedPlayer? embeddedPlayer;
+        private string embeddedPlayerBeatmapHash = string.Empty;
+        private int embeddedPlayerRulesetId;
+        private Guid embeddedPlayerSkinId;
+        private double lastSceneBarProgressDisplayTime = double.MinValue;
+        private Bindable<EzBeatmapPreviewMode>? sceneBarPreviewModeBindable;
+
+        public Bindable<EzSkinEditorSceneType> CurrentScene => sceneBar.CurrentScene;
+
+        internal Bindable<EzSkinEditorPreviewSource> PreviewSource => PreviewState.Source;
+
+        /// <summary>
+        /// Per-skin skin.ini session. Skin-layer only.
+        /// </summary>
+        public EzSkinIniSession? SkinIniSession { get; private set; }
+
+        /// <summary>
+        /// Per-skin EzSkin.json session. Created only via config menu.
+        /// </summary>
+        public EzSkinJsonSession? SkinJsonSession { get; private set; }
+
+        internal EzSkinEditorPreviewState PreviewState { get; } = new EzSkinEditorPreviewState();
+
+        internal Bindable<EzSkinEditorNoteCompareKind> NoteCompareKind { get; } = new Bindable<EzSkinEditorNoteCompareKind>();
 
         public EzSkinEditorScreen()
         {
             RelativeSizeAxes = Axes.Both;
             Anchor = Anchor.Centre;
             Origin = Anchor.Centre;
-
-            // AddLayout(drawSizeLayout = new LayoutValue(Invalidation.DrawSize));
         }
 
         public override void OnEntering(ScreenTransitionEvent e)
         {
             base.OnEntering(e);
-            Schedule(populateSettings);
+            Schedule(refreshScene);
             this.FadeInFromZero(200, Easing.OutQuint);
         }
 
         public override void OnResuming(ScreenTransitionEvent e)
         {
             base.OnResuming(e);
-            Schedule(populateSettings);
+            Schedule(refreshScene);
         }
 
         public override bool OnExiting(ScreenExitEvent e)
         {
+            persistEditorConfig();
             this.FadeOut(200, Easing.OutQuint);
             return base.OnExiting(e);
         }
 
         [BackgroundDependencyLoader]
-        private void load(OsuConfigManager config, OsuColour colours)
+        private void load()
         {
             InternalChildren = new Drawable[]
             {
-                new Container
+                backgroundContainer = new Container { RelativeSizeAxes = Axes.Both },
+                new OsuContextMenuContainer
                 {
                     RelativeSizeAxes = Axes.Both,
-                    Children = new Drawable[]
+                    Child = new PopoverContainer
                     {
-                        // Background plate (use the same skin component as mania stage background).
-                        backgroundContainer = new Container
+                        RelativeSizeAxes = Axes.Both,
+                        Child = new GridContainer
                         {
                             RelativeSizeAxes = Axes.Both,
-                        },
-                        new GridContainer
-                        {
-                            RelativeSizeAxes = Axes.Both,
-                            Padding = new MarginPadding(10),
-                            ColumnDimensions = new[]
-                            {
-                                new Dimension(GridSizeMode.Relative, 0.3f),
-                                new Dimension(GridSizeMode.Relative, 0.4f),
-                                new Dimension(GridSizeMode.Relative, 0.3f),
-                            },
                             RowDimensions = new[]
                             {
-                                new Dimension(GridSizeMode.Relative, 1),
+                                new Dimension(GridSizeMode.AutoSize),
+                                new Dimension(GridSizeMode.AutoSize),
+                                new Dimension(),
                             },
                             Content = new[]
                             {
                                 new Drawable[]
                                 {
-                                    // 左侧：虚拟播放场景
-                                    leftPlaybackContainer = new Container
-                                    {
-                                        RelativeSizeAxes = Axes.Both,
-                                    },
-                                    // 中间：note 显示
-                                    centerNoteDisplayContainer = new Container
-                                    {
-                                        RelativeSizeAxes = Axes.Both,
-                                    },
-                                    // 右侧：设置面板
                                     new Container
                                     {
-                                        RelativeSizeAxes = Axes.Both,
+                                        Name = @"Menu container",
+                                        RelativeSizeAxes = Axes.X,
+                                        Depth = float.MinValue,
+                                        Height = SkinEditor.MENU_HEIGHT,
                                         Children = new Drawable[]
                                         {
-                                            settingsScrollContainer = new OsuScrollContainer
+                                            menuBar = new EzSkinEditorMenuBar
                                             {
-                                                RelativeSizeAxes = Axes.Both,
-                                                Height = 0.9f, // 为应用按钮留出空间
+                                                ApplyAction = applySettings,
+                                                ExitAction = tryExit,
+                                                CreateEzSkinJsonAction = createEzSkinJson,
+                                                UpdateEzSkinJsonSnapshotAction = updateEzSkinJsonSnapshot,
+                                                RemoveEzSkinJsonAction = removeEzSkinJson,
+                                                ImportJsonAction = importJson,
+                                                ImportFromSkinJsonAction = importFromSkinJson,
+                                                ExportJsonAction = exportJson,
+                                                WriteColoursToSkinIniAction = writeColoursToSkinIni,
+                                                WriteSizesToSkinIniAction = writeSizesToSkinIni,
+                                                ExportOskAction = exportOsk,
+                                                CreateConfigSnapshotAction = createConfigSnapshot,
+                                                RestoreConfigSnapshotAction = restoreConfigSnapshot,
+                                                ExportPreviewImageAction = exportPreviewImage,
+                                                CanCreateEzSkinJson = () => SkinJsonSession is { IsSupported: true, HasFile: false },
+                                                CanExportPreviewImage = () => RuntimeInfo.IsDesktop,
+                                                CanUpdateEzSkinJsonSnapshot = () => SkinJsonSession is { IsSupported: true, HasFile: true }
+                                                                                    && SkinJsonSession.IsDirty(ezSkinConfig),
+                                                CanRemoveEzSkinJson = () => SkinJsonSession is { IsSupported: true, HasFile: true },
+                                                CanImportFromSkinJson = () => SkinJsonSession is { IsSupported: true, HasFile: true },
+                                                CanWriteColoursToSkinIni = () => SkinIniSession is { IsSupported: true } && getCurrentKeyMode() > 0,
+                                                CanWriteSizesToSkinIni = () => SkinIniSession is { IsSupported: true } && getCurrentKeyMode() > 0,
+                                                CanExportOsk = canExportOsk,
+                                                CanUseConfigSnapshot = () => sceneBar.CurrentScene.Value != EzSkinEditorSceneType.Note,
                                             },
-                                            new ApplySettingsButton
+                                            topToolbar = new EzSkinEditorTopToolbar
                                             {
-                                                Text = "Apply Settings",
-                                                RelativeSizeAxes = Axes.X,
-                                                Height = 40,
-                                                Anchor = Anchor.BottomCentre,
-                                                Origin = Anchor.BottomCentre,
-                                                Action = applySettings,
-                                            }
-                                        }
+                                                PreviewSource = PreviewState.Source,
+                                                PreviewMode = PreviewState.Mode,
+                                                ToggleBeatmapPlaybackRequested = toggleBeatmapPlayback,
+                                                BeatmapPreviewRequested = selectBeatmapPreview,
+                                            },
+                                        },
                                     },
-                                }
-                            }
-                        }
-                    }
-                }
+                                },
+                                new Drawable[]
+                                {
+                                    sceneBar = new EzSkinEditorSceneBar
+                                    {
+                                        RelativeSizeAxes = Axes.X,
+                                    },
+                                },
+                                new Drawable[]
+                                {
+                                    new GridContainer
+                                    {
+                                        RelativeSizeAxes = Axes.Both,
+                                        ColumnDimensions = new[]
+                                        {
+                                            new Dimension(),
+                                            new Dimension(GridSizeMode.AutoSize),
+                                        },
+                                        Content = new[]
+                                        {
+                                            new Drawable[]
+                                            {
+                                                sceneContentHost = new Container { RelativeSizeAxes = Axes.Both, Masking = true },
+                                                sidebar = new EzSkinEditorSidebar(),
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
             };
         }
 
-        public void PopulateSettings() => populateSettings();
-
-        private void populateSettings()
+        protected override void LoadComplete()
         {
-            // 注意：这里不要创建 HitObjectComposer（会引入编辑器依赖）。
-            // 尽量确保 mania 程序集已加载，以便其在模块初始化时完成 provider 注册。
-
-            backgroundContainer!.Child = createManiaStageBackgroundOrNull() ?? new Container { RelativeSizeAxes = Axes.Both };
-            backgroundContainer.Child.RelativeSizeAxes = Axes.Both;
-
-            provider = createProviderOrNull(Beatmap.Value?.Beatmap);
-
-            // 当调用时初始化屏幕
-            initializeLeftPlayback();
-            initializeCenterDisplay();
-            initializeRightSettings();
+            base.LoadComplete();
+            SkinEditorProviderResolver.EnsureDefaultProviderRegistered();
+            beatmapPicker = new EzSkinEditorBeatmapPicker(realm, beatmapManager);
+            sceneBar.CurrentScene.BindValueChanged(onSceneChanged, true);
+            skinManager.CurrentSkinInfo.BindValueChanged(onCurrentSkinInfoChanged);
+            bindConfigPreviewRefresh();
+            bindColumnKeyModePreviewRefresh();
+            bindSceneBarPlayback();
         }
 
-        private static ISkinEditorVirtualProvider? createProviderOrNull(IBeatmap? beatmap)
+        private void bindColumnKeyModePreviewRefresh()
         {
-            // Prefer a ruleset-registered provider when a beatmap is available.
-            try
+            ezSkinConfig.GetBindable<int>(Ez2Setting.ColumnTypeListSelect).BindValueChanged(_ =>
             {
-                int rulesetId = beatmap?.BeatmapInfo.Ruleset.OnlineID ?? 0;
+                if (sceneBar.CurrentScene.Value == EzSkinEditorSceneType.Colour)
+                    Schedule(refreshPreviewContent);
+            });
+        }
 
-                if (rulesetId != 0)
-                {
-                    var fromRegistry = SkinEditorProviderRegistry.Get(rulesetId);
-                    if (fromRegistry != null)
-                        return fromRegistry;
-                }
+        protected override void Update()
+        {
+            base.Update();
 
-                // Fallback: discover any loaded type that implements ISkinEditorVirtualProvider.
-                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    Type[] types;
+            var source = getActiveScenePlaybackSource();
 
-                    try
-                    {
-                        types = asm.GetTypes();
-                    }
-                    catch
-                    {
-                        continue;
-                    }
+            if (source == null || !source.IsPlaying)
+                return;
 
-                    foreach (var t in types)
-                    {
-                        if (typeof(ISkinEditorVirtualProvider).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract)
-                        {
-                            try
-                            {
-                                return Activator.CreateInstance(t) as ISkinEditorVirtualProvider;
-                            }
-                            catch
-                            {
-                                // ignore and continue
-                            }
-                        }
-                    }
-                }
-            }
-            catch
+            if (source.CurrentTime - lastSceneBarProgressDisplayTime < 16)
+                return;
+
+            sceneBar.PlaybackControls.SetCurrentTime(source.CurrentTime);
+            lastSceneBarProgressDisplayTime = source.CurrentTime;
+        }
+
+        private void bindSceneBarPlayback()
+        {
+            var controls = sceneBar.PlaybackControls;
+            controls.OnSeek = seekSceneBarPlayback;
+            controls.OnPlayStateChanged = setSceneBarPlaybackPlaying;
+
+            sceneBarPreviewModeBindable = PreviewState.Mode.GetBoundCopy();
+            sceneBarPreviewModeBindable.BindValueChanged(mode =>
             {
+                setBeatmapPlaybackPlaying(mode.NewValue == EzBeatmapPreviewMode.Dynamic, updateMode: false);
+            }, true);
+        }
+
+        private void seekSceneBarPlayback(double time) => getActiveScenePlaybackSource()?.Seek(time);
+
+        private void setSceneBarPlaybackPlaying(bool playing) => setBeatmapPlaybackPlaying(playing);
+
+        private void setBeatmapPlaybackPlaying(bool playing, bool updateMode = true)
+        {
+            if (updateMode)
+            {
+                if (playing)
+                    PreviewState.ResumeBeatmapPlayback();
+                else
+                    PreviewState.PauseBeatmapPlayback();
             }
+
+            getActiveScenePlaybackSource()?.SetPlaying(playing);
+            sceneBar.PlaybackControls.SetPlaying(playing);
+            applyPreviewAudioPolicy();
+            refreshSceneBarPlayback();
+        }
+
+        private void refreshSceneBarPlayback()
+        {
+            var controls = sceneBar.PlaybackControls;
+            var source = getActiveScenePlaybackSource();
+
+            if (source == null)
+            {
+                controls.Alpha = 0;
+                return;
+            }
+
+            controls.Alpha = 1;
+            controls.SetRange(source.BeatmapMinTime, source.BeatmapMaxTime);
+            controls.SetCurrentTime(source.CurrentTime);
+            controls.SetPlaying(source.IsPlaying);
+        }
+
+        private IEzSkinEditorScenePlaybackSource? getActiveScenePlaybackSource()
+        {
+            if (sceneBar.CurrentScene.Value == EzSkinEditorSceneType.Appearance)
+                return embeddedPlayer is { CanBeMounted: true } player ? player : null;
+
+            if (sceneBar.CurrentScene.Value is EzSkinEditorSceneType.Size or EzSkinEditorSceneType.Colour)
+                return sceneContentHost.ChildrenOfType<IEzSkinEditorScenePlaybackSource>().FirstOrDefault(s => s.IsActive);
 
             return null;
+        }
+
+        private void onSceneChanged(ValueChangedEvent<EzSkinEditorSceneType> change)
+        {
+            if (change.NewValue == EzSkinEditorSceneType.SkinIni && !isSkinIniSupported())
+            {
+                sceneBar.CurrentScene.Value = EzSkinEditorSceneType.Appearance;
+                return;
+            }
+
+            if (change.OldValue != change.NewValue)
+                persistEditorConfig();
+
+            Schedule(applyCurrentScene);
+        }
+
+        public void PopulateSettings() => refreshScene();
+
+        public void ApplySettings() => applySettings();
+
+        internal void CreateEzSkinJsonForTesting() => createEzSkinJson();
+
+        internal void WriteSizesToSkinIniForTesting() => writeSizesToSkinIni();
+
+        internal void CreateConfigSnapshotForTesting() => createConfigSnapshot();
+
+        internal void RestoreConfigSnapshotForTesting() => restoreConfigSnapshot();
+
+        internal EzSkinEditorComparisonSnapshot ComparisonSnapshotForTesting { get; } = new EzSkinEditorComparisonSnapshot();
+
+        internal EzSkinEditorNoteEditSession NoteSessionForTesting { get; } = new EzSkinEditorNoteEditSession();
+
+        internal EzSkinEditorNoteEditSnapshot NoteSnapshotForTesting { get; } = new EzSkinEditorNoteEditSnapshot();
+
+        internal void CreateNoteSnapshotForTesting() => createNoteSnapshot();
+
+        internal void RestoreNoteSnapshotForTesting() => restoreNoteSnapshot();
+
+        private void refreshScene()
+        {
+            ensureGlobalBeatmapPreview();
+
+            if (sceneBar.CurrentScene.Value == EzSkinEditorSceneType.Appearance)
+            {
+                backgroundContainer!.Child = createManiaStageBackgroundOrNull() ?? new Container { RelativeSizeAxes = Axes.Both };
+                backgroundContainer.Child.RelativeSizeAxes = Axes.Both;
+            }
+            else
+            {
+                disposeEmbeddedPlayer();
+                backgroundContainer!.Child = createManiaStageBackgroundOrNull() ?? new Container { RelativeSizeAxes = Axes.Both };
+                backgroundContainer.Child.RelativeSizeAxes = Axes.Both;
+            }
+
+            ensureSkinIniSession();
+            ensureSkinJsonSession();
+            ensureComparisonSnapshotForCurrentSkin();
+            ensureNoteSnapshotForCurrentSkin();
+
+            sceneContext = buildSceneContext();
+            applyCurrentScene();
+
+            if (sceneBar.CurrentScene.Value == EzSkinEditorSceneType.Appearance)
+                mountAppearanceEmbeddedPlayer();
+
+            Schedule(refreshSceneBarPlayback);
+            menuBar.RefreshMenuState();
+        }
+
+        private void ensureGlobalBeatmapPreview()
+        {
+            if (attemptedGlobalBeatmapPreview || PreviewState.HasBeatmapLoaded)
+                return;
+
+            attemptedGlobalBeatmapPreview = true;
+
+            if (!EzSkinEditorBeatmapPicker.CanUseAsPreview(gameBeatmap.Value))
+                return;
+
+            if (gameBeatmap.Value.BeatmapInfo.Ruleset is not RulesetInfo ruleset)
+                return;
+
+            PreviewState.SetBeatmap(gameBeatmap.Value, ruleset, EzSkinEditorPreviewModes.GetAppearanceLoadMode(ruleset));
+        }
+
+        private void toggleBeatmapPlayback()
+        {
+            if (!PreviewState.HasBeatmapLoaded)
+                return;
+
+            setBeatmapPlaybackPlaying(PreviewState.Mode.Value != EzBeatmapPreviewMode.Dynamic);
+        }
+
+        private void selectBeatmapPreview(RulesetInfo ruleset)
+        {
+            if (beatmapPicker == null)
+                return;
+
+            if (!beatmapPicker.TryPickRandom(ruleset, out var workingBeatmap))
+            {
+                notifications?.Post(new SimpleNotification
+                {
+                    Text = EzEditorStrings.NOTIFY_BEATMAP_NOT_FOUND,
+                });
+                return;
+            }
+
+            embeddedPlayer?.StopAudio();
+            stopPreviewBeatmapTrack(PreviewState.PreviewBeatmap);
+            musicController.Stop();
+            PreviewState.SetBeatmap(workingBeatmap!, ruleset, EzSkinEditorPreviewModes.GetAppearanceLoadMode(ruleset));
+            refreshScene();
+        }
+
+        private EzSkinEditorSceneContext buildSceneContext()
+        {
+            var currentScene = sceneBar.CurrentScene.Value;
+
+            bool allowBeatmapPreview = currentScene == EzSkinEditorSceneType.Appearance
+                                       && PreviewState.Source.Value == EzSkinEditorPreviewSource.Beatmap;
+
+            bool useVirtualComparisonPreview = currentScene == EzSkinEditorSceneType.Size;
+
+            int virtualPreviewKeyCount = currentScene switch
+            {
+                EzSkinEditorSceneType.Colour => getColourPreviewKeyMode(),
+                EzSkinEditorSceneType.Size => 4,
+                _ => 4,
+            };
+            bool useNoteComparisonOnly = currentScene == EzSkinEditorSceneType.Note;
+
+            // Size/colour scenes always use the mania LN virtual provider, not the loaded beatmap ruleset.
+            var previewBeatmap = allowBeatmapPreview
+                ? PreviewState.PreviewBeatmap?.Beatmap
+                : null;
+
+            SkinEditorProviderResolver.EnsureDefaultProviderRegistered();
+            provider = SkinEditorProviderResolver.Resolve(previewBeatmap);
+
+            bool usesEzNoteVariants = EzSkinEditorNoteVariantResolver.UsesEzVariants(skinManager.CurrentSkin.Value);
+
+            return new EzSkinEditorSceneContext
+            {
+                Provider = provider,
+                EditorSkin = getEditorSkin(),
+                ActualSkin = skinManager.CurrentSkin.Value,
+                UsesEzNoteVariants = usesEzNoteVariants,
+                NoteComparisonSource = buildNoteComparisonSource(useNoteComparisonOnly, useVirtualComparisonPreview, usesEzNoteVariants),
+                NoteCompareKind = NoteCompareKind,
+                SkinIniSession = SkinIniSession,
+                SkinJsonSession = SkinJsonSession,
+                PreviewState = PreviewState,
+                RequestSceneRefresh = refreshScene,
+                RequestPreviewRefresh = () => Schedule(refreshPreviewContent),
+                CommitSkinIni = commitSkinIni,
+                AllowBeatmapPreview = allowBeatmapPreview,
+                UseVirtualComparisonPreview = useVirtualComparisonPreview,
+                VirtualPreviewKeyCount = virtualPreviewKeyCount,
+                UseNoteComparisonOnly = useNoteComparisonOnly,
+                PreviewSource = PreviewState.Source.Value,
+                PreviewBeatmap = PreviewState.PreviewBeatmap,
+                PreviewRuleset = PreviewState.Ruleset.Value,
+                PreviewMode = PreviewState.Mode.Value,
+                ComparisonSnapshot = useNoteComparisonOnly ? null : ComparisonSnapshotForTesting,
+                NoteSession = NoteSessionForTesting,
+                NoteSnapshot = NoteSnapshotForTesting,
+                CreateNoteSnapshot = createNoteSnapshot,
+                RestoreNoteSnapshot = restoreNoteSnapshot,
+                ExportNotePreview = exportNotePreview,
+                GetEmbeddedPlayer = () => embeddedPlayer,
+            };
+        }
+
+        private void mountAppearanceEmbeddedPlayer()
+        {
+            var workingBeatmap = resolveAppearanceWorkingBeatmap();
+            var ruleset = resolveAppearanceRuleset(workingBeatmap);
+
+            if (embeddedPlayer != null && !embeddedPlayer.CanBeMounted)
+            {
+                embeddedPlayer = null;
+                embeddedPlayerBeatmapHash = string.Empty;
+                embeddedPlayerRulesetId = -1;
+                embeddedPlayerSkinId = Guid.Empty;
+            }
+
+            if (workingBeatmap == null || ruleset == null)
+            {
+                disposeEmbeddedPlayer();
+                return;
+            }
+
+            string beatmapHash = workingBeatmap.BeatmapInfo.Hash;
+            int rulesetId = ruleset.OnlineID;
+            var skinId = skinManager.CurrentSkinInfo.Value.ID;
+
+            if (embeddedPlayer != null
+                && embeddedPlayerBeatmapHash == beatmapHash
+                && embeddedPlayerRulesetId == rulesetId
+                && embeddedPlayerSkinId == skinId)
+            {
+                applyEmbeddedPlayerToAppearanceContent();
+                Schedule(() => setBeatmapPlaybackPlaying(PreviewState.Mode.Value == EzBeatmapPreviewMode.Dynamic, updateMode: false));
+                return;
+            }
+
+            disposeEmbeddedPlayer();
+
+            ensureAppearanceBeatmapTrackLoaded(workingBeatmap);
+
+            embeddedPlayer = new EzSkinEditorEmbeddedPlayer(workingBeatmap, ruleset, getEditorSkin());
+            embeddedPlayerBeatmapHash = beatmapHash;
+            embeddedPlayerRulesetId = rulesetId;
+            embeddedPlayerSkinId = skinId;
+
+            applyEmbeddedPlayerToAppearanceContent();
+
+            Schedule(() => setBeatmapPlaybackPlaying(PreviewState.Mode.Value == EzBeatmapPreviewMode.Dynamic, updateMode: false));
+        }
+
+        private T? getSceneContent<T>() where T : Drawable
+            => sceneContentHost.Children.Count == 1 ? sceneContentHost.Child as T : null;
+
+        private void applyEmbeddedPlayerToAppearanceContent()
+        {
+            if (getSceneContent<EzSkinEditorAppearanceSceneContent>() is EzSkinEditorAppearanceSceneContent appearance)
+                appearance.SetEmbeddedPlayer(embeddedPlayer);
+        }
+
+        private void ensureAppearanceBeatmapTrackLoaded(WorkingBeatmap workingBeatmap)
+        {
+            if (workingBeatmap.TrackLoaded)
+                return;
+
+            if (gameBeatmap.Value is WorkingBeatmap current && current.TryTransferTrack(workingBeatmap))
+                return;
+
+            workingBeatmap.LoadTrack();
+        }
+
+        private WorkingBeatmap? resolveAppearanceWorkingBeatmap()
+        {
+            if (PreviewState.PreviewBeatmap is WorkingBeatmap preview)
+                return preview;
+
+            if (EzSkinEditorBeatmapPicker.CanUseAsPreview(gameBeatmap.Value))
+                return gameBeatmap.Value;
+
+            return null;
+        }
+
+        private RulesetInfo? resolveAppearanceRuleset(WorkingBeatmap? workingBeatmap) =>
+            PreviewState.Ruleset.Value ?? workingBeatmap?.BeatmapInfo.Ruleset;
+
+        private void disposeEmbeddedPlayer()
+        {
+            embeddedPlayer?.StopAudio();
+            embeddedPlayer?.Expire();
+            embeddedPlayer = null;
+            embeddedPlayerBeatmapHash = string.Empty;
+            embeddedPlayerRulesetId = -1;
+            embeddedPlayerSkinId = Guid.Empty;
+
+            applyEmbeddedPlayerToAppearanceContent();
+        }
+
+        private static void stopPreviewBeatmapTrack(IWorkingBeatmap? beatmap)
+        {
+            if (beatmap is not { TrackLoaded: true })
+                return;
+
+            if (beatmap.Track.IsRunning)
+                beatmap.Track.Stop();
+        }
+
+        private void applyPreviewAudioPolicy()
+        {
+            if (sceneBar.CurrentScene.Value != EzSkinEditorSceneType.Appearance)
+                return;
+
+            // Preview audio is owned by the embedded player while dynamic; global music must stay off.
+            musicController.Stop();
+        }
+
+        private IEzSkinEditorNoteComparisonSource? buildNoteComparisonSource(bool useNoteComparisonOnly, bool useVirtualComparisonPreview, bool usesEzNoteVariants)
+        {
+            if (!useNoteComparisonOnly && !useVirtualComparisonPreview)
+                return null;
+
+            if (useNoteComparisonOnly)
+                return new NoteEditComparisonSource(NoteSessionForTesting, NoteSnapshotForTesting, usesEzNoteVariants);
+
+            var profile = EzSkinEditorNoteRulesetProfileRegistry.All.FirstOrDefault();
+
+            if (profile == null)
+                return null;
+
+            string variantId = profile.GetDefaultVariantId(usesEzNoteVariants, EzSkinEditorNotePart.Note);
+
+            return new ConfigSnapshotComparisonSource(
+                ezSkinConfig,
+                ComparisonSnapshotForTesting,
+                usesEzNoteVariants,
+                variantId,
+                profile.RulesetInfo);
+        }
+
+        private void applyCurrentScene()
+        {
+            sceneContext = buildSceneContext();
+
+            var strategy = EzSkinEditorSceneRegistry.Get(sceneBar.CurrentScene.Value);
+
+            if (sceneBar.CurrentScene.Value == EzSkinEditorSceneType.Appearance
+                && getSceneContent<EzSkinEditorAppearanceSceneContent>() is EzSkinEditorAppearanceSceneContent appearance)
+            {
+                appearance.RefreshFromContext(sceneContext);
+            }
+            else
+            {
+                detachEmbeddedPlayerFromHierarchy();
+                sceneContentHost.Child = strategy.CreateSceneContent(sceneContext);
+            }
+
+            sidebar.ApplyStrategy(strategy, sceneContext);
+        }
+
+        private void detachEmbeddedPlayerFromHierarchy()
+            => embeddedPlayer?.DetachForRemount();
+
+        private void applySettings()
+        {
+            ezSkinConfig.Save();
+
+            if (SkinIniSession is { IsSupported: true, IsDirty: true })
+                SkinIniSession.Commit();
+
+            skinManager.CurrentSkinInfo.TriggerChange();
+            refreshScene();
+        }
+
+        private void commitSkinIni()
+        {
+            if (SkinIniSession is not { IsSupported: true, IsDirty: true })
+                return;
+
+            SkinIniSession.Commit();
+            refreshScene();
+        }
+
+        private bool isSkinIniSupported() => EzSkinIniSupport.IsSupported(skinManager.CurrentSkinInfo.Value);
+
+        private void ensureSkinIniSession()
+        {
+            var currentSkin = skinManager.CurrentSkinInfo.Value;
+
+            if (!isSkinIniSupported())
+            {
+                if (SkinIniSession?.IsDirty == true)
+                    SkinIniSession.Discard();
+
+                SkinIniSession = null;
+                sceneBar.SetSceneVisible(EzSkinEditorSceneType.SkinIni, false);
+
+                if (sceneBar.CurrentScene.Value == EzSkinEditorSceneType.SkinIni)
+                    sceneBar.CurrentScene.Value = EzSkinEditorSceneType.Appearance;
+
+                return;
+            }
+
+            sceneBar.SetSceneVisible(EzSkinEditorSceneType.SkinIni, true);
+
+            Guid currentSkinId = currentSkin.ID;
+            SkinIniSession ??= new EzSkinIniSession(skinManager);
+
+            if (SkinIniSession.SkinId == currentSkinId)
+                return;
+
+            if (SkinIniSession.IsDirty)
+                SkinIniSession.Discard();
+
+            SkinIniSession.LoadFromSkin(currentSkin);
+        }
+
+        private void ensureSkinJsonSession()
+        {
+            var currentSkin = skinManager.CurrentSkinInfo.Value;
+
+            if (!EzSkinJsonSupport.IsSupported(currentSkin))
+            {
+                SkinJsonSession = null;
+                return;
+            }
+
+            Guid currentSkinId = currentSkin.ID;
+            SkinJsonSession ??= new EzSkinJsonSession(skinManager);
+
+            if (SkinJsonSession.SkinId == currentSkinId)
+                return;
+
+            SkinJsonSession.LoadFromSkin(currentSkin);
+        }
+
+        private void createEzSkinJson()
+        {
+            ensureSkinJsonSession();
+
+            if (SkinJsonSession == null || !SkinJsonSession.CreateInitial(ezSkinConfig))
+            {
+                postNotification(EzEditorStrings.NOTIFY_CANNOT_CREATE_EZSKIN_JSON);
+                return;
+            }
+
+            postNotification(EzEditorStrings.NOTIFY_CREATED_EZSKIN_JSON);
+            refreshScene();
+        }
+
+        private void updateEzSkinJsonSnapshot()
+        {
+            ensureSkinJsonSession();
+
+            if (SkinJsonSession == null || !SkinJsonSession.Commit(ezSkinConfig))
+            {
+                postNotification(EzEditorStrings.NOTIFY_CANNOT_UPDATE_EZSKIN_JSON_SNAPSHOT);
+                return;
+            }
+
+            postNotification(EzEditorStrings.NOTIFY_UPDATED_EZSKIN_JSON_SNAPSHOT);
+            refreshScene();
+        }
+
+        private void removeEzSkinJson()
+        {
+            ensureSkinJsonSession();
+
+            if (SkinJsonSession == null || !SkinJsonSession.Remove())
+            {
+                postNotification(EzEditorStrings.NOTIFY_CANNOT_REMOVE_EZSKIN_JSON);
+                return;
+            }
+
+            postNotification(EzEditorStrings.NOTIFY_REMOVED_EZSKIN_JSON);
+            refreshScene();
+        }
+
+        private void importFromSkinJson()
+        {
+            ensureSkinJsonSession();
+
+            if (SkinJsonSession is not { HasFile: true })
+            {
+                postNotification(EzEditorStrings.NOTIFY_NO_EZSKIN_JSON_ON_SKIN);
+                return;
+            }
+
+            string? json = skinManager.CurrentSkinInfo.Value.PerformRead(skin => EzSkinJsonStorage.TryReadJson(skinManager, skin));
+
+            if (json == null)
+            {
+                postNotification(EzEditorStrings.NOTIFY_CANNOT_READ_EZSKIN_JSON);
+                return;
+            }
+
+            EzSkinJsonBridge.Apply(EzSkinJsonDocument.Parse(json), ezSkinConfig);
+            postNotification(EzEditorStrings.NOTIFY_IMPORTED_FROM_SKIN_TO_MEMORY);
+            refreshScene();
+        }
+
+        private void importJson()
+        {
+            var selector = host.CreateSystemFileSelector(new[] { ".json" });
+
+            if (selector == null)
+            {
+                postNotification(EzEditorStrings.NOTIFY_FILE_SELECTOR_NOT_SUPPORTED);
+                return;
+            }
+
+            selector.Selected += file =>
+            {
+                try
+                {
+                    string text = File.ReadAllText(file.FullName);
+                    var document = EzSkinJsonDocument.Parse(text);
+
+                    if (SkinJsonSession is { IsSupported: true })
+                        SkinJsonSession.ApplyImportedDocument(document, ezSkinConfig);
+                    else
+                        EzSkinJsonBridge.Apply(document, ezSkinConfig);
+
+                    postNotification(EzEditorStrings.NOTIFY_IMPORTED_JSON);
+                    refreshScene();
+                }
+                catch (Exception e)
+                {
+                    postNotification(LocalisableString.Format(EzEditorStrings.NOTIFY_IMPORT_FAILED, e.Message));
+                }
+                finally
+                {
+                    selector.Dispose();
+                }
+            };
+
+            selector.Present();
+        }
+
+        private void exportJson()
+        {
+            try
+            {
+                var exportStorage = (storage as OsuStorage)?.GetExportStorage() ?? storage.GetStorageForDirectory(@"exports");
+                string skinName = skinManager.CurrentSkinInfo.Value.PerformRead(s => s.Name);
+                string path = EzSkinJsonStorage.ExportToStorage(exportStorage, ezSkinConfig, skinName);
+                postNotification(LocalisableString.Format(EzEditorStrings.NOTIFY_EXPORTED_TO, path));
+            }
+            catch (Exception e)
+            {
+                postNotification(LocalisableString.Format(EzEditorStrings.NOTIFY_EXPORT_FAILED, e.Message));
+            }
+        }
+
+        private void writeColoursToSkinIni()
+        {
+            int keyMode = getCurrentKeyMode();
+
+            if (SkinIniSession == null || !EzSkinColourSkinIniWriter.TryWriteManiaColumnColours(keyMode, ezSkinConfig, SkinIniSession))
+            {
+                postNotification(EzEditorStrings.NOTIFY_CANNOT_WRITE_SKIN_INI_COLOURS);
+                return;
+            }
+
+            postNotification(LocalisableString.Format(EzEditorStrings.NOTIFY_COLOURS_WRITTEN_TO_DRAFT, keyMode));
+            refreshScene();
+        }
+
+        private void writeSizesToSkinIni()
+        {
+            int keyMode = getCurrentKeyMode();
+
+            if (SkinIniSession == null || !EzSkinSizeSkinIniWriter.TryWriteManiaSizeSettings(keyMode, ezSkinConfig, SkinIniSession))
+            {
+                postNotification(EzEditorStrings.NOTIFY_CANNOT_WRITE_SKIN_INI_SIZES);
+                return;
+            }
+
+            postNotification(LocalisableString.Format(EzEditorStrings.NOTIFY_SIZES_WRITTEN_TO_DRAFT, keyMode));
+            refreshScene();
+        }
+
+        private void exportOsk()
+        {
+            if (!canExportOsk())
+            {
+                postNotification(RuntimeInfo.IsDesktop ? EzEditorStrings.NOTIFY_CANNOT_EXPORT_SKIN : EzEditorStrings.NOTIFY_EXPORT_NOT_SUPPORTED_PLATFORM);
+                return;
+            }
+
+            try
+            {
+                bool committedSkinIni = false;
+
+                if (SkinIniSession is { IsDirty: true })
+                {
+                    SkinIniSession.Commit();
+                    committedSkinIni = true;
+                }
+
+                skinManager.ExportCurrentSkin();
+                postNotification(committedSkinIni ? EzEditorStrings.NOTIFY_SAVED_SKIN_INI_AND_EXPORTING_OSK : EzEditorStrings.NOTIFY_EXPORTING_OSK);
+                refreshScene();
+            }
+            catch (Exception e)
+            {
+                postNotification(LocalisableString.Format(EzEditorStrings.NOTIFY_EXPORT_FAILED, e.Message));
+            }
+        }
+
+        private int getCurrentKeyMode()
+        {
+            if (PreviewState.SuggestedKeyMode.Value is int suggested and > 0)
+                return suggested;
+
+            return ezSkinConfig.Get<int>(Ez2Setting.ColumnTypeListSelect);
+        }
+
+        private int getColourPreviewKeyMode()
+        {
+            int selected = ezSkinConfig.Get<int>(Ez2Setting.ColumnTypeListSelect);
+            return selected > 0 ? selected : 0;
+        }
+
+        private bool canExportOsk() => RuntimeInfo.IsDesktop
+                                       && !skinManager.CurrentSkin.Disabled
+                                       && skinManager.CurrentSkinInfo.Value.PerformRead(s => !s.Protected);
+
+        private void postNotification(LocalisableString text) => notifications?.Post(new SimpleNotification { Text = text });
+
+        private void onCurrentSkinInfoChanged(ValueChangedEvent<Live<SkinInfo>> skin)
+        {
+            if (skin.OldValue.ID != skin.NewValue.ID)
+                persistEditorConfig();
+
+            Schedule(refreshScene);
+        }
+
+        private void ensureComparisonSnapshotForCurrentSkin()
+        {
+            var currentSkinId = skinManager.CurrentSkinInfo.Value.ID;
+
+            if (comparisonSnapshotInitialized && comparisonSnapshotSkinId == currentSkinId)
+                return;
+
+            recaptureComparisonSnapshot();
+            comparisonSnapshotInitialized = true;
+            comparisonSnapshotSkinId = currentSkinId;
+        }
+
+        private void recaptureComparisonSnapshot()
+        {
+            ComparisonSnapshotForTesting.CaptureFrom(ezSkinConfig, SkinIniSession);
+            ComparisonSnapshotForTesting.SyncBindableDefaults(ezSkinConfig);
+        }
+
+        private void createConfigSnapshot()
+        {
+            recaptureComparisonSnapshot();
+            postNotification(EzEditorStrings.NOTIFY_CREATED_CONFIG_SNAPSHOT);
+            refreshScene();
+        }
+
+        private void restoreConfigSnapshot()
+        {
+            ComparisonSnapshotForTesting.ApplyTo(ezSkinConfig, SkinIniSession);
+            postNotification(EzEditorStrings.NOTIFY_RESTORED_CONFIG_SNAPSHOT);
+            refreshScene();
+        }
+
+        private void ensureNoteSnapshotForCurrentSkin()
+        {
+            var currentSkinId = skinManager.CurrentSkinInfo.Value.ID;
+
+            if (noteSnapshotInitialized && noteSnapshotSkinId == currentSkinId)
+                return;
+
+            initializeNoteSessionDefaults();
+            recaptureNoteSnapshot();
+            noteSnapshotInitialized = true;
+            noteSnapshotSkinId = currentSkinId;
+        }
+
+        private void initializeNoteSessionDefaults()
+        {
+            if (NoteSessionForTesting.Ruleset.Value is not null)
+                return;
+
+            var profile = EzSkinEditorNoteRulesetProfileRegistry.All.FirstOrDefault();
+
+            if (profile == null)
+                return;
+
+            NoteSessionForTesting.Ruleset.Value = profile.RulesetInfo;
+            NoteSessionForTesting.VariantId.Value = profile.GetDefaultVariantId(
+                EzSkinEditorNoteVariantResolver.UsesEzVariants(skinManager.CurrentSkin.Value),
+                NoteSessionForTesting.Part.Value);
+        }
+
+        private void recaptureNoteSnapshot()
+        {
+            NoteSnapshotForTesting.CaptureFrom(NoteSessionForTesting);
+        }
+
+        private void createNoteSnapshot()
+        {
+            recaptureNoteSnapshot();
+            postNotification(EzEditorStrings.NOTIFY_CREATED_NOTE_SNAPSHOT);
+            refreshNoteComparisonSnapshotPane();
+        }
+
+        private void restoreNoteSnapshot()
+        {
+            NoteSnapshotForTesting.ApplyTo(NoteSessionForTesting);
+            postNotification(EzEditorStrings.NOTIFY_RESTORED_NOTE_SNAPSHOT);
+            refreshNoteComparisonLivePane();
+        }
+
+        private void refreshNoteComparisonSnapshotPane()
+        {
+            if (tryGetNoteComparisonHost(out var noteHost))
+                noteHost.RefreshSnapshotPane();
+            else
+                Schedule(refreshPreviewContent);
+        }
+
+        private void refreshNoteComparisonLivePane()
+        {
+            if (tryGetNoteComparisonHost(out var noteHost))
+                noteHost.UpdateContext(buildSceneContext());
+            else
+                Schedule(refreshPreviewContent);
+        }
+
+        private bool tryGetNoteComparisonHost(out EzSkinEditorNoteComparisonHost noteHost)
+        {
+            if (getSceneContent<EzSkinEditorNoteComparisonHost>() is EzSkinEditorNoteComparisonHost directHost)
+            {
+                noteHost = directHost;
+                return true;
+            }
+
+            if (getSceneContent<EzSkinEditorPreviewHost>() is EzSkinEditorPreviewHost previewHost
+                && previewHost.ChildrenOfType<EzSkinEditorNoteComparisonHost>().FirstOrDefault() is EzSkinEditorNoteComparisonHost nestedHost)
+            {
+                noteHost = nestedHost;
+                return true;
+            }
+
+            noteHost = null!;
+            return false;
+        }
+
+        private void exportNotePreview()
+        {
+            if (!RuntimeInfo.IsDesktop)
+                return;
+
+            var skinInfo = skinManager.CurrentSkinInfo.Value;
+
+            if (skinInfo.PerformRead(s => s.Protected))
+            {
+                postNotification(EzEditorStrings.NOTIFY_CANNOT_EXPORT_NOTE_PREVIEW);
+                return;
+            }
+
+            var profile = EzSkinEditorNoteRulesetProfileRegistry.Get(NoteSessionForTesting.Ruleset.Value);
+
+            if (profile == null)
+            {
+                postNotification(EzEditorStrings.PLACEHOLDER_NOTE_RULESET_NOT_SUPPORTED);
+                return;
+            }
+
+            string exportName = string.IsNullOrWhiteSpace(NoteSessionForTesting.ExportName.Value)
+                ? "note-preview"
+                : NoteSessionForTesting.ExportName.Value.Trim();
+
+            foreach (char invalid in Path.GetInvalidFileNameChars())
+                exportName = exportName.Replace(invalid, '_');
+
+            bool usesEzVariants = EzSkinEditorNoteVariantResolver.UsesEzVariants(skinManager.CurrentSkin.Value);
+            var request = NoteSessionForTesting.ToPreviewRequest(usesEzVariants, NoteCompareKind.Value);
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    string? directory = ScriptedSkinSupport.IsScriptedSkin(skinInfo)
+                        ? skinManager.GetScriptDirectory(skinInfo.Value)
+                        : null;
+
+                    ExternalEditOperation<SkinInfo>? edit = null;
+
+                    if (directory == null)
+                    {
+                        var detached = skinInfo.PerformRead(s => s.Detach());
+                        edit = await skinManager.BeginExternalEditing(detached).ConfigureAwait(false);
+                        directory = edit.MountedPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    }
+
+                    using var image = EzSkinEditorNoteImageExporter.Export(profile, request, directory);
+
+                    if (image == null)
+                    {
+                        if (edit != null)
+                            await edit.Finish().ConfigureAwait(false);
+
+                        Schedule(() => postNotification(EzEditorStrings.NOTIFY_CANNOT_EXPORT_NOTE_PREVIEW));
+                        return;
+                    }
+
+                    string filePath = Path.Combine(directory, $"{exportName}.png");
+                    await image.SaveAsPngAsync(filePath).ConfigureAwait(false);
+
+                    if (edit != null)
+                        await edit.Finish().ConfigureAwait(false);
+
+                    Schedule(() =>
+                    {
+                        host.OpenFileExternally(directory + Path.DirectorySeparatorChar);
+                        postNotification(EzEditorStrings.NOTIFY_NOTE_EXPORTED);
+                    });
+                }
+                catch (Exception e)
+                {
+                    Schedule(() => postNotification(LocalisableString.Format(EzEditorStrings.NOTIFY_EXPORT_FAILED, e.Message)));
+                }
+            });
+        }
+
+        private void persistEditorConfig()
+        {
+            ezSkinConfig.Save();
+            skinManager.CurrentSkinInfo.TriggerChange();
+        }
+
+        private void bindConfigPreviewRefresh()
+        {
+            if (configPreviewRefreshBound)
+                return;
+
+            configPreviewRefreshBound = true;
+
+            foreach (var setting in EzSkinJsonSettingCatalog.All)
+                EzSkinJsonBridge.BindSettingValueChanged(ezSkinConfig, setting, () => Schedule(refreshPreviewContent));
+        }
+
+        private void refreshPreviewContent()
+        {
+            if (!IsLoaded)
+                return;
+
+            sceneContext = buildSceneContext();
+
+            if (tryGetNoteComparisonHost(out var noteHost))
+            {
+                noteHost.UpdateContext(sceneContext);
+                return;
+            }
+
+            if (getSceneContent<EzSkinEditorAppearanceSceneContent>() is EzSkinEditorAppearanceSceneContent appearanceContent)
+            {
+                appearanceContent.RefreshFromContext(sceneContext);
+                applyEmbeddedPlayerToAppearanceContent();
+                refreshSceneBarPlayback();
+                return;
+            }
+
+            if (getSceneContent<EzSkinEditorPreviewHost>() is EzSkinEditorPreviewHost previewHost)
+            {
+                previewHost.RefreshFromContext(sceneContext);
+                Schedule(refreshSceneBarPlayback);
+                return;
+            }
+
+            var strategy = EzSkinEditorSceneRegistry.Get(sceneBar.CurrentScene.Value);
+            sceneContentHost.Child = strategy.CreateSceneContent(sceneContext);
+            Schedule(refreshSceneBarPlayback);
+        }
+
+        private void exportPreviewImage()
+        {
+            if (!RuntimeInfo.IsDesktop)
+                return;
+
+            host.TakeScreenshotAsync().ContinueWith(task =>
+            {
+                if (task.IsFaulted)
+                {
+                    Schedule(() => postNotification(LocalisableString.Format(EzEditorStrings.NOTIFY_EXPORT_FAILED, task.Exception?.GetBaseException().Message ?? "unknown error")));
+                    return;
+                }
+
+                Schedule(() =>
+                {
+                    try
+                    {
+                        using Image<Rgba32> image = task.GetResultSafely();
+                        string filename = $"ez-skin-editor-preview-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.png";
+                        var exportStorage = (storage as OsuStorage)?.GetExportStorage() ?? storage.GetStorageForDirectory(@"exports");
+
+                        using (var stream = exportStorage.CreateFileSafely(filename))
+                            image.SaveAsPng(stream);
+
+                        postNotification(LocalisableString.Format(EzEditorStrings.NOTIFY_EXPORTED_TO, filename));
+                    }
+                    catch (Exception e)
+                    {
+                        postNotification(LocalisableString.Format(EzEditorStrings.NOTIFY_EXPORT_FAILED, e.Message));
+                    }
+                });
+            }, TaskScheduler.Default);
+        }
+
+        private ISkin getEditorSkin()
+        {
+            var currentSkin = skinManager.CurrentSkin.Value;
+
+            return currentSkin is EzStyleProSkin or Ez2Skin or SbISkin or ScriptedSkinWrapper
+                ? currentSkin
+                : new EzStyleProSkin(skinManager);
+        }
+
+        private void tryExit()
+        {
+            if (this.IsCurrentScreen())
+                ShowExitDialog();
+        }
+
+        public void ShowExitDialog()
+        {
+            if (!this.IsCurrentScreen())
+                return;
+
+            if (dialogOverlay == null)
+            {
+                this.Exit();
+                return;
+            }
+
+            if (SkinIniSession?.IsDirty != true)
+            {
+                this.Exit();
+                return;
+            }
+
+            dialogOverlay.Push(new ConfirmDialog(EzEditorStrings.EXIT_CONFIRM_APPLY_TO_SKIN, () =>
+            {
+                applySettings();
+
+                if (this.IsCurrentScreen())
+                    this.Exit();
+            }, () =>
+            {
+                SkinIniSession?.Discard();
+
+                if (this.IsCurrentScreen())
+                    this.Exit();
+            }));
+        }
+
+        public void PresentGameplay()
+        {
+            if (sceneBar.CurrentScene.Value != EzSkinEditorSceneType.Appearance)
+                return;
+
+            mountAppearanceEmbeddedPlayer();
+            embeddedPlayer?.Restart();
+            refreshPreviewContent();
         }
 
         private static Drawable? createManiaStageBackgroundOrNull()
@@ -235,10 +1304,7 @@ namespace osu.Game.EzOsuGame.Edit
             if (lookup == null)
                 return null;
 
-            return new SkinnableDrawable(lookup)
-            {
-                RelativeSizeAxes = Axes.Both
-            };
+            return new SkinnableDrawable(lookup) { RelativeSizeAxes = Axes.Both };
         }
 
         private static ISkinComponentLookup? tryCreateManiaSkinComponentLookupOrNull(string componentName)
@@ -260,236 +1326,6 @@ namespace osu.Game.EzOsuGame.Edit
             catch
             {
                 return null;
-            }
-        }
-
-        private void initializeLeftPlayback()
-        {
-            var currentSkin = getEditorSkin();
-
-            if (provider != null)
-            {
-                var dynamicPart = provider.CreateDynamicPart(currentSkin);
-
-                leftPlaybackContainer!.Children = new[]
-                {
-                    dynamicPart.With(p =>
-                    {
-                        p.RelativeSizeAxes = Axes.Both;
-                        p.Anchor = Anchor.Centre;
-                        p.Origin = Anchor.Centre;
-                    })
-                };
-            }
-            else
-            {
-                // Fallback if not supported
-                leftPlaybackContainer!.Children = new Drawable[]
-                {
-                    new OsuSpriteText
-                    {
-                        Anchor = Anchor.Centre,
-                        Origin = Anchor.Centre,
-                        Text = "Virtual playfield not supported for this ruleset",
-                        Colour = Color4.White,
-                    }
-                };
-            }
-        }
-
-        private void initializeCenterDisplay()
-        {
-            var currentSkin = getEditorSkin();
-
-            if (provider != null)
-            {
-                centerNoteDisplayContainer!.Children = new[]
-                {
-                    provider.CreateStaticPart(currentSkin)
-                };
-            }
-            else
-            {
-                centerNoteDisplayContainer!.Children = new Drawable[]
-                {
-                    new OsuSpriteText
-                    {
-                        Anchor = Anchor.Centre,
-                        Origin = Anchor.Centre,
-                        Text = "Note display not supported for this ruleset",
-                        Colour = Color4.White,
-                    }
-                };
-            }
-        }
-
-        private void initializeRightSettings()
-        {
-            var currentSkin = getEditorSkin();
-
-            // 检查是否为脚本皮肤
-            if (currentSkin is ScriptedSkinWrapper scriptedWrapper)
-            {
-                var scriptedSkin = scriptedWrapper.GetScriptedSkin();
-
-                var configEditor = new ScriptedSkinConfigEditor();
-                configEditor.SetSkin(scriptedSkin);
-
-                // 创建重载按钮
-                var reloadButton = new ReloadScriptButton
-                {
-                    Text = "重载脚本",
-                    RelativeSizeAxes = Axes.X,
-                    Height = 40,
-                    Action = () =>
-                    {
-                        // 使用 Task.Run 在后台线程执行异步操作，避免 async void
-                        _ = Task.Run(async () =>
-                        {
-                            try
-                            {
-                                // 获取当前脚本路径
-                                string scriptPath = skinManager.GetScriptPath(scriptedWrapper.SkinInfo.Value);
-
-                                if (!string.IsNullOrEmpty(scriptPath))
-                                {
-                                    bool success = await skinManager.TriggerScriptReload(scriptPath).ConfigureAwait(false);
-
-                                    if (success)
-                                    {
-                                        // 在主线程刷新配置编辑器
-                                        Schedule(() =>
-                                        {
-                                            configEditor.SetSkin(scriptedWrapper.GetScriptedSkin());
-                                        });
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                // 记录错误但不崩溃
-                                Logger.Log($"重载脚本失败: {ex.Message}", LoggingTarget.Runtime, LogLevel.Error);
-                            }
-                        });
-                    }
-                };
-
-                settingsScrollContainer!.Child = new FillFlowContainer
-                {
-                    RelativeSizeAxes = Axes.X,
-                    AutoSizeAxes = Axes.Y,
-                    Direction = FillDirection.Vertical,
-                    Spacing = new Vector2(0, 15),
-                    Padding = new MarginPadding(10),
-                    Children = new Drawable[]
-                    {
-                        new OsuSpriteText
-                        {
-                            Text = "脚本皮肤配置",
-                            Colour = Color4.White,
-                            Font = OsuFont.Default.With(size: 18, weight: FontWeight.Bold),
-                        },
-                        reloadButton,
-                        configEditor,
-                    }
-                };
-            }
-            else if (provider != null)
-            {
-                // Provider may provide a full parameters UI; prefer that when available.
-                settingsScrollContainer!.Child = provider.CreateParametersPart(currentSkin);
-            }
-            else
-            {
-                // Default placeholder when provider not present
-                settingsScrollContainer!.Child = new FillFlowContainer
-                {
-                    RelativeSizeAxes = Axes.X,
-                    AutoSizeAxes = Axes.Y,
-                    Direction = FillDirection.Vertical,
-                    Spacing = new Vector2(10),
-                    Padding = new MarginPadding(10),
-                    Children = new Drawable[]
-                    {
-                        new OsuSpriteText
-                        {
-                            Text = "皮肤参数调整",
-                            Colour = Color4.White,
-                            Font = OsuFont.Default.With(size: 18),
-                        },
-                        new OsuSpriteText
-                        {
-                            Text = "TODO: 添加参数控件",
-                            Colour = Color4.Gray,
-                            Font = OsuFont.Default.With(size: 14),
-                        }
-                    }
-                };
-            }
-        }
-
-        private void applySettings()
-        {
-            // TODO: 将设置应用到当前皮肤
-            // 目前只是刷新中间显示
-            initializeCenterDisplay();
-        }
-
-        private ISkin getEditorSkin()
-        {
-            var currentSkin = skinManager.CurrentSkin.Value;
-
-            return currentSkin is EzStyleProSkin or Ez2Skin or SbISkin
-                ? currentSkin
-                : new EzStyleProSkin(skinManager);
-        }
-
-        private void showExitDialog()
-        {
-            // 里程碑A阶段：dialog overlay 可能在当前依赖树里不可用，务必降级为直接退出。
-            if (dialogOverlay == null)
-            {
-                this.Exit();
-                return;
-            }
-
-            dialogOverlay.Push(new ConfirmDialog("应用更改到皮肤？", () =>
-            {
-                applySettings();
-                this.Exit();
-            }, this.Exit));
-        }
-
-        public void PresentGameplay()
-        {
-            // 作为 overlay，这里不应 Push/Present gameplay。
-        }
-
-        private static OsuSpriteText createUnavailableText(string text) => new OsuSpriteText
-        {
-            Anchor = Anchor.Centre,
-            Origin = Anchor.Centre,
-            Text = text,
-            Colour = Color4.White,
-        };
-
-        private partial class ApplySettingsButton : OsuButton
-        {
-            [BackgroundDependencyLoader]
-            private void load(OverlayColourProvider? overlayColourProvider, OsuColour colours)
-            {
-                BackgroundColour = overlayColourProvider?.Background3 ?? colours.Blue3;
-                Content.CornerRadius = 5;
-            }
-        }
-
-        private partial class ReloadScriptButton : OsuButton
-        {
-            [BackgroundDependencyLoader]
-            private void load(OsuColour colours)
-            {
-                BackgroundColour = colours.Green3;
-                Content.CornerRadius = 5;
             }
         }
     }

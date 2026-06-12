@@ -239,7 +239,11 @@ namespace osu.Game.Screens.Select
                                                         // Pad enough to only reset scroll when well into the left wedge areas.
                                                         Padding = new MarginPadding { Right = 40 },
                                                         RelativeSizeAxes = Axes.Both,
-                                                        Child = new LeftSideInteractionContainer(() => carousel.ScrollToSelection())
+                                                        Child = new LeftSideInteractionContainer(() =>
+                                                        {
+                                                            if (!carousel.UserScrolling)
+                                                                carousel.ScrollToSelection();
+                                                        })
                                                         {
                                                             RelativeSizeAxes = Axes.Both,
                                                         },
@@ -367,7 +371,7 @@ namespace osu.Game.Screens.Select
         /// </summary>
         protected abstract void OnStart();
 
-        public override IReadOnlyList<ScreenFooterButton> CreateFooterButtons() => new ScreenFooterButton[]
+        public override IReadOnlyList<ScreenFooterButton> CreateFooterButtons()
         {
             footerButtonMods = new FooterButtonMods(modSelectOverlay)
             {
@@ -375,8 +379,13 @@ namespace osu.Game.Screens.Select
                 Mods = Mods,
                 Ruleset = Ruleset,
                 RequestDeselectAllMods = () => modRestoreController.ClearOrRestore(Mods, modSelectOverlay),
-            },
-            new FooterButtonRandom
+            };
+            footerButtonMods.Add(new EzModFooterAltHint());
+
+            return new ScreenFooterButton[]
+            {
+                footerButtonMods,
+                new FooterButtonRandom
             {
                 NextRandom = () =>
                 {
@@ -403,7 +412,8 @@ namespace osu.Game.Screens.Select
                     updateBeatmapPreviewSelection();
                 },
                 ezBeatmapPreviewOverlay.ExpandedState)
-        };
+            };
+        }
 
         protected override void LoadComplete()
         {
@@ -434,13 +444,6 @@ namespace osu.Game.Screens.Select
                 ensureTrackLooping(Beatmap.Value, TrackChangeDirection.None);
                 ensurePlayingSelected();
             }, true);
-
-            OnLoadComplete += _ => addEzModFooterHelpers();
-        }
-
-        private void addEzModFooterHelpers()
-        {
-            footerButtonMods.Add(new EzModFooterAltHint());
 
             var keyboardHandler = EzSongSelectKeyboardHandler.ForSongSelect(modRestoreController, Mods, modSelectOverlay);
             keyboardHandler.Depth = float.MinValue;
@@ -655,6 +658,18 @@ namespace osu.Game.Screens.Select
 
             // Refetch only if explicitly requested (e.g. when returning to screen after potential external changes).
             // Avoid refetching during normal beatmap selection to prevent unnecessary cache invalidation and memory spikes.
+            if (!refetch && !Beatmap.IsDefault)
+            {
+                var id = Beatmap.Value.BeatmapInfo.ID;
+
+                if (beatmaps.QueryBeatmap(b => b.ID == id) == null)
+                {
+                    Beatmap.SetDefault();
+                    performDebounceSelection();
+                    return false;
+                }
+            }
+
             var currentBeatmap = beatmaps.GetWorkingBeatmap(Beatmap.Value.BeatmapInfo, refetch);
             bool validSelection = checkBeatmapValidForSelection(currentBeatmap.BeatmapInfo);
 
@@ -1129,6 +1144,8 @@ namespace osu.Game.Screens.Select
                     skinnableContent.ScaleTo(1.2f, 600, Easing.OutQuint);
                     skinnableContent.FadeOut(200, Easing.OutQuint);
 
+                    ezBeatmapPreviewOverlay.SetSongSelectBackgroundRevealed(true);
+
                     updateBackgroundDim();
 
                     Footer?.Hide();
@@ -1158,6 +1175,8 @@ namespace osu.Game.Screens.Select
                 skinnableContent.ResizeWidthTo(1f, 500, Easing.OutQuint);
                 skinnableContent.ScaleTo(1, 500, Easing.OutQuint);
                 skinnableContent.FadeIn(500, Easing.OutQuint);
+
+                ezBeatmapPreviewOverlay.SetSongSelectBackgroundRevealed(false);
 
                 Footer?.Show();
             }

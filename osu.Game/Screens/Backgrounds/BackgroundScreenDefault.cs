@@ -23,6 +23,7 @@ using osu.Game.Configuration;
 using osu.Game.EzOsuGame;
 using osu.Game.Graphics.Backgrounds;
 using osu.Game.EzOsuGame.Background;
+using osu.Game.EzOsuGame.Background.Pixiv;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.Online.API;
 using osu.Game.Online.API.Requests.Responses;
@@ -33,6 +34,8 @@ namespace osu.Game.Screens.Backgrounds
     public partial class BackgroundScreenDefault : BackgroundScreen
     {
         private Background background;
+        private PixivAttributionBadge pixivAttribution;
+        private PixivIllustInfo pendingPixivAttribution;
 
         private int currentDisplay;
         private const int background_count = 8;
@@ -142,8 +145,38 @@ namespace osu.Game.Screens.Backgrounds
             background?.FadeOut(800, Easing.OutQuint);
             background?.Expire();
 
+            removePixivAttribution();
+
             AddInternal(background = newBackground);
+
+            if (pendingPixivAttribution.IllustId > 0)
+                showPixivAttribution(pendingPixivAttribution);
+
+            pendingPixivAttribution = default;
             currentDisplay++;
+        }
+
+        [Resolved(CanBeNull = true)]
+        private OsuGame game { get; set; }
+
+        private void showPixivAttribution(PixivIllustInfo illust)
+        {
+            string artworkUrl = $"https://www.pixiv.net/artworks/{illust.IllustId}";
+
+            AddInternal(pixivAttribution = new PixivAttributionBadge(illust, () =>
+            {
+                if (game != null)
+                    game.OpenUrlExternally(artworkUrl);
+                else
+                    gameHost.OpenUrlExternally(artworkUrl);
+            }));
+        }
+
+        private void removePixivAttribution()
+        {
+            pixivAttribution?.FadeOut(400);
+            pixivAttribution?.Expire();
+            pixivAttribution = null;
         }
 
         [Resolved]
@@ -154,6 +187,9 @@ namespace osu.Game.Screens.Backgrounds
 
         [Resolved]
         private LargeTextureStore largeTextures { get; set; } = null!;
+
+        [Resolved]
+        private PixivBackgroundCoordinator pixivCoordinator { get; set; } = null!;
 
         private bool storageTextureSourceAdded;
 
@@ -266,6 +302,25 @@ namespace osu.Game.Screens.Backgrounds
                     }
 
                     return new Background($@"Backgrounds/bg{RNG.Next(0, 5) % 5 + 1}");
+                }
+
+                case BackgroundSource.PixivFollow:
+                {
+                    ensureStorageTextureSource();
+
+                    bool hasLocal = pixivCoordinator.TryPickImmediateLocalBackground(out PixivIllustInfo illust, out string resourcePath);
+                    pendingPixivAttribution = hasLocal ? illust : default;
+
+                    var pixivBackground = new PixivBackground(hasLocal ? illust : null, hasLocal ? resourcePath : null);
+
+                    if (pixivBackground.Equals(background))
+                    {
+                        pendingPixivAttribution = default;
+                        return background;
+                    }
+
+                    pixivCoordinator.EnqueueSongChangeDownload();
+                    return pixivBackground;
                 }
             }
 

@@ -34,7 +34,8 @@ using osu.Game.Screens.Ranking.Statistics;
 using osu.Game.Skinning;
 using osu.Game.Rulesets.Configuration;
 using osu.Game.Configuration;
-using osu.Game.EzOsuGame.Mods;
+using osu.Game.EzOsuGame.Mods.LAsMods;
+using osu.Game.EzOsuGame.Mods.CommunityMod;
 using osu.Game.EzOsuGame.Statistics;
 using osu.Game.Localisation;
 using osu.Game.Rulesets.Scoring.Legacy;
@@ -139,6 +140,13 @@ namespace osu.Game.Rulesets.Taiko
                         new ModNiceBPM(),
                         new ModReconcile(),
                         new UniversalLoopPlayClip(),
+                    };
+
+                case ModType.CommunityMod:
+                    return new Mod[]
+                    {
+                        new ModHealthAdaptive(),
+                        new ModAccuracyAdaptive(),
                     };
 
                 case ModType.DifficultyReduction:

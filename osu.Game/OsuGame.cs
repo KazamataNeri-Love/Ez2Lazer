@@ -38,6 +38,9 @@ using osu.Game.Beatmaps;
 using osu.Game.Collections;
 using osu.Game.Configuration;
 using osu.Game.Database;
+using osu.Game.EzOsuGame.Acrylic;
+using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Edit;
 using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Overlays;
 using osu.Game.Graphics;
@@ -234,6 +237,8 @@ namespace osu.Game
         private RealmDetachedBeatmapStore detachedBeatmapStore;
 
         private ScreenStackFooter screenStackFooter;
+
+        private AcrylicCaptureScope acrylicCaptureScope;
 
         private readonly string[] args;
 
@@ -444,6 +449,7 @@ namespace osu.Game
 
             // Transfer any runtime changes back to configuration file.
             SkinManager.CurrentSkinInfo.ValueChanged += skin => configSkin.Value = skin.NewValue.ID.ToString();
+            SkinManager.CurrentSkinInfo.ValueChanged += onCurrentSkinChangedForEzJson;
 
             UserPlayingState.BindValueChanged(p =>
             {
@@ -1055,6 +1061,17 @@ namespace osu.Game
             };
         }
 
+        private void onCurrentSkinChangedForEzJson(ValueChangedEvent<Live<SkinInfo>> skin)
+        {
+            if (ScreenStack.CurrentScreen is EzSkinEditorScreen)
+                return;
+
+            if (!Ez2ConfigManager.Get<bool>(Ez2Setting.EzSkinJsonAutoApplyOnSkinChange))
+                return;
+
+            EzSkinJsonAutoApply.TryApplyForSkin(SkinManager, skin.NewValue, Ez2ConfigManager);
+        }
+
         protected override void LoadComplete()
         {
             base.LoadComplete();
@@ -1110,7 +1127,7 @@ namespace osu.Game
                             Children = new Drawable[]
                             {
                                 backReceptor = new ScreenFooter.BackReceptor(),
-                                ScreenStack = new OsuScreenStack { RelativeSizeAxes = Axes.Both },
+                                acrylicCaptureScope = new AcrylicCaptureScope(ScreenStack = new OsuScreenStack { RelativeSizeAxes = Axes.Both }),
                                 logoContainer = new Container { RelativeSizeAxes = Axes.Both },
                                 // TODO: what is this? why is this?
                                 // TODO: this is being screen scaled even though it's probably AN OVERLAY.
@@ -1150,6 +1167,7 @@ namespace osu.Game
                 new ConfineMouseTracker()
             });
 
+            dependencies.CacheAs<IAcrylicCaptureRegistrar>(acrylicCaptureScope);
             dependencies.Cache(ScreenFooter);
 
             ScreenStack.ScreenPushed += screenPushed;
@@ -1246,7 +1264,8 @@ namespace osu.Game
             loadComponentSingleFile(new MedalOverlay(), topMostOverlayContent.Add);
 
             loadComponentSingleFile(new BackgroundDataStoreProcessor(), Add, true);
-            loadComponentSingleFile(new EzAnalysisWarmupProcessor(), Add);
+            loadComponentSingleFile(new EzAnalysisWarmupProcessor(), Add, true);
+            loadComponentSingleFile(new EzOsuGame.Background.Pixiv.PixivAutoDownloadProcessor(), Add, true);
             loadComponentSingleFile<BeatmapStore>(detachedBeatmapStore = new RealmDetachedBeatmapStore(), Add, true);
             loadComponentSingleFile(new QueueController(), Add, true);
 

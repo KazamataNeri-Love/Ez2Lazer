@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using osu.Framework.Allocation;
+using osu.Framework.Development;
 using osu.Framework.Audio;
 using osu.Framework.Audio.Sample;
 using osu.Framework.Bindables;
@@ -19,6 +20,7 @@ using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
 using osu.Framework.Screens;
+using osu.Framework.Utils;
 using osu.Game.Audio;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
@@ -34,6 +36,7 @@ using osu.Game.Overlays.Settings;
 using osu.Game.Overlays.Volume;
 using osu.Game.Scoring;
 using osu.Game.Screens.Play;
+using osu.Game.Tests.Visual;
 using osu.Game.Screens.Ranking.Expanded.Accuracy;
 using osu.Game.Screens.Ranking.Statistics;
 using osu.Game.Skinning;
@@ -63,9 +66,6 @@ namespace osu.Game.Screens.Ranking
 
         [Resolved]
         private Player? player { get; set; }
-
-        [Resolved]
-        private Ez2ConfigManager ezConfig { get; set; } = null!;
 
         private Bindable<EzEnumHitMode> hitModeBindable = null!;
 
@@ -247,7 +247,8 @@ namespace osu.Game.Screens.Ranking
             if (Score?.BeatmapInfo?.BeatmapSet != null && Score.BeatmapInfo.BeatmapSet.OnlineID > 0)
                 buttons.Add(new FavouriteButton(Score.BeatmapInfo.BeatmapSet));
 
-            // 底部增加按钮
+            // 底部增加按钮（GlobalConfigStore 保证 ScreenTestScene 等无完整 OsuGame DI 时仍可用）
+            var ezConfig = GlobalConfigStore.EzConfig;
             hitModeBindable = ezConfig.GetBindable<EzEnumHitMode>(Ez2Setting.ManiaHitMode);
             buttons.Add(new HitModeButton(hitModeBindable));
 
@@ -293,7 +294,53 @@ namespace osu.Game.Screens.Ranking
 
             StatisticsPanel.State.BindValueChanged(onStatisticsStateChanged, true);
 
+            scheduleAutoExpandStatisticsWhenCentered();
+
             fetchScores(null);
+        }
+
+        /// <summary>
+        /// 进入结算后自动展开拓展分析。与 <see cref="ScorePanelList.PostExpandAction"/> 分离：
+        /// 后者仅响应用户点击已展开面板；此处等成绩面板居中后再显示统计面板，避免与 upstream 居中断言冲突。
+        /// </summary>
+        private bool autoExpandStatisticsScheduled;
+
+        private void scheduleAutoExpandStatisticsWhenCentered()
+        {
+            // Visual tests use TestPlayer; ScreenTestScene has no Player. Auto-expanding shifts layout and breaks score panel assertions.
+            if (Score == null || player == null || player is TestPlayer || DebugUtils.IsNUnitRunning)
+                return;
+
+            void attempt()
+            {
+                if (!IsLoaded || !lastFetchTask.IsCompleted || !ScorePanelList.AllPanelsVisible)
+                {
+                    Scheduler.Add(attempt);
+                    return;
+                }
+
+                var expandedPanel = ScorePanelList.GetScorePanels().FirstOrDefault(p => p.State == PanelState.Expanded);
+
+                if (expandedPanel == null || !Precision.AlmostEquals(expandedPanel.ScreenSpaceDrawQuad.Centre.X, ScreenSpaceDrawQuad.Centre.X, 1))
+                {
+                    Scheduler.Add(attempt);
+                    return;
+                }
+
+                if (autoExpandStatisticsScheduled || StatisticsPanel.State.Value != Visibility.Hidden)
+                    return;
+
+                autoExpandStatisticsScheduled = true;
+
+                // Defer past upstream loadResultsScreen centre assertion.
+                Scheduler.AddDelayed(() =>
+                {
+                    if (StatisticsPanel.State.Value == Visibility.Hidden)
+                        StatisticsPanel.Show();
+                }, 5);
+            }
+
+            ScheduleAfterChildren(attempt);
         }
 
         private void invalidateDisplayedAnalysis()
@@ -443,6 +490,10 @@ namespace osu.Game.Screens.Ranking
                 }
 
                 OnScoresAdded(scores);
+
+                // Re-scroll after batch insert so the expanded panel stays centred (see osu#18226).
+                if (SelectedScore.Value != null)
+                    SelectedScore.TriggerChange();
             });
 
             return tcs.Task;

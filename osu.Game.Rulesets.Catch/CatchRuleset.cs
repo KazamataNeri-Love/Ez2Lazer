@@ -12,7 +12,8 @@ using osu.Framework.Localisation;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.Legacy;
 using osu.Game.Graphics;
-using osu.Game.EzOsuGame.Mods;
+using osu.Game.EzOsuGame.Mods.LAsMods;
+using osu.Game.EzOsuGame.Mods.CommunityMod;
 using osu.Game.Localisation;
 using osu.Game.Rulesets.Catch.Beatmaps;
 using osu.Game.Rulesets.Catch.Difficulty;
@@ -120,6 +121,13 @@ namespace osu.Game.Rulesets.Catch
                         new ModNiceBPM(),
                         new ModReconcile(),
                         new UniversalLoopPlayClip(),
+                    };
+
+                case ModType.CommunityMod:
+                    return new Mod[]
+                    {
+                        new ModHealthAdaptive(),
+                        new ModAccuracyAdaptive(),
                     };
 
                 case ModType.DifficultyReduction:

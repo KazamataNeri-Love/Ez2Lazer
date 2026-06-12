@@ -21,8 +21,7 @@ using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
 using osu.Game.EzOsuGame.Analysis;
-using osu.Game.EzOsuGame.Configuration;
-using osu.Game.EzOsuGame.Scoring;
+using osu.Game.EzOsuGame.UI;
 using osu.Game.EzOsuGame.UserInterface;
 using osu.Game.Localisation;
 using osu.Game.Overlays;
@@ -57,6 +56,8 @@ namespace osu.Game.Screens.Select
         private ModSettingChangeTracker? settingChangeTracker;
 
         private BeatmapSetOnlineStatusPill statusPill = null!;
+        private Container modeArea = null!;
+        private EzManiaModeFlow maniaModeFlow = null!;
         private OsuHoverContainer titleLink = null!;
         private MarqueeContainer titleLabel = null!;
         private OsuHoverContainer artistLink = null!;
@@ -69,13 +70,6 @@ namespace osu.Game.Screens.Select
         private FavouriteButton favouriteButton = null!;
         private Statistic lengthStatistic = null!;
         private Statistic bpmStatistic = null!;
-
-        private FillFlowContainer maniaModeFlow = null!;
-        private OsuSpriteText hitModeText = null!;
-        private OsuSpriteText healthModeText = null!;
-
-        private IBindable<EzEnumHitMode> maniaHitModeBindable = null!;
-        private IBindable<EzEnumHealthMode> maniaHealthModeBindable = null!;
 
         [Resolved]
         private ISongSelect? songSelect { get; set; }
@@ -93,6 +87,8 @@ namespace osu.Game.Screens.Select
 
         private FillFlowContainer statisticsFlow = null!;
 
+        private static readonly float status_row_height = OsuFont.Style.Caption1.Size + 2f;
+
         public BeatmapTitleWedge()
         {
             RelativeSizeAxes = Axes.X;
@@ -100,14 +96,14 @@ namespace osu.Game.Screens.Select
         }
 
         [BackgroundDependencyLoader]
-        private void load(Ez2ConfigManager ezConfig)
+        private void load()
         {
             Masking = true;
             CornerRadius = corner_radius;
 
             InternalChildren = new Drawable[]
             {
-                new WedgeBackground(),
+                new EzSongSelectWedgeBackground(),
                 new FillFlowContainer
                 {
                     RelativeSizeAxes = Axes.X,
@@ -121,12 +117,44 @@ namespace osu.Game.Screens.Select
                     Spacing = new Vector2(0f, 4f),
                     Children = new Drawable[]
                     {
-                        new ShearAligningWrapper(statusPill = new BeatmapSetOnlineStatusPill
+                        new ShearAligningWrapper(new GridContainer
                         {
                             Shear = -OsuGame.SHEAR,
-                            ShowUnknownStatus = true,
-                            TextSize = OsuFont.Style.Caption1.Size,
-                            TextPadding = new MarginPadding { Horizontal = 6, Vertical = 1 },
+                            RelativeSizeAxes = Axes.X,
+                            AutoSizeAxes = Axes.Y,
+                            Padding = new MarginPadding { Horizontal = 6, Vertical = 1 },
+                            ColumnDimensions = new[]
+                            {
+                                new Dimension(GridSizeMode.AutoSize),
+                                new Dimension(GridSizeMode.Absolute, 30),
+                                new Dimension(),
+                            },
+                            Content = new[]
+                            {
+                                new[]
+                                {
+                                    statusPill = new BeatmapSetOnlineStatusPill
+                                    {
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft,
+                                        ShowUnknownStatus = true,
+                                        TextSize = OsuFont.Style.Caption1.Size,
+                                        TextPadding = new MarginPadding { Horizontal = 6, Vertical = 1 },
+                                    },
+                                    Empty(),
+                                    modeArea = new Container
+                                    {
+                                        RelativeSizeAxes = Axes.X,
+                                        AutoSizeAxes = Axes.Y,
+                                        // Padding = new MarginPadding { Right = 2f },
+                                        Child = maniaModeFlow = new EzManiaModeFlow
+                                        {
+                                            Anchor = Anchor.CentreRight,
+                                            Origin = Anchor.CentreRight,
+                                        },
+                                    },
+                                },
+                            },
                         }),
                         new ShearAligningWrapper(new Container
                         {
@@ -191,32 +219,6 @@ namespace osu.Game.Screens.Select
                                 },
                             },
                         }),
-                        new ShearAligningWrapper(maniaModeFlow = new FillFlowContainer
-                        {
-                            Shear = -OsuGame.SHEAR,
-                            Anchor = Anchor.CentreLeft,
-                            Origin = Anchor.CentreLeft,
-                            RelativeSizeAxes = Axes.X,
-                            AutoSizeAxes = Axes.Y,
-                            Direction = FillDirection.Horizontal,
-                            Spacing = new Vector2(12f, 0f),
-                            Alpha = 0f,
-                            Children = new Drawable[]
-                            {
-                                hitModeText = new OsuSpriteText
-                                {
-                                    Text = string.Empty,
-                                    Font = OsuFont.Style.Caption2.With(weight: FontWeight.SemiBold),
-                                    Colour = OsuColour.Gray(0.75f),
-                                },
-                                healthModeText = new OsuSpriteText
-                                {
-                                    Text = string.Empty,
-                                    Font = OsuFont.Style.Caption2.With(weight: FontWeight.SemiBold),
-                                    Colour = OsuColour.Gray(0.75f),
-                                },
-                            },
-                        }),
                         new ShearAligningWrapper(new Container
                         {
                             Shear = -OsuGame.SHEAR,
@@ -229,9 +231,6 @@ namespace osu.Game.Screens.Select
                     },
                 }
             };
-
-            maniaHitModeBindable = ezConfig.GetBindable<EzEnumHitMode>(Ez2Setting.ManiaHitMode);
-            maniaHealthModeBindable = ezConfig.GetBindable<EzEnumHealthMode>(Ez2Setting.ManiaHealthMode);
         }
 
         protected override void LoadComplete()
@@ -252,13 +251,16 @@ namespace osu.Game.Screens.Select
                 settingChangeTracker.SettingChanged += _ => updateLengthAndBpmStatistics();
             });
 
-            maniaHitModeBindable.BindValueChanged(_ => updateDisplay(), true);
-            maniaHealthModeBindable.BindValueChanged(_ => updateDisplay(), true);
-
             updateDisplay();
 
             statisticsFlow.AutoSizeDuration = 100;
             statisticsFlow.AutoSizeEasing = Easing.OutQuint;
+        }
+
+        protected override void Update()
+        {
+            base.Update();
+            maniaModeFlow.SetAvailableWidth(Math.Max(modeArea.DrawWidth - modeArea.Padding.TotalHorizontal, 0));
         }
 
         protected override void PopIn()
@@ -302,19 +304,6 @@ namespace osu.Game.Screens.Select
 
             updateLengthAndBpmStatistics();
             updateOnlineDisplay();
-
-            bool isMania = ruleset.Value.OnlineID == 3;
-
-            if (isMania)
-            {
-                hitModeText.Text = $@"Hit: {EzManiaScoreModeExtensions.GetHitModeDisplayName((int)maniaHitModeBindable.Value)}";
-                healthModeText.Text = $@"HP: {EzManiaScoreModeExtensions.GetHealthModeDisplayName((int)maniaHealthModeBindable.Value)}";
-                maniaModeFlow.Alpha = 1f;
-            }
-            else
-            {
-                maniaModeFlow.Alpha = 0f;
-            }
         }
 
         private CancellationTokenSource? lengthBpmCancellationSource;
@@ -354,7 +343,7 @@ namespace osu.Game.Screens.Select
                 }
                 else
                 {
-                    var (_, _, computedKpsList) = OptimizedBeatmapCalculator.GetKpsCoarse(beatmap, buckets: 64);
+                    var computedKpsList = OptimizedBeatmapCalculator.GetKpsCoarse(beatmap, buckets: 64);
                     kpsList = computedKpsList;
                 }
 

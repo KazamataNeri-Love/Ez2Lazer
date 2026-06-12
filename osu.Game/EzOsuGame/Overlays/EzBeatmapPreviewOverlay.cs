@@ -20,6 +20,7 @@ using osu.Framework.Timing;
 using osu.Game.Beatmaps;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Overlays.Preview;
+using osu.Game.EzOsuGame.UI;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
@@ -39,7 +40,8 @@ namespace osu.Game.EzOsuGame.Overlays
         private const float panel_right_margin = 20;
         private const float default_panel_height = 340;
         private const float min_panel_width = 360;
-        private const float max_panel_width = 560;
+        private const float fallback_max_panel_width = 560;
+        private const float panel_background_focus_opacity = 0.92f;
         private const float min_panel_height = 180;
         private const float max_panel_height = 560;
         private const float bottom_controls_height = 56;
@@ -75,6 +77,7 @@ namespace osu.Game.EzOsuGame.Overlays
         private readonly Bindable<EzBeatmapPreviewMode> previewMode = new Bindable<EzBeatmapPreviewMode>();
 
         private readonly Container panelContainer;
+        private readonly EzAcrylicPanelBackground panelBackground;
         private readonly Container stageViewport;
         private readonly Container stageScaleContainer;
         private readonly Container stageAreaContainer;
@@ -121,6 +124,8 @@ namespace osu.Game.EzOsuGame.Overlays
         private IManiaStaticPreviewRenderer? maniaStaticRenderer;
         private PreviewDensityController densityController = null!;
         private Bindable<double> previewDensity = null!;
+        private Bindable<EzBeatmapPreviewMode> sharedPreviewModeConfig = null!;
+        private Bindable<EzBeatmapPreviewMode> maniaPreviewModeConfig = null!;
 
         [Resolved(CanBeNull = true)]
         private ISkin? skin { get; set; }
@@ -146,6 +151,7 @@ namespace osu.Game.EzOsuGame.Overlays
 
         private bool expanded;
         private bool fullMapFocusActive;
+        private bool songSelectBackgroundRevealed;
         private float focusSavedPanelWidth;
         private float focusSavedPanelHeight;
 
@@ -177,11 +183,7 @@ namespace osu.Game.EzOsuGame.Overlays
                         RelativeSizeAxes = Axes.Both,
                         Children = new Drawable[]
                         {
-                            new Box
-                            {
-                                RelativeSizeAxes = Axes.Both,
-                                Colour = Color4.Black.Opacity(0.78f)
-                            },
+                            panelBackground = new EzAcrylicPanelBackground(Color4.Black.Opacity(panel_background_focus_opacity)),
                             loadTimeText = new OsuSpriteText
                             {
                                 Text = "Load Time: 0ms",
@@ -321,9 +323,11 @@ namespace osu.Game.EzOsuGame.Overlays
         [BackgroundDependencyLoader]
         private void load(Ez2ConfigManager ezConfig)
         {
-            previewMode.BindTo(ezConfig.GetBindable<EzBeatmapPreviewMode>(Ez2Setting.BeatmapPreviewMode));
+            sharedPreviewModeConfig = ezConfig.GetBindable<EzBeatmapPreviewMode>(Ez2Setting.BeatmapPreviewMode);
+            maniaPreviewModeConfig = ezConfig.GetBindable<EzBeatmapPreviewMode>(Ez2Setting.BeatmapPreviewModeMania);
             previewDensity = ezConfig.GetBindable<double>(Ez2Setting.BeatmapPreviewDensity);
             densityController = new PreviewDensityController(previewDensity);
+            applyPreviewModeForCurrentRuleset();
         }
 
         protected override void LoadComplete()
@@ -347,6 +351,8 @@ namespace osu.Game.EzOsuGame.Overlays
 
             expanded = true;
             ExpandedState.Value = true;
+            panelBackground.AcrylicCaptureVisible = true;
+            panelBackground.SyncAcrylicCaptureState();
 
             if (drawableRuleset == null && playableBeatmap != null && currentRuleset != null)
                 selectionDirty = true;
@@ -369,6 +375,8 @@ namespace osu.Game.EzOsuGame.Overlays
 
             expanded = false;
             ExpandedState.Value = false;
+            panelBackground.AcrylicCaptureVisible = false;
+            panelBackground.SyncAcrylicCaptureState();
             heightResizeActive = false;
             widthResizeActive = false;
             selectionLoadInProgress = false;
@@ -412,11 +420,16 @@ namespace osu.Game.EzOsuGame.Overlays
 
             this.playableBeatmap = playableBeatmap;
             string beatmapHash = playableBeatmap.BeatmapInfo.Hash;
+            bool rulesetChanged = currentRulesetOnlineId != ruleset.OnlineID;
             bool beatmapSame = currentRulesetOnlineId == ruleset.OnlineID && currentBeatmapHash == beatmapHash;
 
             bool unchanged = !forceReload && beatmapSame;
 
             currentRuleset = ruleset;
+
+            if (rulesetChanged)
+                applyPreviewModeForCurrentRuleset();
+
             updatePreviewModeButtons();
 
             if (unchanged)
@@ -454,8 +467,36 @@ namespace osu.Game.EzOsuGame.Overlays
             }
         }
 
+        /// <summary>
+        /// Match song select background-hold reveal: hide all preview UI while only the beatmap background remains visible.
+        /// </summary>
+        public void SetSongSelectBackgroundRevealed(bool revealed)
+        {
+            if (songSelectBackgroundRevealed == revealed)
+                return;
+
+            songSelectBackgroundRevealed = revealed;
+
+            if (revealed)
+            {
+                if (fullMapFocusActive)
+                    setFullMapFocusState(false);
+
+                ClearTransforms();
+                this.FadeOut(200, Easing.OutQuint);
+                this.ScaleTo(1.2f, 600, Easing.OutQuint);
+                return;
+            }
+
+            ClearTransforms();
+            this.FadeIn(500, Easing.OutQuint);
+            this.ScaleTo(1f, 500, Easing.OutQuint);
+        }
+
         public void SuspendForScreenExit()
         {
+            SetSongSelectBackgroundRevealed(false);
+
             selectionLoadInProgress = false;
             cancelScheduledSelectionLoad();
             cancelPendingLoad();
@@ -759,7 +800,7 @@ namespace osu.Game.EzOsuGame.Overlays
             if (base.OnMouseDown(e))
                 return true;
 
-            if (customManiaStaticMode && fullMapMode && stageViewport.ReceivePositionalInputAt(e.ScreenSpaceMousePosition))
+            if (stageViewport.ReceivePositionalInputAt(e.ScreenSpaceMousePosition))
             {
                 setFullMapFocusState(true);
                 return true;
@@ -902,7 +943,8 @@ namespace osu.Game.EzOsuGame.Overlays
                 // 清理所有引用
                 playableBeatmap = null;
                 currentRuleset = null;
-                previewMode.UnbindAll();
+                sharedPreviewModeConfig.UnbindAll();
+                maniaPreviewModeConfig.UnbindAll();
             }
         }
 
@@ -1115,9 +1157,22 @@ namespace osu.Game.EzOsuGame.Overlays
                 stageScaleContainer.Clear(true);
         }
 
+        private float getWedgeAlignedMaxPanelWidth()
+        {
+            if (DefaultPanelRightEdgeInScreenSpace != null)
+            {
+                float targetRightEdge = ToLocalSpace(new Vector2(DefaultPanelRightEdgeInScreenSpace(), 0)).X;
+
+                if (!float.IsNaN(targetRightEdge) && !float.IsInfinity(targetRightEdge))
+                    return Math.Max(min_panel_width, targetRightEdge - panel_left_margin);
+            }
+
+            return Math.Min(fallback_max_panel_width, DrawWidth - panel_left_margin - panel_right_margin);
+        }
+
         private float clampPanelWidth(float width)
         {
-            float maxWidth = Math.Min(max_panel_width, DrawWidth - panel_left_margin - panel_right_margin);
+            float maxWidth = getWedgeAlignedMaxPanelWidth();
             return Math.Clamp(width, min_panel_width, Math.Max(min_panel_width, maxWidth));
         }
 
@@ -1218,10 +1273,66 @@ namespace osu.Game.EzOsuGame.Overlays
 
         private void setPreviewMode(EzBeatmapPreviewMode mode)
         {
-            if (previewMode.Value == mode)
+            EzBeatmapPreviewMode validated = getValidatedPreviewMode(mode, currentRuleset);
+
+            if (previewMode.Value == validated)
                 return;
 
-            previewMode.Value = mode;
+            previewMode.Value = validated;
+            persistPreviewMode(validated);
+        }
+
+        private void applyPreviewModeForCurrentRuleset()
+        {
+            EzBeatmapPreviewMode target = getValidatedPreviewMode(getStoredPreviewMode(), currentRuleset);
+
+            if (previewMode.Value == target)
+                return;
+
+            previewMode.Value = target;
+        }
+
+        private EzBeatmapPreviewMode getStoredPreviewMode()
+        {
+            try
+            {
+                return isManiaRuleset(currentRuleset) ? maniaPreviewModeConfig.Value : sharedPreviewModeConfig.Value;
+            }
+            catch
+            {
+                return getDefaultPreviewMode(currentRuleset);
+            }
+        }
+
+        private void persistPreviewMode(EzBeatmapPreviewMode mode)
+        {
+            try
+            {
+                if (isManiaRuleset(currentRuleset))
+                    maniaPreviewModeConfig.Value = mode;
+                else
+                    sharedPreviewModeConfig.Value = mode;
+            }
+            catch
+            {
+                // Keep the in-session choice even if persistence fails.
+            }
+        }
+
+        private static EzBeatmapPreviewMode getDefaultPreviewMode(RulesetInfo? ruleset) =>
+            isManiaRuleset(ruleset) ? EzBeatmapPreviewMode.StaticFullMap : EzBeatmapPreviewMode.Static;
+
+        private static EzBeatmapPreviewMode getValidatedPreviewMode(EzBeatmapPreviewMode mode, RulesetInfo? ruleset)
+        {
+            if (!Enum.IsDefined(mode))
+                return getDefaultPreviewMode(ruleset);
+
+            IReadOnlyList<EzBeatmapPreviewMode> availableModes = isManiaRuleset(ruleset) ? mania_preview_modes : shared_preview_modes;
+
+            if (availableModes.Contains(mode))
+                return mode;
+
+            return getDefaultPreviewMode(ruleset);
         }
 
         private void onPreviewModeChanged()
@@ -1273,15 +1384,8 @@ namespace osu.Game.EzOsuGame.Overlays
 
         private IReadOnlyList<EzBeatmapPreviewMode> getAvailablePreviewModes() => isManiaRuleset(currentRuleset) ? mania_preview_modes : shared_preview_modes;
 
-        private EzBeatmapPreviewMode getHighlightedPreviewMode()
-        {
-            IReadOnlyList<EzBeatmapPreviewMode> availableModes = getAvailablePreviewModes();
-
-            if (availableModes.Contains(previewMode.Value))
-                return previewMode.Value;
-
-            return dynamicMode ? EzBeatmapPreviewMode.Dynamic : EzBeatmapPreviewMode.Static;
-        }
+        private EzBeatmapPreviewMode getHighlightedPreviewMode() =>
+            getValidatedPreviewMode(previewMode.Value, currentRuleset);
 
         private static bool isManiaRuleset(RulesetInfo? ruleset) => ruleset?.OnlineID == 3;
 
@@ -1330,6 +1434,8 @@ namespace osu.Game.EzOsuGame.Overlays
 
             fullMapFocusActive = focused;
             FullMapFocusState.Value = focused;
+
+            panelBackground.TintBox.FadeColour(Color4.Black.Opacity(panel_background_focus_opacity), 100, Easing.OutQuint);
 
             previewModeButtonList.FadeTo(focused ? 0 : 1, 100, Easing.OutQuint);
             loadTimeText.FadeTo(focused ? 0 : 1, 100, Easing.OutQuint);

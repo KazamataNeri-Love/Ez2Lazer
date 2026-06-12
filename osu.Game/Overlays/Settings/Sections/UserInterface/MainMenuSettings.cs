@@ -2,14 +2,14 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using osu.Framework.Allocation;
-using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Localisation;
 using osu.Game.Configuration;
+using osu.Game.EzOsuGame.Background.Pixiv;
+using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Overlays;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Localisation;
-using osu.Game.Online.API;
-using osu.Game.Online.API.Requests.Responses;
 
 namespace osu.Game.Overlays.Settings.Sections.UserInterface
 {
@@ -17,14 +17,12 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
     {
         protected override LocalisableString Header => UserInterfaceStrings.MainMenuHeader;
 
-        private IBindable<APIUser> user = null!;
-
-        private readonly Bindable<SettingsNote.Data?> backgroundSourceNote = new Bindable<SettingsNote.Data?>();
-
         [BackgroundDependencyLoader]
-        private void load(OsuConfigManager config, IAPIProvider api)
+        private void load(OsuConfigManager config, Ez2ConfigManager ezConfig,
+                          PixivBackgroundCoordinator pixivBackgroundCoordinator,
+                          INotificationOverlay? notifications)
         {
-            user = api.LocalUser.GetBoundCopy();
+            var backgroundSource = config.GetBindable<BackgroundSource>(OsuSetting.MenuBackgroundSource);
 
             Children = new Drawable[]
             {
@@ -57,30 +55,15 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
                 new SettingsItemV2(new FormEnumDropdown<BackgroundSource>
                 {
                     Caption = UserInterfaceStrings.BackgroundSource,
-                    Current = config.GetBindable<BackgroundSource>(OsuSetting.MenuBackgroundSource),
-                })
-                {
-                    Note = { BindTarget = backgroundSourceNote },
-                },
+                    Current = backgroundSource,
+                }),
+                new EzPixivBackgroundSettings(ezConfig, pixivBackgroundCoordinator, notifications, backgroundSource),
                 new SettingsItemV2(new FormEnumDropdown<SeasonalBackgroundMode>
                 {
                     Caption = UserInterfaceStrings.SeasonalBackgrounds,
                     Current = config.GetBindable<SeasonalBackgroundMode>(OsuSetting.SeasonalBackgroundMode),
                 })
             };
-        }
-
-        protected override void LoadComplete()
-        {
-            base.LoadComplete();
-
-            user.BindValueChanged(u =>
-            {
-                if (u.NewValue?.IsSupporter != true)
-                    backgroundSourceNote.Value = new SettingsNote.Data(UserInterfaceStrings.NotSupporterNote, SettingsNote.Type.Informational);
-                else
-                    backgroundSourceNote.Value = null;
-            }, true);
         }
     }
 }
