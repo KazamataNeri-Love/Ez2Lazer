@@ -173,6 +173,36 @@ namespace osu.Game.Overlays.Settings.Sections.Graphics
                 {
                     Keywords = new[] { "scale", "letterbox" },
                 },
+                new SettingsItemV2(new FormSliderBar<float>
+                {
+                    Caption = EzSettingsStrings.BACKGROUND_SCALE,
+                    HintText = EzSettingsStrings.BACKGROUND_SCALE_TOOLTIP,
+                    Current = ezConfig.GetBindable<float>(Ez2Setting.BackgroundScale),
+                    KeyboardStep = 0.01f,
+                }.With(bindBackgroundPreviewEvent))
+                {
+                    Keywords = new[] { "background", "scale", "zoom", "storyboard", "video", "ui" }
+                },
+                new SettingsItemV2(new FormSliderBar<float>
+                {
+                    Caption = EzSettingsStrings.BACKGROUND_POSITION_X,
+                    Current = ezConfig.GetBindable<float>(Ez2Setting.BackgroundPosX),
+                    KeyboardStep = 0.01f,
+                    DisplayAsPercentage = true,
+                }.With(bindBackgroundPreviewEvent))
+                {
+                    Keywords = new[] { "background", "position", "horizontal", "x", "ui" }
+                },
+                new SettingsItemV2(new FormSliderBar<float>
+                {
+                    Caption = EzSettingsStrings.BACKGROUND_POSITION_Y,
+                    Current = ezConfig.GetBindable<float>(Ez2Setting.BackgroundPosY),
+                    KeyboardStep = 0.01f,
+                    DisplayAsPercentage = true,
+                }.With(bindBackgroundPreviewEvent))
+                {
+                    Keywords = new[] { "background", "position", "vertical", "y", "ui" }
+                },
                 new SettingsItemV2(new FormEnumDropdown<ScalingMode>
                 {
                     Caption = GraphicsSettingsStrings.ScreenScaling,
@@ -465,6 +495,77 @@ namespace osu.Game.Overlays.Settings.Sections.Graphics
                     Colour = Color4.White,
                     RelativeSizeAxes = Axes.Both,
                     Alpha = 0.5f,
+                };
+            }
+        }
+
+        private Drawable? backgroundPreview;
+
+        private void bindBackgroundPreviewEvent(FormSliderBar<float> slider)
+        {
+            slider.Current.ValueChanged += _ => showBackgroundPreview();
+        }
+
+        private void showBackgroundPreview()
+        {
+            float scale = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundScale);
+            float posX = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundPosX);
+            float posY = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundPosY);
+
+            if (backgroundPreview?.IsAlive == true && backgroundPreview is BackgroundScalingPreview existing)
+            {
+                // Update existing preview live as the slider moves.
+                existing.Scale = new Vector2(scale);
+                float maxPan = Math.Max(0, (1 - scale) / 2);
+                existing.Position = new Vector2(
+                    (posX - 0.5f) * 2 * maxPan,
+                    (posY - 0.5f) * 2 * maxPan
+                );
+            }
+            else
+            {
+                game.Add(backgroundPreview = new BackgroundScalingPreview());
+            }
+
+            backgroundPreview.FadeOutFromOne(1500);
+            backgroundPreview.Expire();
+        }
+
+        private partial class BackgroundScalingPreview : Container
+        {
+            public BackgroundScalingPreview()
+            {
+                RelativeSizeAxes = Axes.Both;
+                RelativePositionAxes = Axes.Both;
+                Anchor = Anchor.Centre;
+                Origin = Anchor.Centre;
+
+                const float corner_radius = 10;
+
+                float scale = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundScale);
+                float posX = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundPosX);
+                float posY = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundPosY);
+
+                this.Scale = new Vector2(scale);
+                float maxPan = Math.Max(0, (1 - scale) / 2);
+                this.Position = new Vector2(
+                    (posX - 0.5f) * 2 * maxPan,
+                    (posY - 0.5f) * 2 * maxPan
+                );
+
+                Child = new Container
+                {
+                    Anchor = Anchor.Centre,
+                    Origin = Anchor.Centre,
+                    RelativeSizeAxes = Axes.Both,
+                    Masking = true,
+                    CornerRadius = corner_radius,
+                    Child = new Box
+                    {
+                        Colour = Color4.White,
+                        RelativeSizeAxes = Axes.Both,
+                        Alpha = 0.5f,
+                    },
                 };
             }
         }

@@ -113,6 +113,7 @@ namespace osu.Game.EzOsuGame.Overlays
                 {
                     Keywords = new[] { "storyboard", "video", "size", "auto", "autosize", "ui" }
                 },
+
                 new SettingsItemV2(new FormCheckBox
                 {
                     Caption = EzSettingsStrings.HIT_OBJECT_LIFETIME_USES_OWN_TIME,

@@ -11,69 +11,18 @@ using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Testing;
 using osu.Game.Beatmaps;
-using osu.Game.Beatmaps.ControlPoints;
 using osu.Game.EzOsuGame.HUD;
 using osu.Game.Rulesets.Mania.Beatmaps;
 using osu.Game.Rulesets.Mania.EzMania.HUD;
 using osu.Game.Rulesets.Scoring;
-using osu.Game.Screens.Play;
 using osu.Game.Screens.Play.HUD.HitErrorMeters;
 using osu.Game.Skinning;
 using osuTK;
-using osu.Game.Rulesets.Mania.Objects.Drawables;
-using osu.Game.Rulesets.Mania.Skinning.Default;
-using osu.Game.Rulesets.Objects.Drawables;
 using osu.Game.Rulesets.Mania.Skinning.EzStylePro;
-using osu.Game.Rulesets.Mania.Skinning.Legacy;
-using osu.Game.Rulesets.Mania.UI;
 using osu.Framework.Allocation;
-using osu.Framework.Graphics.Colour;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Logging;
-using osu.Game.EzOsuGame;
-
-// ═══════════════════════════════════════════════════════════════════════════
-// EzProNeriColumnBackground — 加载后覆写 Column.EzNoteSizeBindable
-// 所有 Note 绘制逻辑完全沿用 EzPro 原始 EzNote / EzHoldNoteHead / EzHoldNoteTail / EzHoldNoteMiddle
-// ═══════════════════════════════════════════════════════════════════════════
-
-public partial class EzProNeriColumnBackground : EzColumnBackground
-{
-    [Resolved]
-    private Column column { get; set; } = null!;
-
-    [Resolved]
-    private ISkinSource skin { get; set; } = null!;
-
-    [Resolved]
-    private EzLocalTextureFactory factory { get; set; } = null!;
-
-    protected override void LoadComplete()
-    {
-        base.LoadComplete();
-        overrideNoteSize();
-    }
-
-    private void overrideNoteSize()
-    {
-        Scheduler.Add(() =>
-        {
-            float w = skin.GetConfig<ManiaSkinConfigurationLookup, float>(
-                new ManiaSkinConfigurationLookup(LegacyManiaSkinConfigurationLookups.ColumnWidth, column.Index)
-            )?.Value ?? column.DrawWidth;
-
-            if (w <= 0)
-            {
-                overrideNoteSize();
-                return;
-            }
-
-            float h = w * factory.GetRatio();
-            column.EzNoteSizeBindable.Value = new Vector2(w, h);
-        });
-    }
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ComboMilestoneSwitcher — Combo 达标自动切换纹理
@@ -168,30 +117,13 @@ public class EzProNeriEnergySystem : Component
     [Resolved(canBeNull: true)]
     private JudgementCountController? judgementCountController { get; set; }
 
-    [Resolved(canBeNull: true)]
-    private GameplayClockContainer? gameplayClockContainer { get; set; }
-
     public double Energy { get; private set; }
     public double EnergyS { get; private set; }
     public readonly BindableBool IsSuperTime = new BindableBool();
     /// <summary>EnergyS 达到 1000 时置 true，消费后手动重置</summary>
     public readonly BindableBool FeverUpReady = new BindableBool();
 
-    /// <summary>ST 触发次数计数器，首次 ST 自动触发 FeverUp</summary>
-    public int StTriggerCount { get; private set; }
-
-    /// <summary>ST 保护计数器，进入 ST 时 = 5，Miss/Poor/Ok 各减 1</summary>
-    private int stProtectCount;
-
-    /// <summary>50× 惩罚是否已触发</summary>
-    private bool penaltyApplied;
-
-    private const int ST_PROTECT_MAX = 5;
-
     public static EzProNeriEnergySystem? Instance { get; private set; }
-
-    /// <summary>全局暂停状态，由 EnergySystem 每帧同步（供背景层组件读取）</summary>
-    public static bool IsGamePaused { get; private set; }
 
     private const double MAX_ENERGY = 1000;
 
@@ -208,7 +140,7 @@ public class EzProNeriEnergySystem : Component
     {
         base.LoadComplete();
         Instance = this;
-        Logger.Log($"[EnergySys] LoadComplete — jcc={(judgementCountController is null ? "NULL" : "OK")}, gcc={(gameplayClockContainer is null ? "NULL" : "OK")}, counters={judgementCountController?.Counters?.Count() ?? 0}");
+        Logger.Log($"[EnergySys] LoadComplete — jcc is {(judgementCountController is null ? "NULL" : "OK")}, counters={judgementCountController?.Counters?.Count() ?? 0}");
         if (judgementCountController is null) return;
         int bound = 0;
         foreach (var counter in judgementCountController.Counters)
@@ -235,30 +167,10 @@ public class EzProNeriEnergySystem : Component
                     }
                     else
                     {
-                        if (stProtectCount > 0)
-                        {
-                            // 保护期内：仅减计数，不结束 ST，Energy 保持满值
-                            stProtectCount--;
-                            Logger.Log($"[EnergySys] ST protect decremented to {stProtectCount}, delta={delta}");
-                            return;
-                        }
-
-                        if (!penaltyApplied)
-                        {
-                            // 保护期过后第一个负向判定：50 倍扣 Energy
-                            penaltyApplied = true;
-                            Logger.Log($"[EnergySys] 50x penalty applied! base delta={delta}");
-                            IsSuperTime.Value = false;
-                            Energy = Math.Max(0, Energy + delta * 50);
-                            EnergyS = 0;
-                        }
-                        else
-                        {
-                            // 常规结束 ST
-                            IsSuperTime.Value = false;
-                            Energy = Math.Max(0, Energy + delta);
-                            EnergyS = 0;
-                        }
+                        // 负向判定 → 结束超神时间，Energy 扣减，EnergyS 清零
+                        IsSuperTime.Value = false;
+                        Energy = Math.Max(0, Energy + delta);
+                        EnergyS = 0;
                     }
                     return;
                 }
@@ -267,7 +179,9 @@ public class EzProNeriEnergySystem : Component
                 double newEnergy = Math.Clamp(Energy + delta, 0, MAX_ENERGY);
                 if (newEnergy >= MAX_ENERGY && Energy < MAX_ENERGY)
                 {
-                    enterSuperTime();
+                    Energy = MAX_ENERGY;
+                    IsSuperTime.Value = true;
+                    EnergyS = 0;
                 }
                 else
                 {
@@ -282,31 +196,12 @@ public class EzProNeriEnergySystem : Component
     protected override void Update()
     {
         base.Update();
-
-        // 通过 GameplayClockContainer.IsPaused 检测暂停
-        IsGamePaused = gameplayClockContainer?.IsPaused.Value == true;
-
         if (!IsSuperTime.Value && Energy >= MAX_ENERGY)
         {
-            enterSuperTime();
+            IsSuperTime.Value = true;
+            Energy = MAX_ENERGY;
+            EnergyS = 0;
         }
-    }
-
-    private void enterSuperTime()
-    {
-        StTriggerCount++;
-        stProtectCount = ST_PROTECT_MAX;
-        penaltyApplied = false;
-        IsSuperTime.Value = true;
-        Energy = MAX_ENERGY;
-        EnergyS = 0;
-
-        if (StTriggerCount == 1)
-        {
-            FeverUpReady.Value = true;
-        }
-
-        Logger.Log($"[EnergySys] SuperTime #{StTriggerCount} started, protect={stProtectCount}");
     }
 }
 
@@ -404,7 +299,6 @@ public partial class EzProNeriFeverUp : CompositeDrawable
     private ISkinSource skin { get; set; } = null!;
 
     private Sprite? sprite;
-    private float imageWidth;
     private float imageHeight;
 
     [BackgroundDependencyLoader]
@@ -416,7 +310,6 @@ public partial class EzProNeriFeverUp : CompositeDrawable
         var tex = skin.GetTexture("SuperTime/FeverUp");
         if (tex != null)
         {
-            imageWidth = tex.Width;
             imageHeight = tex.Height;
             sprite = new Sprite
             {
@@ -447,8 +340,7 @@ public partial class EzProNeriFeverUp : CompositeDrawable
         float pw = DrawWidth;
         float ph = DrawHeight;
 
-        float proportionalHeight = pw * imageHeight / imageWidth;
-        sprite.Size = new Vector2(pw, proportionalHeight);
+        sprite.Width = pw;
         sprite.Y = 0;
         sprite.Alpha = 1;
         sprite.MoveToY(-ph, 400, Easing.None);
@@ -484,29 +376,10 @@ public partial class EzProNeriFeverLight : CompositeDrawable
     /// <summary>由 Playfield 回调根据谱面设置</summary>
     public float Bpm { get; set; } = 150;
 
-    /// <summary>谱面 timing points，用于 BPM 动态变化</summary>
-    public IReadOnlyList<TimingControlPoint>? TimingPoints { get; set; }
-
-    /// <summary>首拍偏移（ms），相位从此对齐</summary>
-    private double firstBeatTime;
-
     [BackgroundDependencyLoader]
     private void load()
     {
         AutoSizeAxes = Axes.Both;
-
-        // 解析首拍时间
-        if (TimingPoints != null && TimingPoints.Count > 0)
-        {
-            for (int i = 0; i < TimingPoints.Count; i++)
-            {
-                if (TimingPoints[i].BeatLength > 0)
-                {
-                    firstBeatTime = TimingPoints[i].Time;
-                    break;
-                }
-            }
-        }
 
         var tex = skin.GetTexture("SuperTime/FeverLight");
         if (tex != null)
@@ -543,8 +416,6 @@ public partial class EzProNeriFeverLight : CompositeDrawable
     protected override void Update()
     {
         base.Update();
-        if (EzProNeriEnergySystem.IsGamePaused)
-            return;
         if (sprite is null || !visible) return;
 
         if (justShown)
@@ -554,114 +425,55 @@ public partial class EzProNeriFeverLight : CompositeDrawable
             return;
         }
 
-        // 懒初始化首拍时间（TimingPoints 由 transformer 回调设置，晚于 load()）
-        if (firstBeatTime == 0 && TimingPoints != null && TimingPoints.Count > 0)
-            firstBeatTime = TimingPoints[0].Time;
-
-        double phaseTime = Math.Max(0, Clock.CurrentTime - firstBeatTime);
         double beatMs = 60000.0 / Bpm;
-        double phase = (phaseTime % beatMs) / beatMs;
+        double phase = (Clock.CurrentTime % beatMs) / beatMs;
         // sin 波形，0..1 平滑闪烁，频率 = BPM（每拍一个周期）
         sprite.Alpha = (float)((Math.Sin(phase * 2 * Math.PI) + 1) / 2);
     }
 }
 // ═══════════════════════════════════════════════════════════════════════════
-// 基类：BoxLight 三组件共用逻辑（BPM 相位计算、首拍对齐、暂停保护）
+// EzProNeriBoxlightAnimator — 全屏 BPM 同步帧动画（Background 层）
+// ═══════════════════════════════════════════════════════════════════════════
+// 加载 boxlight-0.png … boxlight-N.png 序列。
+// 两个 Sprite 交替播放，每周期 = 4 拍，偏移 2 拍，实现无缝循环。
+// 高度拉伸至屏幕高度，保持比例。无帧时静默跳过。
 // ═══════════════════════════════════════════════════════════════════════════
 
-public abstract partial class EzProNeriBoxLightPlayerBase : CompositeDrawable
+public partial class EzProNeriBoxlightAnimator : CompositeDrawable
 {
     [Resolved]
     private ISkinSource skin { get; set; } = null!;
 
-    protected readonly List<Texture> frames = new List<Texture>();
-    protected bool hasFrames;
-    protected bool sizeInitialized;
-
+    private readonly List<Texture> frames = new List<Texture>();
+    private Sprite? sprite;
+    private bool hasFrames;
+    private bool sizeInitialized;
     public float Bpm { get; set; } = 150;
-    public IReadOnlyList<TimingControlPoint>? TimingPoints { get; set; }
-
-    /// <summary>首拍偏移（ms），相位从此对齐（懒初始化）</summary>
-    protected double firstBeatTime;
-
-    /// <summary>子类指定纹理前缀，如 "BoxLight-Intro"</summary>
-    protected abstract string TexturePrefix { get; }
 
     [BackgroundDependencyLoader]
     private void load()
     {
         for (int i = 0; ; i++)
         {
-            var tex = skin.GetTexture($"SuperTime/{TexturePrefix}-{i:D3}");
+            var tex = skin.GetTexture($"SuperTime/boxlight-{i:D3}");
             if (tex == null) break;
             frames.Add(tex);
         }
 
         if (frames.Count == 0)
         {
-            Logger.Log($"[{GetType().Name}] ⚠ No frames loaded — disabled");
+            Logger.Log("[Boxlight] ⚠ No frames loaded — disabled");
             return;
         }
 
         hasFrames = true;
-        Logger.Log($"[{GetType().Name}] Loaded {frames.Count} frames, first={frames[0].Width}x{frames[0].Height}");
+        Logger.Log($"[Boxlight] Loaded {frames.Count} frames, first={frames[0].Width}×{frames[0].Height}");
 
-        onFramesLoaded();
-    }
-
-    /// <summary>帧加载完成后由子类创建可视化结构</summary>
-    protected abstract void onFramesLoaded();
-
-    /// <summary>每帧由子类调用：获取 aligned time、beatMs、cycleMs</summary>
-    protected bool getTiming(out double t, out double beatMs, out double cycleMs)
-    {
-        if (!hasFrames || EzProNeriEnergySystem.IsGamePaused)
+        sprite = new Sprite
         {
-            t = beatMs = cycleMs = 0;
-            return false;
-        }
-
-        // 懒初始化首拍时间
-        if (firstBeatTime == 0 && TimingPoints != null && TimingPoints.Count > 0)
-            firstBeatTime = TimingPoints[0].Time;
-
-        t = Math.Max(0, Clock.CurrentTime - firstBeatTime);
-        beatMs = 60000.0 / Bpm;
-        cycleMs = beatMs * 4;   // 1 次播放 = 4 拍
-        return true;
-    }
-
-    protected void initSize(Sprite[] sprites)
-    {
-        if (sizeInitialized) return;
-        sizeInitialized = true;
-
-        float parentW = Parent?.DrawWidth ?? 1024;
-        var refTex = frames[0];
-        float scale = parentW / refTex.Width * 1.50f;
-        foreach (var s in sprites)
-            s.Size = new Vector2(refTex.Width * scale, refTex.Height * scale);
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// BoxLight-IntroPlayer — 开场冲锋（一次性）
-// ═══════════════════════════════════════════════════════════════════════════
-// 帧率与 loop 组件一致：所有帧在 4 拍内播完，不循环，播完即止。
-// ═══════════════════════════════════════════════════════════════════════════
-
-public partial class EzProNeriBoxLightIntroPlayer : EzProNeriBoxLightPlayerBase
-{
-    protected override string TexturePrefix => "BoxLight-Intro";
-
-    private Sprite? sprite;
-    private bool completed;
-
-    public bool IntroCompleted => completed;
-
-    protected override void onFramesLoaded()
-    {
-        sprite = new Sprite { Anchor = Anchor.Centre, Origin = Anchor.Centre };
+            Anchor = Anchor.Centre,
+            Origin = Anchor.Centre,
+        };
         AddInternal(sprite);
         sprite.Texture = frames[0];
     }
@@ -669,104 +481,20 @@ public partial class EzProNeriBoxLightIntroPlayer : EzProNeriBoxLightPlayerBase
     protected override void Update()
     {
         base.Update();
-        if (!getTiming(out double t, out double beatMs, out double cycleMs)) return;
-        if (completed || sprite == null) return;
+        if (!hasFrames || sprite == null) return;
 
-        initSize(new[] { sprite });
-
-        double frameDuration = cycleMs / frames.Count;
-        int frame = (int)(t / frameDuration);
-        if (frame >= frames.Count)
+        if (!sizeInitialized)
         {
-            completed = true;
-            sprite.Alpha = 0;
-            return;
+            sizeInitialized = true;
+            float parentW = Parent?.DrawWidth ?? 1024;
+            var refTex = frames[0];
+            float scale = parentW / refTex.Width * 1.50f;
+            sprite.Size = new Vector2(refTex.Width * scale, refTex.Height * scale);
         }
 
-        sprite.Texture = frames[frame];
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// BoxLight-CirclePlayer — 圆环周期膨胀（循环）
-// ═══════════════════════════════════════════════════════════════════════════
-// 播放速率：1 次 / 4 拍（所有帧在 4 拍内播完一次膨胀）。
-// 播放频率：每 2 拍触发一次（双 Sprite 错开 2 拍，每拍都有膨胀脉冲）。
-// ═══════════════════════════════════════════════════════════════════════════
-
-public partial class EzProNeriBoxLightCirclePlayer : EzProNeriBoxLightPlayerBase
-{
-    protected override string TexturePrefix => "BoxLight-Circle";
-
-    private readonly Sprite[] altSprites = new Sprite[2];
-
-    protected override void onFramesLoaded()
-    {
-        for (int i = 0; i < 2; i++)
-        {
-            altSprites[i] = new Sprite { Anchor = Anchor.Centre, Origin = Anchor.Centre };
-            AddInternal(altSprites[i]);
-        }
-
-        altSprites[0].Texture = frames[0];
-        altSprites[1].Texture = frames[frames.Count / 2];
-    }
-
-    protected override void Update()
-    {
-        base.Update();
-        if (!getTiming(out double t, out double beatMs, out double cycleMs)) return;
-
-        initSize(altSprites);
-
-        double offsetMs = cycleMs / 2; // 每 2 拍触发一次
-
-        double phaseA = (t % cycleMs) / cycleMs;
-        double phaseB = ((t + offsetMs) % cycleMs) / cycleMs;
-
-        altSprites[0].Texture = frames[(int)(phaseA * frames.Count) % frames.Count];
-        altSprites[1].Texture = frames[(int)(phaseB * frames.Count) % frames.Count];
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// BoxLight-LinesPlayer — 螺旋线持续旋转（循环）
-// ═══════════════════════════════════════════════════════════════════════════
-// 帧率与 Circle 完全一致：所有帧在 4 拍内播完一圈，双 Sprite 错开 2 拍。
-// ═══════════════════════════════════════════════════════════════════════════
-
-public partial class EzProNeriBoxLightLinesPlayer : EzProNeriBoxLightPlayerBase
-{
-    protected override string TexturePrefix => "BoxLight-Lines";
-
-    private readonly Sprite[] altSprites = new Sprite[2];
-
-    protected override void onFramesLoaded()
-    {
-        for (int i = 0; i < 2; i++)
-        {
-            altSprites[i] = new Sprite { Anchor = Anchor.Centre, Origin = Anchor.Centre };
-            AddInternal(altSprites[i]);
-        }
-
-        altSprites[0].Texture = frames[0];
-        altSprites[1].Texture = frames[frames.Count / 2];
-    }
-
-    protected override void Update()
-    {
-        base.Update();
-        if (!getTiming(out double t, out double beatMs, out double cycleMs)) return;
-
-        initSize(altSprites);
-
-        double offsetMs = cycleMs / 2; // 每 2 拍触发一次
-
-        double phaseA = (t % cycleMs) / cycleMs;
-        double phaseB = ((t + offsetMs) % cycleMs) / cycleMs;
-
-        altSprites[0].Texture = frames[(int)(phaseA * frames.Count) % frames.Count];
-        altSprites[1].Texture = frames[(int)(phaseB * frames.Count) % frames.Count];
+        double beatMs = 60000.0 / Bpm;
+        double phase = (Clock.CurrentTime % (beatMs * 4)) / (beatMs * 4);
+        sprite.Texture = frames[(int)(phase * frames.Count) % frames.Count];
     }
 }
 
@@ -788,28 +516,9 @@ public partial class EzProNeriBoxgoldAnimator : CompositeDrawable
     private bool sizeInitialized;
     public float Bpm { get; set; } = 150;
 
-    /// <summary>谱面 timing points，用于支持 BPM 动态变化</summary>
-    public IReadOnlyList<TimingControlPoint>? TimingPoints { get; set; }
-
-    /// <summary>首拍偏移（ms），相位从此对齐</summary>
-    private double firstBeatTime;
-
     [BackgroundDependencyLoader]
     private void load()
     {
-        // 解析首拍时间
-        if (TimingPoints != null && TimingPoints.Count > 0)
-        {
-            for (int i = 0; i < TimingPoints.Count; i++)
-            {
-                if (TimingPoints[i].BeatLength > 0)
-                {
-                    firstBeatTime = TimingPoints[i].Time;
-                    break;
-                }
-            }
-        }
-
         for (int i = 0; ; i++)
         {
             var tex = skin.GetTexture($"SuperTime/boxgold-{i:D3}");
@@ -845,8 +554,6 @@ public partial class EzProNeriBoxgoldAnimator : CompositeDrawable
     protected override void Update()
     {
         base.Update();
-        if (EzProNeriEnergySystem.IsGamePaused)
-            return;
         if (!hasFrames) return;
 
         bool superTime = EzProNeriEnergySystem.Instance?.IsSuperTime.Value ?? false;
@@ -869,11 +576,7 @@ public partial class EzProNeriBoxgoldAnimator : CompositeDrawable
         }
 
         double beatMs = 60000.0 / Bpm;
-        // 懒初始化首拍时间
-        if (firstBeatTime == 0 && TimingPoints != null && TimingPoints.Count > 0)
-            firstBeatTime = TimingPoints[0].Time;
-
-        double totalMs = Math.Max(0, Clock.CurrentTime - firstBeatTime);
+        double totalMs = Clock.CurrentTime;
         double cycleMs = beatMs * 8;      // 8 拍完成一次完整帧序列
         double halfMs  = beatMs * 4;      // 每 4 拍启动一个新动画元件
 
@@ -910,7 +613,6 @@ public class ManiaEzProForNeriTransformer : SkinTransformer
         [10] = new KeyColumnConfig(48f),                                                     // 10K
         [12] = new KeyColumnConfig(48f, new[] { 0, 11 }, 1.2f),                              // 10K2S: 列0,11 Scratch
         [14] = new KeyColumnConfig(48f, new[] { 0, 12 }, 1.2f, new[] { 6 }, 1.2f, new[] { 13 }),  // 10K2S1P: 列0,12 Scratch; 列6 Pedal; 列13 Hidden(宽0)
-        [16] = new KeyColumnConfig(40f, new[] { 0, 15 }, 1.2f),
     };
 
     /// <summary>未知 Key 数时的回退配置</summary>
@@ -962,7 +664,7 @@ public class ManiaEzProForNeriTransformer : SkinTransformer
                 switch (maniaComponent.Component)
                 {
                     case ManiaSkinComponents.ColumnBackground:
-                        return new EzProNeriColumnBackground();
+                        return new EzColumnBackground();
                     case ManiaSkinComponents.KeyArea:
                         return new EzKeyArea();
                     case ManiaSkinComponents.Note:
@@ -990,30 +692,25 @@ public class ManiaEzProForNeriTransformer : SkinTransformer
                 {
                     return new DefaultSkinComponentsContainer(container =>
                     {
-                        var intro = container.OfType<EzProNeriBoxLightIntroPlayer>().FirstOrDefault();
-                        var circle = container.OfType<EzProNeriBoxLightCirclePlayer>().FirstOrDefault();
-                        var lines = container.OfType<EzProNeriBoxLightLinesPlayer>().FirstOrDefault();
-
-                        double bpm = 150;
-                        IReadOnlyList<TimingControlPoint>? timingPoints = null;
-                        try
+                        var boxlight = container.OfType<EzProNeriBoxlightAnimator>().FirstOrDefault();
+                        if (boxlight != null)
                         {
-                            timingPoints = beatmap.ControlPointInfo?.TimingPoints;
-                            if (timingPoints != null && timingPoints.Any(t => t.BeatLength > 0))
+                            boxlight.Anchor = Anchor.Centre;
+                            boxlight.Origin = Anchor.Centre;
+
+                            double bpm = 150;
+                            try
                             {
-                                var firstTiming = timingPoints.First(t => t.BeatLength > 0);
-                                bpm = 60000.0 / firstTiming.BeatLength;
+                                var timingPoints = beatmap.ControlPointInfo?.TimingPoints;
+                                if (timingPoints != null && timingPoints.Any(t => t.BeatLength > 0))
+                                {
+                                    var firstTiming = timingPoints.First(t => t.BeatLength > 0);
+                                    bpm = 60000.0 / firstTiming.BeatLength;
+                                }
                             }
-                        }
-                        catch { }
+                            catch { }
 
-                        foreach (var player in new EzProNeriBoxLightPlayerBase[] { intro, circle, lines })
-                        {
-                            if (player == null) continue;
-                            player.Anchor = Anchor.Centre;
-                            player.Origin = Anchor.Centre;
-                            player.Bpm = (float)bpm;
-                            player.TimingPoints = timingPoints;
+                            boxlight.Bpm = (float)bpm;
                         }
 
                         var boxgold = container.OfType<EzProNeriBoxgoldAnimator>().FirstOrDefault();
@@ -1021,14 +718,24 @@ public class ManiaEzProForNeriTransformer : SkinTransformer
                         {
                             boxgold.Anchor = Anchor.Centre;
                             boxgold.Origin = Anchor.Centre;
+
+                            double bpm = 150;
+                            try
+                            {
+                                var timingPoints = beatmap.ControlPointInfo?.TimingPoints;
+                                if (timingPoints != null && timingPoints.Any(t => t.BeatLength > 0))
+                                {
+                                    var firstTiming = timingPoints.First(t => t.BeatLength > 0);
+                                    bpm = 60000.0 / firstTiming.BeatLength;
+                                }
+                            }
+                            catch { }
+
                             boxgold.Bpm = (float)bpm;
-                            boxgold.TimingPoints = timingPoints;
                         }
                     })
                     {
-                        new EzProNeriBoxLightIntroPlayer(),
-                        new EzProNeriBoxLightCirclePlayer(),
-                        new EzProNeriBoxLightLinesPlayer(),
+                        new EzProNeriBoxlightAnimator(),
                         new EzProNeriBoxgoldAnimator(),
                     };
                 }
@@ -1266,10 +973,9 @@ public class ManiaEzProForNeriTransformer : SkinTransformer
                             {
                                 // 尝试从谱面获取 BPM
                                 double bpm = 150;
-                                IReadOnlyList<TimingControlPoint>? timingPoints = null;
                                 try
                                 {
-                                    timingPoints = beatmap.ControlPointInfo?.TimingPoints;
+                                    var timingPoints = beatmap.ControlPointInfo?.TimingPoints;
                                     if (timingPoints != null && timingPoints.Any(t => t.BeatLength > 0))
                                     {
                                         var firstTiming = timingPoints.First(t => t.BeatLength > 0);
@@ -1280,7 +986,6 @@ public class ManiaEzProForNeriTransformer : SkinTransformer
 
                                 // 一号：左侧，Anchor=CentreLeft, Origin=CentreRight
                                 feverLights[0].Bpm = (float)bpm;
-                                feverLights[0].TimingPoints = timingPoints;
                                 feverLights[0].Anchor = Anchor.CentreLeft;
                                 feverLights[0].Origin = Anchor.CentreRight;
                                 feverLights[0].Scale = new Vector2(2.2658894f);
@@ -1288,7 +993,6 @@ public class ManiaEzProForNeriTransformer : SkinTransformer
 
                                 // 二号：右侧，Anchor=CentreRight, Origin=CentreLeft
                                 feverLights[1].Bpm = (float)bpm;
-                                feverLights[1].TimingPoints = timingPoints;
                                 feverLights[1].Anchor = Anchor.CentreRight;
                                 feverLights[1].Origin = Anchor.CentreLeft;
                                 feverLights[1].Scale = new Vector2(2.2658894f);

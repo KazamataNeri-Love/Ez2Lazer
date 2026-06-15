@@ -191,6 +191,7 @@ namespace osu.Game.Skinning
                                     new DefaultComboCounter(),
                                     new DefaultScoreCounter(),
                                     new DefaultAccuracyCounter(),
+                                    new Default300GRateCounter(),
                                     new DefaultHealthDisplay(),
                                     new DefaultSongProgress(),
                                     new DefaultKeyCounterDisplay(),

@@ -8,11 +8,14 @@ using System.Collections.Generic;
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
+using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Game.EzOsuGame.Configuration;
 using osu.Game.Graphics.Containers;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Storyboards;
 using osu.Game.Storyboards.Drawables;
+using osuTK;
 
 namespace osu.Game.Screens.Play
 {
@@ -51,20 +54,50 @@ namespace osu.Game.Screens.Play
         /// </remarks>
         public IBindable<bool> HasStoryboardEnded = new BindableBool(true);
 
+        private Bindable<float> backgroundScale = null!;
+        private Bindable<float> backgroundPosX = null!;
+        private Bindable<float> backgroundPosY = null!;
+
         public DimmableStoryboard(Storyboard storyboard, IReadOnlyList<Mod> mods)
         {
             this.storyboard = storyboard;
             this.mods = mods;
 
             storyboardMustAlwaysBePresent = new Lazy<bool>(() => storyboard.GetLayer(@"Overlay").Elements.Any() || storyboard.Layers.Any(l => l.Elements.OfType<StoryboardSampleInfo>().Any()));
+
+            // Scale from centre so the background shrinks/expands towards the screen centre.
+            Anchor = Anchor.Centre;
+            Origin = Anchor.Centre;
+            RelativePositionAxes = Axes.Both;
         }
 
         [BackgroundDependencyLoader]
-        private void load()
+        private void load(Ez2ConfigManager ezConfig)
         {
+            backgroundScale = ezConfig.GetBindable<float>(Ez2Setting.BackgroundScale);
+            backgroundPosX = ezConfig.GetBindable<float>(Ez2Setting.BackgroundPosX);
+            backgroundPosY = ezConfig.GetBindable<float>(Ez2Setting.BackgroundPosY);
+
+            backgroundScale.ValueChanged += _ => Scheduler.AddOnce(updateBackgroundScale);
+            backgroundPosX.ValueChanged += _ => Scheduler.AddOnce(updateBackgroundScale);
+            backgroundPosY.ValueChanged += _ => Scheduler.AddOnce(updateBackgroundScale);
+
+            updateBackgroundScale();
+
             Add(OverlayLayerContainer = new Container());
 
             initializeStoryboard(false);
+        }
+
+        private void updateBackgroundScale()
+        {
+            float s = backgroundScale.Value;
+            this.Scale = new Vector2(s);
+
+            float maxPan = Math.Max(0, (1 - s) / 2);
+            float panX = (backgroundPosX.Value - 0.5f) * 2 * maxPan;
+            float panY = (backgroundPosY.Value - 0.5f) * 2 * maxPan;
+            this.Position = new Vector2(panX, panY);
         }
 
         protected override void LoadComplete()
