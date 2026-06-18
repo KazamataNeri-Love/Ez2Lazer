@@ -1,6 +1,8 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System.Threading;
+using System.Threading.Tasks;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
@@ -27,9 +29,10 @@ namespace osu.Game.EzOsuGame.Overlays
         private readonly INotificationOverlay? notifications;
         private readonly Bindable<SettingsNote.Data?> statusNote = new Bindable<SettingsNote.Data?>();
         private readonly Bindable<string> tokenInput = new Bindable<string>(string.Empty);
-        private readonly BindableBool showManualTokenInput = new BindableBool();
+        private readonly BindableBool showAdvancedSettings = new BindableBool();
 
-        private FillFlowContainer manualTokenSection = null!;
+        private readonly SettingsButton checkButton;
+        private int loginRequestInFlight;
 
         public EzPixivBackgroundSettings(
             Ez2ConfigManager ezConfig,
@@ -45,105 +48,111 @@ namespace osu.Game.EzOsuGame.Overlays
             Direction = FillDirection.Vertical;
             Spacing = new Vector2(0, SettingsSection.ITEM_SPACING_V2);
 
-            var saveButton = createActionButton(EzSettingsStrings.PIXIV_SAVE_TOKEN, EzSettingsStrings.PIXIV_SAVE_TOKEN_TOOLTIP, new[] { "pixiv", "save", "token" },
-                new MarginPadding { Right = 2.5f });
-            saveButton.Action = () =>
-            {
-                string token = tokenInput.Value?.Trim() ?? string.Empty;
-
-                if (string.IsNullOrWhiteSpace(token))
-                {
-                    post(notifications, EzSettingsStrings.PIXIV_TOKEN_EMPTY);
-                    return;
-                }
-
-                coordinator.Auth.SaveRefreshToken(token);
-                tokenInput.Value = string.Empty;
-                refreshStatus();
-                post(notifications, EzSettingsStrings.PIXIV_TOKEN_SAVED);
-            };
-
-            var checkButton = createActionButton(EzSettingsStrings.PIXIV_CHECK_LOGIN, EzSettingsStrings.PIXIV_CHECK_LOGIN_TOOLTIP, new[] { "pixiv", "login", "verify", "auth" },
-                new MarginPadding { Horizontal = 2.5f });
-            checkButton.Action = checkLogin;
-
-            var clearButton = createActionButton(EzSettingsStrings.PIXIV_CLEAR_TOKEN, EzSettingsStrings.PIXIV_CLEAR_TOKEN_TOOLTIP, new[] { "pixiv", "clear", "logout", "token" },
-                new MarginPadding { Left = 2.5f });
-            clearButton.Action = () =>
-            {
-                coordinator.Auth.ClearRefreshToken();
-                tokenInput.Value = string.Empty;
-                refreshStatus();
-                post(notifications, EzSettingsStrings.PIXIV_TOKEN_CLEARED);
-            };
-
-            var manualToggleButton = createActionButton(EzSettingsStrings.PIXIV_MANUAL_TOKEN, EzSettingsStrings.PIXIV_MANUAL_TOKEN_TOOLTIP,
-                new[] { "pixiv", "manual", "token", "advanced" }, new MarginPadding());
-            manualToggleButton.Action = () => showManualTokenInput.Value = !showManualTokenInput.Value;
-
-            manualTokenSection = new FillFlowContainer
+            var advancedSection = new FillFlowContainer
             {
                 RelativeSizeAxes = Axes.X,
                 AutoSizeAxes = Axes.Y,
                 Direction = FillDirection.Vertical,
+                Spacing = new Vector2(0, SettingsSection.ITEM_SPACING_V2),
                 Children = new Drawable[]
                 {
                     new SettingsItemV2(new PixivTokenFormTextBox
                     {
                         Caption = EzSettingsStrings.PIXIV_REFRESH_TOKEN,
-                        HintText = EzSettingsStrings.PIXIV_REFRESH_TOKEN_TOOLTIP,
+                        HintText = EzSettingsStrings.PIXIV_MANUAL_TOKEN_TOOLTIP,
                         Current = tokenInput,
                     })
                     {
                         Keywords = new[] { "pixiv", "background", "refresh", "token", "auth", "manual" }
                     },
-                    new FillFlowContainer
+                    new SettingsButtonV2
                     {
-                        RelativeSizeAxes = Axes.X,
-                        AutoSizeAxes = Axes.Y,
-                        Direction = FillDirection.Horizontal,
-                        Padding = SettingsPanel.CONTENT_PADDING,
-                        Children = new Drawable[] { saveButton },
+                        Text = EzSettingsStrings.PIXIV_SAVE_TOKEN,
+                        TooltipText = EzSettingsStrings.PIXIV_SAVE_TOKEN_TOOLTIP,
+                        Keywords = new[] { "pixiv", "save", "token" },
+                        Action = () =>
+                        {
+                            string token = tokenInput.Value?.Trim() ?? string.Empty;
+
+                            if (string.IsNullOrWhiteSpace(token))
+                            {
+                                post(notifications, EzSettingsStrings.PIXIV_TOKEN_EMPTY);
+                                return;
+                            }
+
+                            coordinator.Auth.SaveRefreshToken(token);
+                            tokenInput.Value = string.Empty;
+                            refreshLocalStatus();
+                            post(notifications, EzSettingsStrings.PIXIV_TOKEN_SAVED);
+                        },
                     },
+                    new SettingsItemV2(new FormTextBox
+                    {
+                        Caption = EzSettingsStrings.PIXIV_API_PROXY_BASE_URL,
+                        HintText = EzSettingsStrings.PIXIV_API_PROXY_BASE_URL_TOOLTIP,
+                        Current = ezConfig.GetBindable<string>(Ez2Setting.PixivApiProxyBaseUrl),
+                    })
+                    {
+                        Keywords = new[] { "pixiv", "background", "proxy", "api", "reverse", "反代" }
+                    },
+                    new SettingsItemV2(new FormCheckBox
+                    {
+                        Caption = EzSettingsStrings.PIXIV_ALLOW_R18,
+                        HintText = EzSettingsStrings.PIXIV_ALLOW_R18_TOOLTIP,
+                        Current = ezConfig.GetBindable<bool>(Ez2Setting.PixivAllowR18),
+                    })
+                    {
+                        Keywords = new[] { "pixiv", "r-18", "r18", "nsfw", "filter" }
+                    },
+                    new SettingsItemV2(new FormCheckBox
+                    {
+                        Caption = EzSettingsStrings.PIXIV_LANDSCAPE_ONLY,
+                        HintText = EzSettingsStrings.PIXIV_LANDSCAPE_ONLY_TOOLTIP,
+                        Current = ezConfig.GetBindable<bool>(Ez2Setting.PixivLandscapeOnly),
+                    })
+                    {
+                        Keywords = new[] { "pixiv", "landscape", "horizontal", "横图", "filter", "aspect" }
+                    },
+                    createListSetting(ezConfig, Ez2Setting.PixivAccountWhitelist, EzSettingsStrings.PIXIV_ACCOUNT_WHITELIST, EzSettingsStrings.PIXIV_ACCOUNT_WHITELIST_TOOLTIP,
+                        new[] { "pixiv", "whitelist", "account", "artist", "filter" }),
+                    createListSetting(ezConfig, Ez2Setting.PixivAccountBlacklist, EzSettingsStrings.PIXIV_ACCOUNT_BLACKLIST, EzSettingsStrings.PIXIV_ACCOUNT_BLACKLIST_TOOLTIP,
+                        new[] { "pixiv", "blacklist", "account", "artist", "filter" }),
+                    createListSetting(ezConfig, Ez2Setting.PixivTagInclude, EzSettingsStrings.PIXIV_TAG_INCLUDE, EzSettingsStrings.PIXIV_TAG_INCLUDE_TOOLTIP,
+                        new[] { "pixiv", "tag", "include", "filter" }),
+                    createListSetting(ezConfig, Ez2Setting.PixivTagExclude, EzSettingsStrings.PIXIV_TAG_EXCLUDE, EzSettingsStrings.PIXIV_TAG_EXCLUDE_TOOLTIP,
+                        new[] { "pixiv", "tag", "exclude", "filter" }),
                 },
             };
 
-            showManualTokenInput.BindValueChanged(change =>
+            showAdvancedSettings.BindValueChanged(change =>
             {
                 if (change.NewValue)
-                    manualTokenSection.Show();
+                    advancedSection.Show();
                 else
                 {
-                    manualTokenSection.Hide();
+                    advancedSection.Hide();
                     tokenInput.Value = string.Empty;
                 }
             }, true);
 
             Children = new Drawable[]
             {
-                new Container
+                new FillFlowContainer
                 {
                     RelativeSizeAxes = Axes.X,
                     AutoSizeAxes = Axes.Y,
+                    Direction = FillDirection.Vertical,
+                    Spacing = Vector2.Zero,
+                    Margin = new MarginPadding { Top = 0 },
                     Padding = SettingsPanel.CONTENT_PADDING,
-                    Child = new SettingsNote
+                    Children = new Drawable[]
                     {
-                        RelativeSizeAxes = Axes.X,
-                        Current = { BindTarget = statusNote },
-                    },
-                },
-                new Container
-                {
-                    RelativeSizeAxes = Axes.X,
-                    AutoSizeAxes = Axes.Y,
-                    Padding = SettingsPanel.CONTENT_PADDING,
-                    Child = new SettingsNote
-                    {
-                        RelativeSizeAxes = Axes.X,
-                        Current =
+                        new SettingsNote
                         {
-                            Value = new SettingsNote.Data(EzSettingsStrings.PIXIV_AUTH_TOOL_HINT, SettingsNote.Type.Informational),
+                            RelativeSizeAxes = Axes.X,
+                            Current = { BindTarget = statusNote },
                         },
+                        new EzPixivAuthToolHintNote(),
                     },
                 },
                 new FillFlowContainer
@@ -154,12 +163,45 @@ namespace osu.Game.EzOsuGame.Overlays
                     Padding = SettingsPanel.CONTENT_PADDING,
                     Children = new Drawable[]
                     {
-                        checkButton,
-                        clearButton,
-                        manualToggleButton,
-                    }
+                        checkButton = new SettingsButton
+                        {
+                            Text = EzSettingsStrings.PIXIV_CHECK_LOGIN,
+                            TooltipText = EzSettingsStrings.PIXIV_CHECK_LOGIN_TOOLTIP,
+                            Keywords = new[] { "pixiv", "login", "verify", "auth" },
+                            Width = 1 / 3f,
+                            Margin = new MarginPadding { Vertical = 0 },
+                            Padding = new MarginPadding { Right = 2.5f },
+                            Action = checkLogin,
+                        },
+                        new SettingsButton
+                        {
+                            Text = EzSettingsStrings.PIXIV_CLEAR_TOKEN,
+                            TooltipText = EzSettingsStrings.PIXIV_CLEAR_TOKEN_TOOLTIP,
+                            Keywords = new[] { "pixiv", "clear", "logout", "token" },
+                            Width = 1 / 3f,
+                            Margin = new MarginPadding { Vertical = 0 },
+                            Padding = new MarginPadding { Horizontal = 2.5f },
+                            Action = () =>
+                            {
+                                coordinator.Auth.ClearRefreshToken();
+                                tokenInput.Value = string.Empty;
+                                refreshLocalStatus();
+                                post(notifications, EzSettingsStrings.PIXIV_TOKEN_CLEARED);
+                            },
+                        },
+                        new SettingsButton
+                        {
+                            Text = EzSettingsStrings.PIXIV_CUSTOM_TOOL_HINT,
+                            TooltipText = EzSettingsStrings.PIXIV_CUSTOM_TOOL_TOOLTIP,
+                            Keywords = new[] { "pixiv", "custom", "advanced", "filter", "proxy", "token" },
+                            Width = 1 / 3f,
+                            Margin = new MarginPadding { Vertical = 0 },
+                            Padding = new MarginPadding { Left = 2.5f },
+                            Action = () => showAdvancedSettings.Value = !showAdvancedSettings.Value,
+                        },
+                    },
                 },
-                manualTokenSection,
+                advancedSection,
                 new SettingsItemV2(new FormCheckBox
                 {
                     Caption = EzSettingsStrings.PIXIV_AUTO_DOWNLOAD_ENABLED,
@@ -169,32 +211,6 @@ namespace osu.Game.EzOsuGame.Overlays
                 {
                     Keywords = new[] { "pixiv", "background", "download", "auto", "cache", "bg_pixiv" }
                 },
-                new SettingsItemV2(new FormCheckBox
-                {
-                    Caption = EzSettingsStrings.PIXIV_ALLOW_R18,
-                    HintText = EzSettingsStrings.PIXIV_ALLOW_R18_TOOLTIP,
-                    Current = ezConfig.GetBindable<bool>(Ez2Setting.PixivAllowR18),
-                })
-                {
-                    Keywords = new[] { "pixiv", "r-18", "r18", "nsfw", "filter" }
-                },
-                new SettingsItemV2(new FormCheckBox
-                {
-                    Caption = EzSettingsStrings.PIXIV_LANDSCAPE_ONLY,
-                    HintText = EzSettingsStrings.PIXIV_LANDSCAPE_ONLY_TOOLTIP,
-                    Current = ezConfig.GetBindable<bool>(Ez2Setting.PixivLandscapeOnly),
-                })
-                {
-                    Keywords = new[] { "pixiv", "landscape", "horizontal", "横图", "filter", "aspect" }
-                },
-                createListSetting(ezConfig, Ez2Setting.PixivAccountWhitelist, EzSettingsStrings.PIXIV_ACCOUNT_WHITELIST, EzSettingsStrings.PIXIV_ACCOUNT_WHITELIST_TOOLTIP,
-                    new[] { "pixiv", "whitelist", "account", "artist", "filter" }),
-                createListSetting(ezConfig, Ez2Setting.PixivAccountBlacklist, EzSettingsStrings.PIXIV_ACCOUNT_BLACKLIST, EzSettingsStrings.PIXIV_ACCOUNT_BLACKLIST_TOOLTIP,
-                    new[] { "pixiv", "blacklist", "account", "artist", "filter" }),
-                createListSetting(ezConfig, Ez2Setting.PixivTagInclude, EzSettingsStrings.PIXIV_TAG_INCLUDE, EzSettingsStrings.PIXIV_TAG_INCLUDE_TOOLTIP,
-                    new[] { "pixiv", "tag", "include", "filter" }),
-                createListSetting(ezConfig, Ez2Setting.PixivTagExclude, EzSettingsStrings.PIXIV_TAG_EXCLUDE, EzSettingsStrings.PIXIV_TAG_EXCLUDE_TOOLTIP,
-                    new[] { "pixiv", "tag", "exclude", "filter" }),
             };
 
             backgroundSource.BindValueChanged(change =>
@@ -202,7 +218,7 @@ namespace osu.Game.EzOsuGame.Overlays
                 if (change.NewValue == BackgroundSource.PixivFollow)
                 {
                     Show();
-                    refreshStatus();
+                    refreshLocalStatus();
                 }
                 else
                 {
@@ -213,6 +229,9 @@ namespace osu.Game.EzOsuGame.Overlays
 
         private void checkLogin()
         {
+            if (Interlocked.CompareExchange(ref loginRequestInFlight, 1, 0) != 0)
+                return;
+
             string token = tokenInput.Value?.Trim() ?? string.Empty;
 
             if (!string.IsNullOrWhiteSpace(token))
@@ -223,31 +242,38 @@ namespace osu.Game.EzOsuGame.Overlays
 
             if (!coordinator.Auth.HasRefreshToken)
             {
-                refreshStatus();
+                Interlocked.Exchange(ref loginRequestInFlight, 0);
+                refreshLocalStatus();
                 post(notifications, EzSettingsStrings.PIXIV_STATUS_NOT_CONFIGURED);
                 return;
             }
 
-            if (!coordinator.Auth.TryRefreshAccessToken(out _, out string? error))
-            {
-                refreshStatus();
-                post(notifications, error ?? EzSettingsStrings.PIXIV_VERIFY_FAILED);
-                return;
-            }
+            checkButton.Enabled.Value = false;
 
-            if (coordinator.Api.TryGetUserAccount(out string? account, out error))
+            Task.Run(() =>
             {
-                refreshStatus();
-                post(notifications, EzSettingsStrings.PIXIV_VERIFY_SUCCESS.Format(account ?? "?"));
-            }
-            else
-            {
-                refreshStatus();
-                post(notifications, error ?? EzSettingsStrings.PIXIV_VERIFY_FAILED);
-            }
+                bool success = coordinator.TryVerifyLogin(out string? account, out LocalisableString? error);
+
+                Schedule(() =>
+                {
+                    Interlocked.Exchange(ref loginRequestInFlight, 0);
+                    checkButton.Enabled.Value = true;
+
+                    if (success)
+                    {
+                        statusNote.Value = new SettingsNote.Data(EzSettingsStrings.PIXIV_STATUS_LOGGED_IN.Format(account ?? "?"), SettingsNote.Type.Informational);
+                        post(notifications, EzSettingsStrings.PIXIV_VERIFY_SUCCESS.Format(account ?? "?"));
+                    }
+                    else
+                    {
+                        statusNote.Value = new SettingsNote.Data(EzSettingsStrings.PIXIV_STATUS_INVALID, SettingsNote.Type.Warning);
+                        post(notifications, error ?? EzSettingsStrings.PIXIV_VERIFY_FAILED);
+                    }
+                });
+            });
         }
 
-        private void refreshStatus()
+        private void refreshLocalStatus()
         {
             if (!coordinator.Auth.HasRefreshToken)
             {
@@ -255,24 +281,9 @@ namespace osu.Game.EzOsuGame.Overlays
                 return;
             }
 
-            if (coordinator.Auth.TryRefreshAccessToken(out _, out _) && coordinator.Api.TryGetUserAccount(out string? account, out _))
-                statusNote.Value = new SettingsNote.Data(EzSettingsStrings.PIXIV_STATUS_LOGGED_IN.Format(account ?? "?"), SettingsNote.Type.Informational);
-            else
-                statusNote.Value = new SettingsNote.Data(EzSettingsStrings.PIXIV_STATUS_INVALID, SettingsNote.Type.Warning);
-        }
-
-        private static SettingsButton createActionButton(LocalisableString text, LocalisableString tooltip, string[] keywords, MarginPadding spacingPadding)
-        {
-            return new SettingsButton
-            {
-                Text = text,
-                TooltipText = tooltip,
-                Keywords = keywords,
-                RelativeSizeAxes = Axes.X,
-                Width = 1 / 3f,
-                Margin = new MarginPadding { Vertical = 0 },
-                Padding = spacingPadding,
-            };
+            statusNote.Value = new SettingsNote.Data(
+                EzSettingsStrings.PIXIV_STATUS_LOGGED_IN.Format(coordinator.Auth.LoadAccountName() ?? "?"),
+                SettingsNote.Type.Informational);
         }
 
         private static SettingsItemV2 createListSetting(

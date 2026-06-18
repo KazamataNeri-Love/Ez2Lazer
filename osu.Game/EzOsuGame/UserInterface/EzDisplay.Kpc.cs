@@ -39,15 +39,38 @@ namespace osu.Game.EzOsuGame.UserInterface
                     return;
                 }
 
-                bool dataChanged = maniaSummary != value;
                 maniaSummary = value;
 
-                // 只在数据真正变化时才更新显示
-                if (dataChanged)
-                    onDataChanged();
+                var summary = value.Value;
+                var columnCounts = summary.ColumnCounts;
+
+                if (columnCounts.Count == 0)
+                {
+                    clear();
+                    return;
+                }
+
+                // Analysis may resend column totals without LN breakdown (e.g. partial cache refresh).
+                // Do not wipe previously rendered LN segments when holds were omitted.
+                if (!summary.HasHoldNoteCounts)
+                {
+                    if (columnsMatchCached(columnCounts))
+                        return;
+
+                    onDataChanged(preserveCachedHolds: true);
+                    return;
+                }
+
+                var holdCounts = summary.HoldNoteCounts;
+
+                if (countsMatchCached(columnCounts, holdCounts))
+                    return;
+
+                onDataChanged();
             }
         }
 
+        private readonly Box background;
         private readonly FillFlowContainer columnNotesContainer;
 
         private List<BarChartColumnEntry>? barEntries;
@@ -60,31 +83,45 @@ namespace osu.Game.EzOsuGame.UserInterface
         private int[]? lastKnownHolds;
         private int lastKnownCount;
 
+        /// <summary>
+        /// Whether the capsule background is shown.
+        /// </summary>
+        public bool ShowBackground
+        {
+            get => background.IsPresent;
+            set
+            {
+                if (value)
+                    background.Show();
+                else
+                    background.Hide();
+            }
+        }
+
         public EzDisplayKpc()
         {
             AutoSizeAxes = Axes.X;
             RelativeSizeAxes = Axes.Y;
-            Margin = new MarginPadding { Horizontal = 8f, Vertical = 2f };
 
             InternalChild = new Container
             {
                 Masking = true,
-                CornerRadius = 5,
+                CornerRadius = 6,
                 AutoSizeAxes = Axes.X,
                 RelativeSizeAxes = Axes.Y,
                 Children = new Drawable[]
                 {
-                    new Box
+                    background = new Box
                     {
                         RelativeSizeAxes = Axes.Both,
-                        Colour = Colour4.Black.Opacity(0.6f),
+                        Colour = Color4Extensions.FromHex("303d47"),
                     },
                     new Container
                     {
                         Anchor = Anchor.CentreLeft,
                         Origin = Anchor.CentreLeft,
                         AutoSizeAxes = Axes.Both,
-                        Margin = new MarginPadding { Horizontal = 8f, Vertical = 2f },
+                        Margin = new MarginPadding { Horizontal = 7f, Vertical = 1.5f },
                         Children = new[]
                         {
                             columnNotesContainer = new FillFlowContainer
@@ -93,8 +130,7 @@ namespace osu.Game.EzOsuGame.UserInterface
                                 Anchor = Anchor.CentreLeft,
                                 Origin = Anchor.CentreLeft,
                                 Direction = FillDirection.Horizontal,
-                                Spacing = new Vector2(5f, 0),
-                                Padding = new MarginPadding { Horizontal = 5f },
+                                Spacing = new Vector2(5f, 0f),
                             },
                         }
                     }
@@ -105,23 +141,78 @@ namespace osu.Game.EzOsuGame.UserInterface
         /// <summary>
         /// 数据变化时调用（ManiaSummary setter）
         /// </summary>
-        private void onDataChanged()
+        private void onDataChanged(bool preserveCachedHolds = false)
         {
             if (maniaSummary == null)
                 return;
 
-            // 解析并缓存数据
-            parseAndCacheData(maniaSummary.Value.ColumnCounts, maniaSummary.Value.HoldNoteCounts);
+            parseAndCacheData(maniaSummary.Value.ColumnCounts, maniaSummary.Value.HasHoldNoteCounts ? maniaSummary.Value.HoldNoteCounts : null, preserveCachedHolds);
 
-            // 渲染显示
             if (lastKnownColumns != null)
                 rebuildAndRender(lastKnownColumns, lastKnownHolds, lastKnownCount);
+        }
+
+        private bool columnsMatchCached(Dictionary<int, int> columnNoteCounts)
+        {
+            if (lastKnownColumns == null)
+                return false;
+
+            int maxKey = 0;
+
+            foreach (int k in columnNoteCounts.Keys)
+            {
+                if (k > maxKey)
+                    maxKey = k;
+            }
+
+            int kc = maxKey + 1;
+
+            if (lastKnownCount != kc)
+                return false;
+
+            for (int i = 0; i < kc; i++)
+            {
+                if (lastKnownColumns[i] != columnNoteCounts.GetValueOrDefault(i))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private bool countsMatchCached(Dictionary<int, int> columnNoteCounts, Dictionary<int, int> holdNoteCounts)
+        {
+            if (lastKnownColumns == null)
+                return false;
+
+            int maxKey = 0;
+
+            foreach (int k in columnNoteCounts.Keys)
+            {
+                if (k > maxKey)
+                    maxKey = k;
+            }
+
+            int kc = maxKey + 1;
+
+            if (lastKnownCount != kc)
+                return false;
+
+            for (int i = 0; i < kc; i++)
+            {
+                if (lastKnownColumns[i] != columnNoteCounts.GetValueOrDefault(i))
+                    return false;
+
+                if ((lastKnownHolds?[i] ?? 0) != holdNoteCounts.GetValueOrDefault(i))
+                    return false;
+            }
+
+            return true;
         }
 
         /// <summary>
         /// 解析并缓存数据
         /// </summary>
-        private void parseAndCacheData(Dictionary<int, int> columnNoteCounts, Dictionary<int, int>? holdNoteCounts = null)
+        private void parseAndCacheData(Dictionary<int, int> columnNoteCounts, Dictionary<int, int>? holdNoteCounts = null, bool preserveCachedHolds = false)
         {
             if (columnNoteCounts.Count == 0)
             {
@@ -148,7 +239,11 @@ namespace osu.Game.EzOsuGame.UserInterface
                 for (int i = 0; i < kc; i++)
                 {
                     normalized[i] = columnNoteCounts.GetValueOrDefault(i);
-                    normalizedHold[i] = holdNoteCounts?.GetValueOrDefault(i) ?? 0;
+
+                    if (preserveCachedHolds && holdNoteCounts == null && lastKnownHolds != null && i < lastKnownCount)
+                        normalizedHold[i] = lastKnownHolds[i];
+                    else
+                        normalizedHold[i] = holdNoteCounts?.GetValueOrDefault(i) ?? 0;
                 }
 
                 // 缓存数据
@@ -243,8 +338,6 @@ namespace osu.Game.EzOsuGame.UserInterface
             {
                 for (int i = 0; i < currentColumnCount; i++)
                 {
-                    var c = barEntries[i].Container;
-                    if (c.Alpha < 0.99f) c.Show();
                     barEntries[i].SetValues(0, 0, 1);
                 }
 
@@ -255,8 +348,7 @@ namespace osu.Game.EzOsuGame.UserInterface
             {
                 int total = i < columns ? columnNoteCounts[i] : 0;
                 int hold = (holdNoteCounts != null && i < columns) ? holdNoteCounts[i] : 0;
-                var c = barEntries[i].Container;
-                if (c.Alpha < 0.99f) c.Show();
+
                 barEntries[i].SetValues(total, hold, maxCount);
             }
         }
@@ -336,6 +428,8 @@ namespace osu.Game.EzOsuGame.UserInterface
 
             public void SetValues(int totalNotes, int holdNotes, int maxCount)
             {
+                holdNotes = Math.Clamp(holdNotes, 0, totalNotes);
+
                 if (lastTotalNotes == totalNotes && lastHoldNotes == holdNotes && lastMaxCount == maxCount)
                     return;
 
@@ -345,10 +439,36 @@ namespace osu.Game.EzOsuGame.UserInterface
 
                 int regularNotes = totalNotes - holdNotes;
 
-                float totalHeight = maxCount > 0 ? (float)totalNotes / maxCount * max_bar_height : 0;
-                float regularHeight = maxCount > 0 ? (float)regularNotes / maxCount * max_bar_height : 0;
+                float regularHeight = 0;
+                float holdHeight = 0;
 
-                float holdHeight = Math.Max(0, totalHeight - regularHeight);
+                if (maxCount > 0)
+                {
+                    float scale = max_bar_height / maxCount;
+                    regularHeight = regularNotes * scale;
+
+                    if (holdNotes > 0)
+                    {
+                        holdHeight = holdNotes * scale;
+
+                        // Keep tiny LN segments visible instead of flickering at sub-pixel heights.
+                        if (holdHeight > 0 && holdHeight < 1f)
+                            holdHeight = 1f;
+                    }
+                }
+
+                float combinedHeight = regularHeight + holdHeight;
+
+                if (combinedHeight > max_bar_height)
+                {
+                    float ratio = max_bar_height / combinedHeight;
+                    regularHeight *= ratio;
+                    holdHeight *= ratio;
+                }
+
+                if (holdNotes > 0 && holdHeight > 0 && holdHeight < 1f)
+                    holdHeight = 1f;
+
                 regularBox.Height = regularHeight;
                 holdBox.Height = holdHeight;
                 holdBox.Margin = new MarginPadding { Bottom = regularHeight };

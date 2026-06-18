@@ -53,6 +53,27 @@ namespace osu.Game.EzOsuGame.Analysis
             return true;
         }
 
+        /// <summary>
+        /// Computes baseline NoMod xxy SR for persisting to <see cref="BeatmapInfo.XxyStarRating"/>.
+        /// Returns -1 when unsupported or failed, 0 for empty beatmaps.
+        /// </summary>
+        public static double ComputeBaselineXxyStarRatingForRealm(BeatmapManager beatmapManager, BeatmapInfo beatmapInfo, CancellationToken cancellationToken = default)
+        {
+            var working = beatmapManager.GetWorkingBeatmap(beatmapInfo);
+
+            if (!EzXxyStarRatingSupport.SupportsBeatmap(working.Beatmap, beatmapInfo.Ruleset))
+                return -1;
+
+            if (working.Beatmap.HitObjects.Count == 0)
+                return 0;
+
+            var lookup = new EzAnalysisLookupCache(beatmapInfo, beatmapInfo.Ruleset, mods: null);
+
+            return TryComputeXxySr(beatmapManager, lookup, cancellationToken, out double xxySr)
+                ? xxySr
+                : -1;
+        }
+
         public static bool TryComputeXxySrAndPp(BeatmapManager beatmapManager, in EzAnalysisLookupCache lookup, CancellationToken cancellationToken,
                                                 out double? xxySr, out double? pp)
         {
@@ -132,7 +153,6 @@ namespace osu.Game.EzOsuGame.Analysis
             }
 
             double? xxySr = null;
-            double? pp = tryComputePerfectPp(playableWorkingBeatmap, analysisBeatmap, lookup, cancellationToken);
 
             if (!onlyKps)
                 tryComputeXxySr(analysisBeatmap, lookup, cancellationToken, out xxySr);
@@ -146,7 +166,7 @@ namespace osu.Game.EzOsuGame.Analysis
                 ? null
                 : new EzManiaSummary(columnCounts, holdNoteCounts, xxySr);
 
-            return new EzAnalysisResult(commonSummary, pp, maniaSummary);
+            return new EzAnalysisResult(commonSummary, pp: null, maniaSummary);
         }
 
         public static bool TryComputeRulesetSpecificRadarData(WorkingBeatmap workingBeatmap, in EzAnalysisLookupCache lookup, CancellationToken cancellationToken,

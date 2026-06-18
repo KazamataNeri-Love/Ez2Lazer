@@ -19,6 +19,7 @@ using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
 using osu.Game.EzOsuGame.Analysis;
+using osu.Game.EzOsuGame.Beatmaps;
 using osu.Game.EzOsuGame.UserInterface;
 using osu.Game.Localisation;
 using osu.Game.Online;
@@ -26,6 +27,7 @@ using osu.Game.Online.Chat;
 using osu.Game.Overlays;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
+using osuTK;
 using osuTK.Graphics;
 
 namespace osu.Game.Screens.Select
@@ -44,12 +46,6 @@ namespace osu.Game.Screens.Select
 
             [Resolved]
             private IBindable<IReadOnlyList<Mod>> mods { get; set; } = null!;
-
-            [Resolved]
-            private EzAnalysisDatabase analysisDatabase { get; set; } = null!;
-
-            [Resolved]
-            private EzAnalysisCache ezAnalysisCache { get; set; } = null!;
 
             private ModSettingChangeTracker? settingChangeTracker;
 
@@ -215,7 +211,8 @@ namespace osu.Game.Screens.Select
                                                     {
                                                         Anchor = Anchor.CentreLeft,
                                                         Origin = Anchor.CentreLeft,
-                                                        RelativeSizeAxes = Axes.Y,
+                                                        Scale = new Vector2(1.25f),
+                                                        ShowBackground = false,
                                                     },
                                                     Empty(),
                                                     difficultyStatisticsDisplay = new DifficultyStatisticsDisplay(autoSize: true),
@@ -294,13 +291,26 @@ namespace osu.Game.Screens.Select
                 updateDifficultyStatistics();
             }
 
+            public void ApplyKpcMetrics(in EzSongSelectAnalysisDisplay.PanelMetrics metrics)
+            {
+                if (beatmap.IsDefault || beatmap.Value.BeatmapInfo is not BeatmapInfo beatmapInfo
+                    || !EzAnalysisProviderBridge.HasAnalysisProvider(ruleset.Value)
+                    || !beatmapInfo.SupportsXxyStarRating())
+                {
+                    ezDisplayKpc.ManiaSummary = null;
+                    ezDisplayKpc.Hide();
+                    return;
+                }
+
+                ezDisplayKpc.ManiaSummary = metrics.ManiaSummary;
+                ezDisplayKpc.Show();
+            }
+
             private void updateCountStatistics(CancellationToken cancellationToken)
             {
                 if (beatmap.IsDefault)
                 {
                     countStatisticsDisplay.FadeOut(300, Easing.OutQuint);
-                    ezDisplayKpc.ManiaSummary = null;
-                    ezDisplayKpc.Hide();
                     return;
                 }
 
@@ -312,30 +322,6 @@ namespace osu.Game.Screens.Select
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    bool hasMods = selectedMods.Length > 0;
-                    EzManiaSummary? maniaSummary = null;
-
-                    EzAnalysisResult? dynamicAnalysis = null;
-
-                    if (selectedBeatmap.BeatmapInfo is BeatmapInfo beatmapInfo
-                        && selectedRuleset is RulesetInfo rulesetInfo
-                        && EzAnalysisProviderBridge.HasAnalysisProvider(selectedRuleset))
-                    {
-                        if (hasMods)
-                        {
-                            dynamicAnalysis = ezAnalysisCache
-                                              .GetAnalysisAsync(beatmapInfo, rulesetInfo, selectedMods, cancellationToken)
-                                              .GetAwaiter()
-                                              .GetResult();
-                        }
-                        else if (analysisDatabase.TryGetStoredSqliteSlice(beatmapInfo, selectedRuleset, out var storedSlice))
-                        {
-                            dynamicAnalysis = storedSlice;
-                        }
-                    }
-
-                    // This can take time as it is a synchronous task.
-                    // 使用可取消重载，避免快速切歌时后台任务继续持有旧谱面对象。
                     var playableBeatmap = selectedBeatmap.GetPlayableBeatmap(selectedRuleset, selectedMods, cancellationToken);
 
                     cancellationToken.ThrowIfCancellationRequested();
@@ -343,36 +329,6 @@ namespace osu.Game.Screens.Select
                     var statistics = playableBeatmap.GetStatistics()
                                                     .Select(s => new StatisticDifficulty.Data(s.Name, s.BarDisplayLength ?? 0, s.BarDisplayLength ?? 0, 1, s.Content))
                                                     .ToList();
-
-                    if (selectedBeatmap.BeatmapInfo is BeatmapInfo localBeatmapInfo)
-                    {
-                        maniaSummary = EzSongSelectAnalysisDisplay.Resolve(localBeatmapInfo, dynamicAnalysis, selectedMods).ManiaSummary;
-                    }
-
-                    maniaSummary ??= OptimizedBeatmapCalculator.GetEzManiaSummary(playableBeatmap);
-
-                    bool showKpc = selectedRuleset != null
-                                   && EzAnalysisProviderBridge.HasAnalysisProvider(selectedRuleset);
-
-                    if (showKpc)
-                    {
-                        Schedule(() =>
-                        {
-                            if (cancellationToken.IsCancellationRequested)
-                                return;
-
-                            ezDisplayKpc.ManiaSummary = maniaSummary;
-                            ezDisplayKpc.Show();
-                        });
-                    }
-                    else
-                    {
-                        Schedule(() =>
-                        {
-                            ezDisplayKpc.ManiaSummary = null;
-                            ezDisplayKpc.Hide();
-                        });
-                    }
 
                     Schedule(() =>
                     {

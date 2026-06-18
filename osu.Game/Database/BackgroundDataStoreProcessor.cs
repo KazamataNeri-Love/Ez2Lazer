@@ -77,8 +77,8 @@ namespace osu.Game.Database
 
         private LocalCachedBeatmapMetadataSource localMetadataSource = null!;
 
-        private readonly object ezRealmBackfillLock = new object();
-        private bool ezRealmBackfillQueued;
+        private readonly object ezRealmMetadataBackfillLock = new object();
+        private bool ezRealmMetadataBackfillQueued;
 
         protected virtual int TimeToSleepDuringGameplay => 30000;
 
@@ -124,20 +124,20 @@ namespace osu.Game.Database
 
         private bool tryBeginEzRealmMetadataBackfill()
         {
-            lock (ezRealmBackfillLock)
+            lock (ezRealmMetadataBackfillLock)
             {
-                if (ezRealmBackfillQueued)
+                if (ezRealmMetadataBackfillQueued)
                     return false;
 
-                ezRealmBackfillQueued = true;
+                ezRealmMetadataBackfillQueued = true;
                 return true;
             }
         }
 
         private void endEzRealmMetadataBackfill()
         {
-            lock (ezRealmBackfillLock)
-                ezRealmBackfillQueued = false;
+            lock (ezRealmMetadataBackfillLock)
+                ezRealmMetadataBackfillQueued = false;
         }
 
         protected override void LoadComplete()
@@ -201,6 +201,7 @@ namespace osu.Game.Database
         /// <summary>
         /// Check whether the databased difficulty calculation version matches the latest ruleset provided version.
         /// If it doesn't, clear out any existing difficulties so they can be incrementally recalculated.
+        /// Baseline PP (<see cref="BeatmapInfo.PerformancePoints"/>) is invalidated alongside star ratings.
         /// </summary>
         private void clearOutdatedStarRatings()
         {
@@ -211,7 +212,7 @@ namespace osu.Game.Database
 
                 if (ruleset.LastAppliedDifficultyVersion < currentVersion)
                 {
-                    Logger.Log($"Resetting star ratings for {ruleset.Name} (difficulty calculation version updated from {ruleset.LastAppliedDifficultyVersion} to {currentVersion})");
+                    Logger.Log($"Resetting star ratings and baseline PP for {ruleset.Name} (difficulty calculation version updated from {ruleset.LastAppliedDifficultyVersion} to {currentVersion})");
 
                     int countReset = 0;
 
@@ -222,6 +223,7 @@ namespace osu.Game.Database
                             if (b.Ruleset.ShortName == ruleset.ShortName)
                             {
                                 b.StarRating = -1;
+                                b.PerformancePoints = -1;
                                 countReset++;
                             }
                         }
@@ -229,7 +231,7 @@ namespace osu.Game.Database
                         r.Find<RulesetInfo>(ruleset.ShortName)!.LastAppliedDifficultyVersion = currentVersion;
                     });
 
-                    Logger.Log($"Finished resetting {countReset} beatmap sets for {ruleset.Name}");
+                    Logger.Log($"Finished resetting {countReset} beatmaps for {ruleset.Name}");
                 }
             }
         }
@@ -465,7 +467,7 @@ namespace osu.Game.Database
 
                 try
                 {
-                    double xxyStarRating = beatmapUpdater.ComputeXxyStarRating(beatmap);
+                    double xxyStarRating = EzAnalysisComputation.ComputeBaselineXxyStarRatingForRealm(beatmapManager, beatmap, CancellationToken.None);
 
                     realmAccess.Write(r =>
                     {
@@ -1276,9 +1278,9 @@ namespace osu.Game.Database
             if (notification == null)
                 return;
 
-            bool shouldUpdate = processedCount == 0
-                                  || processedCount >= totalCount
-                                  || processedCount - lastNotificationProgressReported >= notification_progress_update_interval;
+            bool shouldUpdate = processedCount == 0 ||
+                                processedCount >= totalCount ||
+                                processedCount - lastNotificationProgressReported >= notification_progress_update_interval;
 
             if (!shouldUpdate)
                 return;

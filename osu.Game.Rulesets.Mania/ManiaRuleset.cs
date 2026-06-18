@@ -55,7 +55,7 @@ using osu.Game.Skinning;
 
 namespace osu.Game.Rulesets.Mania
 {
-    public class ManiaRuleset : Ruleset, ILegacyRuleset
+    public partial class ManiaRuleset : Ruleset, ILegacyRuleset
     {
         static ManiaRuleset()
         {
@@ -285,6 +285,7 @@ namespace osu.Game.Rulesets.Mania
                     {
                         new ManiaModEz2Settings(),
                         new ManiaModCleanColumn(),
+                        new ManiaModNoteCleanup(),
                         new ManiaModNiceBPM(),
                         new ManiaModSpaceBody(),
                         new ManiaModPatternShift(),
@@ -309,7 +310,6 @@ namespace osu.Game.Rulesets.Mania
                         new ManiaModAdjust(),
                         new ManiaModNtoM(),
                         new ManiaModNtoMAnother(),
-                        new ManiaModCleaner(),
                         new ManiaModNewJudgement(),
                         new ManiaModNoteAdjust(),
                         new ManiaModHealthAdaptive(),
@@ -323,13 +323,11 @@ namespace osu.Game.Rulesets.Mania
                         new ManiaModLNDoubleDistribution(),
                         new ManiaModLNLongShortAddition(),
                         new ManiaModLNSimplify(),
-                        // new ManiaModMalodyStyleLN(),
                         // new ManiaModO2Health(),
-                        // new ManiaModO2Judgement(),
                         new ManiaModPlayfieldTransformation(),
                         new ManiaModReleaseAdjust(),
                         new ManiaModRemedy(),
-                        new ModStarRatingRebirth(),
+                        // new ModStarRatingRebirth(),
                     };
 
                 case ModType.DifficultyReduction:

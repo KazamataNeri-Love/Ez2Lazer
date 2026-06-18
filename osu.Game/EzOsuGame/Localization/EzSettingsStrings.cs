@@ -120,22 +120,34 @@ namespace osu.Game.EzOsuGame.Localization
             new EzLocalizationManager.EzLocalisableString("垂直位置", "Vertical position");
 
         public static readonly EzLocalizationManager.EzLocalisableString EZ_ANALYSIS_REC_ENABLED =
-            new EzLocalizationManager.EzLocalisableString("启用 Ez 分析重算", "Enable Ez analysis recomputation");
+            new EzLocalizationManager.EzLocalisableString("启用 Ez 分析即时计算", "Enable Ez analysis on-demand computation");
 
         public static readonly EzLocalizationManager.EzLocalisableString EZ_ANALYSIS_REC_ENABLED_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
-            "开启后，选歌界面会像官方星级一样按当前 Mod 按需重算 xxy/PP/KPS 并刷新面板。"
-            + "\n关闭时，有 Mod 仍显示 Realm 无 Mod 基线。不控制 SQLite 与 Realm 回填。",
-            "When enabled, song select recomputes xxy/PP/KPS for the current mods on demand (like official star rating) and refreshes panels."
-            + "\nWhen disabled, mods still show the NoMod Realm baseline. Does not control SQLite or Realm backfill.");
+            "控制 Ez SQLite 体系内指标在选歌时是否按需即时计算："
+            + "\n· 主库：NoMod 的 kps/KPC（及 mania 列统计）缺失时 debounce 后补算；"
+            + "\n· 有 Mod：按当前 Mod 即时计算 kps/xxy 等（无匹配分支快照时）；"
+            + "\n· 分支库：仍读取已激活分支的预生成快照，本开关不替代分支构建。"
+            + "\n关闭时仅读已落盘 SQLite 数据，不触发选歌实时计算。"
+            + "\n不影响 Realm 元数据回填；Panel PP 随官方星级缓存（BeatmapDifficultyCache），与开关无关。",
+            "Controls whether Ez SQLite metrics are computed on demand during song select:"
+            + "\n· Main DB: backfill missing NoMod kps/KPC (and mania column stats) after debounce;"
+            + "\n· With mods: compute kps/xxy live for the current mod set when no matching branch snapshot exists;"
+            + "\n· Branch DB: still reads precomputed snapshots from the active branch; this switch does not replace branch builds."
+            + "\nWhen disabled, only stored SQLite values are read; no live song-select computation."
+            + "\nDoes not affect Realm metadata backfill; panel PP follows the official star cache (BeatmapDifficultyCache) and is not gated by this switch.");
 
         public static readonly EzLocalizationManager.EzLocalisableString EZ_ANALYSIS_SQLITE_ENABLED =
-            new EzLocalizationManager.EzLocalisableString("启用 Ez 分析本地数据（SQLite）", "Enable Ez analysis local data (SQLite)");
+            new EzLocalizationManager.EzLocalisableString("启用 Ez 分析 SQLite", "Enable Ez analysis SQLite");
 
         public static readonly EzLocalizationManager.EzLocalisableString EZ_ANALYSIS_SQLITE_ENABLED_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
-            "控制主 analysis SQLite（kps/KPC 缓存）与分支曲库（预生成 Mod 快照）的读写。"
-            + "\n仅在缺少当前版本文件或需要 schema 升级时自动预热；已有匹配文件时请在下方的维护控件手动补算/重算。",
-            "Controls main analysis SQLite (kps/KPC cache) and songs branch libraries (precomputed mod snapshots)."
-            + "\nAuto-warmup runs only when the current database is missing or needs schema upgrade; use maintenance controls below when a matching file already exists.");
+            "启用 Ez 分析 SQLite 主库与分支曲库的读写（kps/KPC、分支 xxy/PP 快照等）。"
+            + "\n关闭后不加载、不写入上述本地缓存。"
+            + "\n自动预热仅在缺少当前版本库或需 schema 升级时触发；已有匹配库时请用下方维护控件手动补算。"
+            + "\n即时计算行为由「Ez 分析即时计算」开关单独控制。",
+            "Enables read/write for the Ez analysis main SQLite database and songs branch libraries (kps/KPC, branch xxy/PP snapshots, etc.)."
+            + "\nWhen disabled, stored local caches are neither loaded nor written."
+            + "\nAuto-warmup runs only when the current database is missing or needs a schema upgrade; use maintenance controls below when a matching file already exists."
+            + "\nOn-demand computation is controlled separately by \"Enable Ez analysis on-demand computation\".");
 
         public static readonly EzLocalizationManager.EzLocalisableString DATA_REBUILD_TARGET =
             new EzLocalizationManager.EzLocalisableString("数据维护目标", "Data maintenance target");
@@ -381,12 +393,25 @@ namespace osu.Game.EzOsuGame.Localization
 
         #region Pixiv 背景
 
-        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_AUTH_TOOL_HINT = new EzLocalizationManager.EzLocalisableString(
-            "请从 github.com/SK-la/EzPixivAuth Releases 下载 EzPixivAuth，双击运行后会自动写入本机 pixiv_auth.json（与 client.realm 同目录）。",
-            "Download EzPixivAuth from github.com/SK-la/EzPixivAuth Releases and run it to write pixiv_auth.json next to client.realm.");
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_AUTH_TOOL_HINT_PREFIX = new EzLocalizationManager.EzLocalisableString(
+            "请从 ",
+            "Download EzPixivAuth from ");
 
-        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_MANUAL_TOKEN = new EzLocalizationManager.EzLocalisableString(
-            "手动输入 refresh_token", "Enter refresh_token manually");
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_AUTH_TOOL_HINT_LINK = new EzLocalizationManager.EzLocalisableString(
+            "EzPixivAuth Releases",
+            "EzPixivAuth Releases");
+
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_AUTH_TOOL_HINT_SUFFIX = new EzLocalizationManager.EzLocalisableString(
+            " 下载 EzPixivAuth，双击运行后会自动写入本机 pixiv_auth.json（与 client.realm 同目录）。",
+            " and run it to write pixiv_auth.json next to client.realm.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_CUSTOM_TOOL_HINT = new EzLocalizationManager.EzLocalisableString(
+            "自定义",
+            "Custom");
+
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_CUSTOM_TOOL_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "展开高级选项：手动 refresh_token、反代地址、过滤、黑白名单。",
+            "Show advanced options: manual refresh_token, proxy URL, filters, and artist/tag lists.");
 
         public static readonly EzLocalizationManager.EzLocalisableString PIXIV_MANUAL_TOKEN_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
             "仅当你已从其他途径获得 refresh_token 时使用。输入为隐藏显示，勿泄露给他人。",
@@ -399,12 +424,28 @@ namespace osu.Game.EzOsuGame.Localization
             "粘贴后点「保存」。仅保存在本机。",
             "Paste and click Save. Stored locally only.");
 
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_API_PROXY_BASE_URL = new EzLocalizationManager.EzLocalisableString(
+            "反代地址", "Proxy base URL");
+
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_API_PROXY_BASE_URL_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "替换 app-api.pixiv.net 与 i.pximg.net 请求（OAuth 登录仍直连）。"
+            + "\n留空则全部直连官方。"
+            + "\nCloudflare Workers 示例：https://pixiv.yourdomain.com"
+            + "\nVercel 示例：https://your-project.vercel.app/api"
+            + "\n参考：https://github.com/vmoranv/pixiv-proxy",
+            "Rewrites app-api.pixiv.net API calls and i.pximg.net image downloads (OAuth login stays direct)."
+            + "\nLeave empty to use official endpoints."
+            + "\nCloudflare Workers example: https://pixiv.yourdomain.com"
+            + "\nVercel example: https://your-project.vercel.app/api"
+            + "\nSee: https://github.com/vmoranv/pixiv-proxy");
+
         public const string PIXIV_AUTH_TOOL_RELEASES_URL = "https://github.com/SK-la/EzPixivAuth/releases";
 
         public static readonly EzLocalizationManager.EzLocalisableString PIXIV_SAVE_TOKEN = new EzLocalizationManager.EzLocalisableString("保存", "Save");
 
         public static readonly EzLocalizationManager.EzLocalisableString PIXIV_SAVE_TOKEN_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
-            "保存到本机。", "Saves locally.");
+            "将上方输入框中的 refresh_token 保存到本机。",
+            "Saves the refresh_token from the input field above to local storage.");
 
         public static readonly EzLocalizationManager.EzLocalisableString PIXIV_CHECK_LOGIN = new EzLocalizationManager.EzLocalisableString("检查登录", "Check login");
 
@@ -431,6 +472,36 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly EzLocalizationManager.EzLocalisableString PIXIV_VERIFY_SUCCESS = new EzLocalizationManager.EzLocalisableString("Pixiv 登录成功：@{0}", "Pixiv login OK: @{0}");
         public static readonly EzLocalizationManager.EzLocalisableString PIXIV_VERIFY_FAILED = new EzLocalizationManager.EzLocalisableString("Pixiv 登录验证失败。", "Pixiv login verification failed.");
 
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_ERROR_TOKEN_REFRESH_FAILED = new EzLocalizationManager.EzLocalisableString(
+            "Pixiv 凭证刷新失败。", "Pixiv token refresh failed.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_ERROR_TOKEN_REFRESH_EMPTY = new EzLocalizationManager.EzLocalisableString(
+            "Pixiv 凭证刷新未返回 access token。", "Pixiv token refresh returned an empty access token.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_ERROR_ACCESS_TOKEN_NOT_SET = new EzLocalizationManager.EzLocalisableString(
+            "Pixiv access token 未就绪。", "Pixiv access token is not set.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_ERROR_FOLLOW_FEED_FAILED = new EzLocalizationManager.EzLocalisableString(
+            "Pixiv 关注流加载失败。", "Failed to load Pixiv follow feed.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_ERROR_FOLLOW_FEED_EMPTY = new EzLocalizationManager.EzLocalisableString(
+            "Pixiv 关注流过滤后无可用插图。", "Pixiv follow feed returned no illustrations after filtering.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_ERROR_IMAGE_DOWNLOAD_FAILED = new EzLocalizationManager.EzLocalisableString(
+            "Pixiv 插图下载失败。", "Failed to download Pixiv image.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_ERROR_IMAGE_EMPTY = new EzLocalizationManager.EzLocalisableString(
+            "Pixiv 插图下载结果为空。", "Downloaded Pixiv image was empty.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_ERROR_REQUEST_FAILED = new EzLocalizationManager.EzLocalisableString(
+            "Pixiv 网络请求失败。", "Pixiv network request failed.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_LOG_SONG_CHANGE_DOWNLOAD = new EzLocalizationManager.EzLocalisableString(
+            "切歌下载", "Song change download");
+
+        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_LOG_AUTO_PREFETCH = new EzLocalizationManager.EzLocalisableString(
+            "自动预缓存", "Auto prefetch");
+
         public static readonly EzLocalizationManager.EzLocalisableString PIXIV_AUTO_DOWNLOAD_ENABLED = new EzLocalizationManager.EzLocalisableString(
             "Pixiv 自动下载", "Pixiv background auto-download");
 
@@ -439,9 +510,6 @@ namespace osu.Game.EzOsuGame.Localization
             + "\n开启后额外持续预缓存；未缓存不足 10 张时自动再拉一页关注流。",
             "Song changes show a random cached BG_PIXIV image immediately without blocking, while one new illustration downloads in the background."
             + "\nWhen enabled, also keeps prefetching and fetches another feed page when fewer than 10 are cached.");
-
-        public static readonly EzLocalizationManager.EzLocalisableString PIXIV_AUTO_DOWNLOAD_PAUSED = new EzLocalizationManager.EzLocalisableString(
-            "Pixiv 自动下载已暂停：{0}", "Pixiv auto-download paused: {0}");
 
         public static readonly EzLocalizationManager.EzLocalisableString PIXIV_ALLOW_R18 = new EzLocalizationManager.EzLocalisableString(
             "允许 R-18 作品", "Allow R-18 works");
@@ -454,8 +522,8 @@ namespace osu.Game.EzOsuGame.Localization
             "仅横图", "Landscape only");
 
         public static readonly EzLocalizationManager.EzLocalisableString PIXIV_LANDSCAPE_ONLY_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
-            "开启时只接受宽大于高的页面（width > height）；多页作品仅在横页中随机。",
-            "When enabled, only pages wider than tall are accepted (width > height). Multi-page works pick randomly from landscape pages only.");
+            "开启时只接受宽大于高的第一页（p0；多页作品不会选用 p1 及之后）。",
+            "When enabled, only accepts page 0 (p0) when wider than tall; later pages of multi-page works are never used.");
 
         public static readonly EzLocalizationManager.EzLocalisableString PIXIV_ACCOUNT_WHITELIST = new EzLocalizationManager.EzLocalisableString(
             "画师 account 白名单", "Artist account whitelist");

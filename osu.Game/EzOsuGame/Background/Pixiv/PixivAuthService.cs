@@ -6,9 +6,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using osu.Framework.Localisation;
 using osu.Framework.Logging;
 using osu.Framework.Platform;
+using osu.Game.EzOsuGame.Localization;
+using WebRequest = osu.Framework.IO.Network.WebRequest;
 
 namespace osu.Game.EzOsuGame.Background.Pixiv
 {
@@ -66,7 +70,7 @@ namespace osu.Game.EzOsuGame.Background.Pixiv
             }
         }
 
-        public bool TryRefreshAccessToken(out string? accessToken, out string? error)
+        public bool TryRefreshAccessToken(out string? accessToken, out LocalisableString? error)
         {
             lock (tokenLock)
             {
@@ -76,61 +80,66 @@ namespace osu.Game.EzOsuGame.Background.Pixiv
                     error = null;
                     return true;
                 }
+            }
 
-                string? refreshToken = LoadRefreshToken();
+            string? refreshToken = LoadRefreshToken();
 
-                if (string.IsNullOrWhiteSpace(refreshToken))
+            if (string.IsNullOrWhiteSpace(refreshToken))
+            {
+                accessToken = null;
+                error = EzSettingsStrings.PIXIV_STATUS_NOT_CONFIGURED;
+                return false;
+            }
+
+            try
+            {
+                using var request = createTokenRequest(new Dictionary<string, string>
+                {
+                    ["grant_type"] = "refresh_token",
+                    ["refresh_token"] = refreshToken,
+                    ["include_policy"] = "true",
+                });
+
+                request.Perform();
+
+                if (request.ResponseStatusCode != HttpStatusCode.OK)
                 {
                     accessToken = null;
-                    error = "Pixiv 未配置：请使用 EzPixivAuth 工具登录，或在高级选项中手动保存 refresh_token。";
+                    error = EzSettingsStrings.PIXIV_ERROR_TOKEN_REFRESH_FAILED;
+                    Logger.Log($"[Pixiv] token refresh HTTP {request.ResponseStatusCode}: {request.GetResponseString()}", LoggingTarget.Network, LogLevel.Important);
+                    invalidateAccessToken();
                     return false;
                 }
 
-                try
+                var json = JObject.Parse(request.GetResponseString() ?? string.Empty);
+                var tokenPayload = PixivJsonHelper.Field(json, "response") as JObject ?? json;
+                string? accessTokenFromResponse = PixivJsonHelper.StringValue(tokenPayload, "access_token");
+                string? newRefresh = PixivJsonHelper.StringValue(tokenPayload, "refresh_token");
+
+                string? responseAccount = PixivJsonHelper.Field(tokenPayload, "user")?["account"]?.ToString();
+
+                if (!string.IsNullOrWhiteSpace(responseAccount))
                 {
-                    using var request = createTokenRequest(new Dictionary<string, string>
-                    {
-                        ["grant_type"] = "refresh_token",
-                        ["refresh_token"] = refreshToken,
-                        ["include_policy"] = "true",
-                    });
+                    cachedAccount = responseAccount;
+                    string tokenToStore = !string.IsNullOrWhiteSpace(newRefresh) ? newRefresh : refreshToken;
+                    SaveRefreshToken(tokenToStore, responseAccount, invalidateAccessTokenCache: false);
+                }
+                else if (!string.IsNullOrWhiteSpace(newRefresh) && newRefresh != refreshToken)
+                {
+                    SaveRefreshToken(newRefresh, invalidateAccessTokenCache: false);
+                }
 
-                    request.Perform();
+                int expiresIn = json["expires_in"]?.Value<int>() ?? 3600;
 
-                    if (request.ResponseStatusCode != HttpStatusCode.OK)
-                    {
-                        accessToken = null;
-                        error = request.GetResponseString() ?? "Pixiv token refresh failed.";
-                        invalidateAccessToken();
-                        return false;
-                    }
-
-                    var json = JObject.Parse(request.GetResponseString() ?? string.Empty);
-                    var tokenPayload = PixivJsonHelper.Field(json, "response") as JObject ?? json;
-                    string? accessTokenFromResponse = PixivJsonHelper.StringValue(tokenPayload, "access_token");
-                    string? newRefresh = PixivJsonHelper.StringValue(tokenPayload, "refresh_token");
-
-                    string? responseAccount = PixivJsonHelper.Field(tokenPayload, "user")?["account"]?.ToString();
-
-                    if (!string.IsNullOrWhiteSpace(responseAccount))
-                    {
-                        cachedAccount = responseAccount;
-                        string tokenToStore = !string.IsNullOrWhiteSpace(newRefresh) ? newRefresh : refreshToken;
-                        SaveRefreshToken(tokenToStore, responseAccount, invalidateAccessTokenCache: false);
-                    }
-                    else if (!string.IsNullOrWhiteSpace(newRefresh) && newRefresh != refreshToken)
-                    {
-                        SaveRefreshToken(newRefresh, invalidateAccessTokenCache: false);
-                    }
-
-                    int expiresIn = json["expires_in"]?.Value<int>() ?? 3600;
+                lock (tokenLock)
+                {
                     accessTokenExpiresAt = DateTimeOffset.UtcNow.AddSeconds(expiresIn);
                     cachedAccessToken = accessTokenFromResponse;
 
                     if (string.IsNullOrWhiteSpace(cachedAccessToken))
                     {
                         accessToken = null;
-                        error = "Pixiv token refresh returned an empty access token.";
+                        error = EzSettingsStrings.PIXIV_ERROR_TOKEN_REFRESH_EMPTY;
                         invalidateAccessToken();
                         return false;
                     }
@@ -139,13 +148,14 @@ namespace osu.Game.EzOsuGame.Background.Pixiv
                     error = null;
                     return true;
                 }
-                catch (Exception ex)
-                {
-                    accessToken = null;
-                    error = ex.Message;
-                    invalidateAccessToken();
-                    return false;
-                }
+            }
+            catch (Exception ex)
+            {
+                accessToken = null;
+                error = EzSettingsStrings.PIXIV_ERROR_REQUEST_FAILED;
+                Logger.Log($"[Pixiv] token refresh: {ex.Message}", LoggingTarget.Network, LogLevel.Important);
+                invalidateAccessToken();
+                return false;
             }
         }
 
@@ -176,7 +186,7 @@ namespace osu.Game.EzOsuGame.Background.Pixiv
                 if (string.IsNullOrWhiteSpace(content))
                     return null;
 
-                var auth = Newtonsoft.Json.JsonConvert.DeserializeObject<PixivAuthFile>(content);
+                var auth = JsonConvert.DeserializeObject<PixivAuthFile>(content);
 
                 if (auth == null || string.IsNullOrWhiteSpace(auth.RefreshToken))
                     return null;
@@ -197,7 +207,7 @@ namespace osu.Game.EzOsuGame.Background.Pixiv
         {
             try
             {
-                string json = Newtonsoft.Json.JsonConvert.SerializeObject(auth, Newtonsoft.Json.Formatting.Indented);
+                string json = JsonConvert.SerializeObject(auth, Formatting.Indented);
                 using var stream = storage.CreateFileSafely(EzModifyPath.PIXIV_AUTH_FILE);
                 using var writer = new StreamWriter(stream);
                 writer.Write(json);
@@ -208,9 +218,9 @@ namespace osu.Game.EzOsuGame.Background.Pixiv
             }
         }
 
-        private static Framework.IO.Network.WebRequest createTokenRequest(Dictionary<string, string> formData)
+        private static WebRequest createTokenRequest(Dictionary<string, string> formData)
         {
-            var request = new Framework.IO.Network.WebRequest(PixivConstants.AUTH_TOKEN_URL)
+            var request = new WebRequest(PixivConstants.AUTH_TOKEN_URL)
             {
                 Method = HttpMethod.Post,
             };
@@ -222,6 +232,7 @@ namespace osu.Game.EzOsuGame.Background.Pixiv
             foreach (var pair in formData)
                 request.AddParameter(pair.Key, pair.Value);
 
+            PixivWebRequest.ConfigureApi(request);
             return request;
         }
     }

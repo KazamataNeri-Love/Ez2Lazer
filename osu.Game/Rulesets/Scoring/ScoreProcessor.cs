@@ -467,6 +467,28 @@ namespace osu.Game.Rulesets.Scoring
         }
 
         /// <summary>
+        /// 已判定区间全 Perfect 时应达到的标准化总分（含 Mod 倍率）。
+        /// 与 live <see cref="TotalScore"/> 同源公式，按规则集 / HitMode 切换计分方式。
+        /// </summary>
+        public long GetTheoreticalPerfectJudgedDisplayScore()
+        {
+            double comboProgress = maximumComboPortion > 0 ? currentComboPortion / maximumComboPortion : 1;
+            double accuracyProgress = maximumAccuracyJudgementCount > 0 ? (double)currentAccuracyJudgementCount / maximumAccuracyJudgementCount : 1;
+            double theoreticalWithoutMods = ComputeTheoreticalPerfectJudgedTotalScore(comboProgress, accuracyProgress, currentBonusPortion);
+            return (long)Math.Round(theoreticalWithoutMods * scoreMultiplier);
+        }
+
+        /// <summary>
+        /// 已判定区间全 Perfect 时的标准化总分（不含 Mod 倍率）。
+        /// </summary>
+        protected virtual double ComputeTheoreticalPerfectJudgedTotalScore(double comboProgress, double accuracyProgress, double bonusPortion)
+        {
+            return 500000 * comboProgress +
+                   500000 * accuracyProgress +
+                   bonusPortion;
+        }
+
+        /// <summary>
         /// Resets this ScoreProcessor to a default state.
         /// </summary>
         /// <param name="storeResults">Whether to store the current state of the <see cref="ScoreProcessor"/> for future use.</param>
@@ -535,6 +557,47 @@ namespace osu.Game.Rulesets.Scoring
             // Populate total score after everything else.
             score.TotalScoreWithoutMods = TotalScoreWithoutMods.Value;
             score.TotalScore = TotalScore.Value;
+        }
+
+        /// <summary>
+        /// [Ez] Applies forced miss judgements for any remaining objects that could not be resolved via drawables.
+        /// </summary>
+        public void ApplyRemainingForcedMisses(HealthProcessor? healthProcessor)
+        {
+            var beatmap = Beatmap.Value;
+            if (beatmap == null)
+                return;
+
+            var judgedHitObjects = new HashSet<HitObject>(HitEvents.Select(e => e.HitObject));
+
+            int safety = Math.Max(MaximumJudgements, 1) * 2;
+
+            while (JudgedHits < MaximumJudgements && safety-- > 0)
+            {
+                bool appliedAny = false;
+
+                foreach (var hitObject in EnumerateHitObjects(beatmap))
+                {
+                    if (judgedHitObjects.Contains(hitObject))
+                        continue;
+
+                    var result = CreateResult(hitObject, hitObject.Judgement);
+                    if (result == null)
+                        continue;
+
+                    result.Type = result.Judgement.MinResult;
+                    result.RawTime = hitObject.GetEndTime();
+
+                    healthProcessor?.ApplyResult(result);
+                    ApplyResult(result);
+                    judgedHitObjects.Add(hitObject);
+                    appliedAny = true;
+                    break;
+                }
+
+                if (!appliedAny)
+                    break;
+            }
         }
 
         /// <summary>

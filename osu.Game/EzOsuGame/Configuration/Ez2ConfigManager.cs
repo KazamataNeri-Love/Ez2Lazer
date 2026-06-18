@@ -112,7 +112,6 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.EditorSyncTimelineSpacing, true);
 
             SetDefault(Ez2Setting.EzAnalysisFilter, false);
-            SetDefault(Ez2Setting.EzRealmMetadataBackfillVersion, 0);
             SetDefault(Ez2Setting.EzSelectCsMode, string.Empty);
             SetDefault(Ez2Setting.ColumnTypeListSelect, 4);
 
@@ -207,6 +206,7 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.PixivTagInclude, string.Empty);
             SetDefault(Ez2Setting.PixivTagExclude, string.Empty);
             SetDefault(Ez2Setting.PixivAutoDownloadEnabled, false);
+            SetDefault(Ez2Setting.PixivApiProxyBaseUrl, string.Empty);
 
             #endregion
 
@@ -774,8 +774,17 @@ namespace osu.Game.EzOsuGame.Configuration
         FrameLimiterBase,
         UpdateFrameLimiter,
 
+        /// <summary>
+        /// 选歌时是否对 Ez SQLite 体系内指标（主库 kps/KPC、有 Mod 时的 kps/xxy 等）做即时计算；关闭则只读已落盘数据。
+        /// 分支库快照仍只读；PP 显示应对齐官方 Star 缓存，不由本开关控制。
+        /// </summary>
         EzAnalysisRecEnabled,
+
+        /// <summary>
+        /// Ez 分析 SQLite 主库与分支曲库读写总开关；与 <see cref="EzAnalysisRecEnabled"/> 分工（存储 vs 即时计算）。
+        /// </summary>
         EzAnalysisSqliteEnabled,
+
         HideMainMenuOnlineBanner,
         NotificationBehaviour,
         ScreenshotAction,
@@ -797,10 +806,6 @@ namespace osu.Game.EzOsuGame.Configuration
 
         EzAnalysisFilter,
 
-        /// <summary>
-        /// Last Ez Realm metadata schema version for which tag/xxy/PP backfill completed (see RealmAccess.EZ_REALM_SCHEMA_VERSION).
-        /// </summary>
-        EzRealmMetadataBackfillVersion,
         EzSelectCsMode,
         ColumnTypeListSelect,
 
@@ -901,6 +906,7 @@ namespace osu.Game.EzOsuGame.Configuration
         PixivTagInclude,
         PixivTagExclude,
         PixivAutoDownloadEnabled,
+        PixivApiProxyBaseUrl,
 
         // 实验性功能
         InputAudioLatencyTracker,

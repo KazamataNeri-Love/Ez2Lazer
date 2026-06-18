@@ -3,9 +3,11 @@
 
 using System.Threading;
 using System.Threading.Tasks;
+using osu.Framework.Localisation;
 using osu.Framework.Logging;
 using osu.Framework.Platform;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Localization;
 
 namespace osu.Game.EzOsuGame.Background.Pixiv
 {
@@ -28,9 +30,11 @@ namespace osu.Game.EzOsuGame.Background.Pixiv
             this.ezConfig = ezConfig;
             Auth = new PixivAuthService(storage);
             Filters = new PixivFilterService(ezConfig);
-            Api = new PixivApiClient(Auth, Filters);
-            Images = new PixivImageStore(storage);
+            Api = new PixivApiClient(Auth, Filters, ezConfig);
+            Images = new PixivImageStore(storage, ezConfig);
             Catalog = new PixivFollowFeedCatalog(Api, Auth, Images);
+
+            ezConfig.GetBindable<string>(Ez2Setting.PixivApiProxyBaseUrl).BindValueChanged(_ => Catalog.Invalidate());
         }
 
         /// <summary>
@@ -56,10 +60,13 @@ namespace osu.Game.EzOsuGame.Background.Pixiv
         }
 
         /// <summary>
-        /// Queues one follow-feed download for the next switch. Never blocks the caller.
+        /// Queues one lightweight follow-feed download per song change. Never blocks the caller.
         /// </summary>
         public void EnqueueSongChangeDownload()
         {
+            if (!Auth.HasRefreshToken)
+                return;
+
             if (Interlocked.CompareExchange(ref songChangeDownloadInFlight, 1, 0) != 0)
                 return;
 
@@ -67,8 +74,8 @@ namespace osu.Game.EzOsuGame.Background.Pixiv
             {
                 try
                 {
-                    if (!tryDownloadNextCatalogIllust(out string? error))
-                        LogFailure("Background prefetch", error);
+                    if (!tryDownloadOnSongChange(out LocalisableString? error))
+                        LogFailure(EzSettingsStrings.PIXIV_LOG_SONG_CHANGE_DOWNLOAD, error);
                 }
                 finally
                 {
@@ -77,7 +84,7 @@ namespace osu.Game.EzOsuGame.Background.Pixiv
             });
         }
 
-        public bool RunBackgroundPrefetch(out string? error)
+        public bool RunBackgroundPrefetch(out LocalisableString? error)
         {
             if (!ezConfig.Get<bool>(Ez2Setting.PixivAutoDownloadEnabled))
             {
@@ -88,21 +95,66 @@ namespace osu.Game.EzOsuGame.Background.Pixiv
             return tryDownloadNextCatalogIllust(out error);
         }
 
-        public void LogFailure(string context, string? error)
+        /// <summary>
+        /// Refreshes the access token and returns the saved account name. Intended for background threads only.
+        /// </summary>
+        public bool TryVerifyLogin(out string? account, out LocalisableString? error)
         {
-            if (string.IsNullOrWhiteSpace(error))
+            account = null;
+            error = null;
+
+            if (!Auth.HasRefreshToken)
+            {
+                error = EzSettingsStrings.PIXIV_STATUS_NOT_CONFIGURED;
+                return false;
+            }
+
+            if (!Auth.TryRefreshAccessToken(out _, out error))
+                return false;
+
+            account = Auth.LoadAccountName();
+
+            if (string.IsNullOrWhiteSpace(account))
+                account = "?";
+
+            return true;
+        }
+
+        public void LogFailure(LocalisableString context, LocalisableString? error)
+        {
+            if (error == null)
                 return;
 
             Logger.Log($"[Pixiv] {context}: {error}", Ez2ConfigManager.LOGGER_NAME, LogLevel.Important);
         }
 
-        private bool tryDownloadNextCatalogIllust(out string? error)
+        /// <summary>
+        /// Song change: at most one feed page and one image download.
+        /// </summary>
+        private bool tryDownloadOnSongChange(out LocalisableString? error)
+        {
+            error = null;
+            long? excludeIllustId = lastIllustId > 0 ? lastIllustId : null;
+
+            if (Catalog.TryGetNextUncached(excludeIllustId, out PixivIllustInfo illust))
+                return Images.TryEnsureCached(illust, out _, out error);
+
+            if (!Catalog.AppendNextPage(out error))
+                return false;
+
+            if (!Catalog.TryGetNextUncached(excludeIllustId, out illust))
+                return true;
+
+            return Images.TryEnsureCached(illust, out _, out error);
+        }
+
+        private bool tryDownloadNextCatalogIllust(out LocalisableString? error)
         {
             error = null;
 
             if (!Auth.HasRefreshToken)
             {
-                error = "Pixiv refresh token is not configured.";
+                error = EzSettingsStrings.PIXIV_STATUS_NOT_CONFIGURED;
                 return false;
             }
 
