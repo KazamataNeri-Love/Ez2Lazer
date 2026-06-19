@@ -103,6 +103,22 @@ namespace osu.Game.EzOsuGame.Localization
             "When enabled, storyboard videos will automatically adjust their size to fill the entire storyboard area, "
             + "which may crop some of the video but will better adapt to different resolutions and screen ratios.");
 
+        public static readonly EzLocalizationManager.EzLocalisableString BACKGROUND_SCALE =
+            new EzLocalizationManager.EzLocalisableString("背景缩放", "Background scale");
+
+        public static readonly EzLocalizationManager.EzLocalisableString BACKGROUND_SCALE_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "调整背景画面（背景图/故事板/视频）的缩放大小和位置。",
+            "Adjust the scale and position of the background (background image/storyboard/video).");
+
+        public static readonly EzLocalizationManager.EzLocalisableString BACKGROUND_SCALE_VALUE =
+            new EzLocalizationManager.EzLocalisableString("缩放值", "Scale");
+
+        public static readonly EzLocalizationManager.EzLocalisableString BACKGROUND_POSITION_X =
+            new EzLocalizationManager.EzLocalisableString("水平位置", "Horizontal position");
+
+        public static readonly EzLocalizationManager.EzLocalisableString BACKGROUND_POSITION_Y =
+            new EzLocalizationManager.EzLocalisableString("垂直位置", "Vertical position");
+
         public static readonly EzLocalizationManager.EzLocalisableString EZ_ANALYSIS_REC_ENABLED =
             new EzLocalizationManager.EzLocalisableString("启用 Ez 分析即时计算", "Enable Ez analysis on-demand computation");
 
