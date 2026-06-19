@@ -43,6 +43,12 @@ namespace osu.Game.Skinning
 
         private CancellationTokenSource? cancellationSource;
 
+        /// <summary>
+        /// Optional external container. When set, <see cref="Reload(Container?)"/> will
+        /// proxy visual output to this target instead of adding children to this instance.
+        /// </summary>
+        public Container? ExternalTarget { get; set; }
+
         public SkinnableContainer(GlobalSkinnableContainerLookup lookup)
         {
             Lookup = lookup;
@@ -67,13 +73,27 @@ namespace osu.Game.Skinning
             cancellationSource?.Cancel();
             cancellationSource = null;
 
-            LoadComponentAsync(content, wrapper =>
+            if (ExternalTarget != null)
             {
-                AddInternal(wrapper);
-                components.AddRange(wrapper.Children.OfType<ISerialisableDrawable>());
-                ComponentsLoaded = true;
-                OnComponentsLoaded?.Invoke(this);
-            }, (cancellationSource = new CancellationTokenSource()).Token);
+                LoadComponentAsync(content, wrapper =>
+                {
+                    ExternalTarget.Clear();
+                    ExternalTarget.Add(wrapper);
+                    components.AddRange(wrapper.Children.OfType<ISerialisableDrawable>());
+                    ComponentsLoaded = true;
+                    OnComponentsLoaded?.Invoke(this);
+                }, (cancellationSource = new CancellationTokenSource()).Token);
+            }
+            else
+            {
+                LoadComponentAsync(content, wrapper =>
+                {
+                    AddInternal(wrapper);
+                    components.AddRange(wrapper.Children.OfType<ISerialisableDrawable>());
+                    ComponentsLoaded = true;
+                    OnComponentsLoaded?.Invoke(this);
+                }, (cancellationSource = new CancellationTokenSource()).Token);
+            }
         }
 
         /// <inheritdoc cref="ISerialisableDrawableContainer"/>

@@ -32,6 +32,7 @@ using osu.Game.Scoring;
 using osu.Game.Screens.Play;
 using osu.Game.Screens.Play.HUD;
 using osu.Game.Screens.Play.HUD.ClicksPerSecond;
+using osu.Game.Skinning;
 using osuTK;
 
 namespace osu.Game.Rulesets.UI
@@ -79,6 +80,8 @@ namespace osu.Game.Rulesets.UI
         private readonly AudioContainer audioContainer = new AudioContainer { RelativeSizeAxes = Axes.Both };
 
         public override Container FrameStableComponents { get; } = new Container { RelativeSizeAxes = Axes.Both };
+
+        public override Container BackgroundLayer { get; } = new Container { RelativeSizeAxes = Axes.Both, Depth = float.MaxValue };
 
         public override IFrameStableClock FrameStableClock => frameStabilityContainer;
 
@@ -188,6 +191,21 @@ namespace osu.Game.Rulesets.UI
                         })),
                 }
             };
+
+            // BackgroundLayer is added outside FrameStabilityContainer
+            // to avoid interfering with its frame-stable pipeline timing.
+            AddInternal(BackgroundLayer);
+
+            // Register a SkinnableContainer proxy for editor discovery.
+            // Alpha=0 keeps it out of the draw traversal; ExternalTarget
+            // proxies Add/Remove/Reload to the real BackgroundLayer.
+            AddInternal(new SkinnableContainer(
+                new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.Background))
+            {
+                ExternalTarget = BackgroundLayer,
+                Alpha = 0,
+                AlwaysPresent = false,
+            });
 
             if ((ResumeOverlay = CreateResumeOverlay()) != null)
             {
@@ -456,6 +474,11 @@ namespace osu.Game.Rulesets.UI
         /// Components to be run potentially multiple times in line with frame-stable gameplay.
         /// </summary>
         public abstract Container FrameStableComponents { get; }
+
+        /// <summary>
+        /// A layer anchored to the full screen, rendered below the playfield and all other content.
+        /// </summary>
+        public abstract Container BackgroundLayer { get; }
 
         /// <summary>
         /// The frame-stable clock which is being used for playfield display.
