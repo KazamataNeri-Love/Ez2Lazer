@@ -240,6 +240,12 @@ namespace osu.Game.Rulesets.Osu
                         new OsuModBloom()
                     };
 
+                case ModType.NeriMod:
+                    return new Mod[]
+                    {
+                        new OsuModFasterBarrelRoll(),
+                    };
+
                 case ModType.System:
                     return new Mod[]
                     {

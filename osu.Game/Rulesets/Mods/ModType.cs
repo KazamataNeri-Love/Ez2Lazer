@@ -13,5 +13,6 @@ namespace osu.Game.Rulesets.Mods
         System,
         LA_Mod = 6,
         CommunityMod = 7,
+        NeriMod = 8,
     }
 }
