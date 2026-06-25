@@ -38,7 +38,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings
         public static HitResult MapTo(O2Judge judge) => judge switch
         {
             O2Judge.Cool => HitResult.Perfect,
-            O2Judge.Good => HitResult.Great,
+            O2Judge.Good => HitResult.Good,
             O2Judge.Bad => HitResult.Meh,
             O2Judge.Miss => HitResult.Miss,
             _ => HitResult.None,
@@ -47,7 +47,6 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings
         public static O2Judge FromHitResult(HitResult result) => result switch
         {
             HitResult.Perfect => O2Judge.Cool,
-            HitResult.Great => O2Judge.Good,
             HitResult.Good => O2Judge.Good,
             HitResult.Meh => O2Judge.Bad,
             HitResult.Miss => O2Judge.Miss,
@@ -221,6 +220,16 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings
         public bool CanBeginHoldAt(double time, TailNote tail) => LazerHoldJudgementReplica.Instance.CanBeginHoldAt(time, tail);
 
         public bool IsHoldBreak(double rawOffset, HitWindows hitWindows) => LazerHoldJudgementReplica.Instance.IsHoldBreak(rawOffset, hitWindows);
+
+        public HitResult RejudgeHitEvent(HitEvent hitEvent, HitWindows hitWindows)
+        {
+            // TailNote 保留原始结果（尾判依赖 Pill 状态和 headHit/holdBreak 等上下文）
+            if (hitEvent.HitObject is TailNote)
+                return hitEvent.Result;
+
+            var outcome = EvaluatePress(hitEvent.TimeOffset, hitWindows);
+            return outcome.Kind == ManiaNoteJudgementOutcomeKind.Apply ? outcome.Result : HitResult.Miss;
+        }
 
         internal static void ApplyPillLogic(double absOffset, double bpm, ManiaReplayJudgementState state, ref O2Judge judge)
         {

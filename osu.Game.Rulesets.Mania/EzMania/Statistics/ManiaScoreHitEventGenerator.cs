@@ -32,6 +32,8 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
             EzScoreReloadBridge.RegisterImplementation("mania", Instance);
             EzScoreReloadBridge.RegisterImplementation("3", Instance);
 
+            // Race Timeline: direct synchronous call (not via ManiaReplaySessionService)
+            // to avoid any async/caching issues for ghost score HUDs.
             EzScoreTimelineBridge.RegisterManiaTimelineBuilder((score, beatmap, cancellationToken) =>
             {
                 var environment = ManiaRuleset.ResolveEnvironment(null, GlobalConfigStore.EzConfig, ReplayRunPurpose.ForRaceTimeline);
