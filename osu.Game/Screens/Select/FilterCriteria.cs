@@ -62,6 +62,14 @@ namespace osu.Game.Screens.Select
         /// </summary>
         public bool? HasStoryboard;
 
+        /// <summary>
+        /// Ez: When <see langword="true"/>, show beatmaps that have video OR storyboard (or both).
+        /// Used by the toggle button in <see cref="FilterControl"/>.
+        /// Unlike individual <see cref="HasVideo"/>/<see cref="HasStoryboard"/>,
+        /// this uses OR logic for the combined filter.
+        /// </summary>
+        public bool? HasVideoOrStoryboard;
+
         public OptionalTextFilter[] SearchTerms = Array.Empty<OptionalTextFilter>();
 
         public RulesetInfo? Ruleset;

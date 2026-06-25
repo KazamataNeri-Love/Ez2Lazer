@@ -16,6 +16,8 @@ using osu.Framework.Bindables;
 using osu.Framework.Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Textures;
+using osuTK;
 using osu.Framework.Logging;
 using osu.Framework.Screens;
 using osu.Framework.Threading;
@@ -25,6 +27,7 @@ using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.Database;
 using osu.Game.Extensions;
+using osu.Game.Graphics.Backgrounds;
 using osu.Game.Graphics.Containers;
 using osu.Game.IO.Archives;
 using osu.Game.EzOsuGame.Audio;
@@ -192,6 +195,9 @@ namespace osu.Game.Screens.Play
 
         [Resolved]
         private OsuGameBase game { get; set; }
+
+        [Resolved]
+        private LargeTextureStore largeTextureStore { get; set; }
 
         public GameplayState GameplayState { get; private set; }
 
@@ -507,15 +513,66 @@ namespace osu.Game.Screens.Play
 
         private Drawable createUnderlayComponents(WorkingBeatmap working)
         {
+            bool hasStoryboardOrVideo = GameplayState.Storyboard.HasDrawable
+                                        || GameplayState.Storyboard.GetLayer(@"Video").Elements.Any();
+
+            // Shared scale/position applied to a common wrapper holding both
+            // background layer and DimmableStoryboard.
+            float bgScale = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundScale);
+            float bgPosX = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundPosX);
+            float bgPosY = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundPosY);
+
+            float s = bgScale;
+            float maxPan = Math.Max(0, (1 - s) / 2);
+            Vector2 pos = new Vector2(
+                (bgPosX - 0.5f) * 2 * maxPan,
+                (bgPosY - 0.5f) * 2 * maxPan
+            );
+
+            DimmableStoryboard = new DimmableStoryboard(GameplayState.Storyboard, GameplayState.Mods)
+            {
+                RelativeSizeAxes = Axes.Both,
+                RelativePositionAxes = Axes.Both,
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre,
+            };
+
+            // Background overlay layer — uses BeatmapBackground which has a built-in
+            // fallback texture ("Backgrounds/bg1") when working.GetBackground() is null.
+            var backgroundLayer = new Container
+            {
+                RelativeSizeAxes = Axes.Both,
+                Alpha = hasStoryboardOrVideo ? 0 : 1,
+                AlwaysPresent = true,
+                Children = new Drawable[]
+                {
+                    new BeatmapBackground(working),
+                },
+            };
+
+            // Common wrapper: both background and storyboard share the same Scale/Position.
+            var backgroundWrapper = new Container
+            {
+                RelativeSizeAxes = Axes.Both,
+                RelativePositionAxes = Axes.Both,
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre,
+                Children = new Drawable[]
+                {
+                    backgroundLayer,
+                    DimmableStoryboard,
+                },
+            };
+
+            backgroundWrapper.Scale = new Vector2(s);
+            backgroundWrapper.Position = pos;
+
             var container = new Container
             {
                 RelativeSizeAxes = Axes.Both,
                 Children = new Drawable[]
                 {
-                    DimmableStoryboard = new DimmableStoryboard(GameplayState.Storyboard, GameplayState.Mods)
-                    {
-                        RelativeSizeAxes = Axes.Both
-                    },
+                    backgroundWrapper,
                     letterboxOverlay = new LetterboxOverlay
                     {
                         BreakTracker = breakTracker,

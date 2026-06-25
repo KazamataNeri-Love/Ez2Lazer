@@ -60,6 +60,7 @@ namespace osu.Game.Screens.Select
         private EzKeyModeSelector csSelector = null!;
         private ShearedKSPreviewButton ksPreviewButton = null!;
         private ShearedToggleButton ezAnalysisFilterButton = null!;
+        private ShearedToggleButton storyboardVideoFilterButton = null!;
 
         [Resolved]
         private Ez2ConfigManager ezConfig { get; set; } = null!;
@@ -243,6 +244,7 @@ namespace osu.Game.Screens.Select
                                         new Dimension(),
                                         new Dimension(GridSizeMode.Absolute), // can probably be removed?
                                         new Dimension(GridSizeMode.AutoSize),
+                                        new Dimension(GridSizeMode.AutoSize),
                                     },
                                     Content = new[]
                                     {
@@ -260,6 +262,15 @@ namespace osu.Game.Screens.Select
                                                 AutoSizeAxes = Axes.X,
                                                 Text = EzSongSelectStrings.EZ_ANALYSIS_FILTER,
                                                 TooltipText = EzSongSelectStrings.EZ_ANALYSIS_FILTER_TOOLTIP,
+                                                Height = 30f,
+                                            },
+                                            storyboardVideoFilterButton = new ShearedToggleButton
+                                            {
+                                                Anchor = Anchor.Centre,
+                                                Origin = Anchor.Centre,
+                                                AutoSizeAxes = Axes.X,
+                                                Text = EzSongSelectStrings.STORYBOARD_VIDEO_FILTER,
+                                                TooltipText = EzSongSelectStrings.STORYBOARD_VIDEO_FILTER_TOOLTIP,
                                                 Height = 30f,
                                             },
                                         },
@@ -363,6 +374,7 @@ namespace osu.Game.Screens.Select
 
             csSelector.Current.BindValueChanged(_ => updateCriteria());
             ezAnalysisFilterButton.Active.BindValueChanged(_ => updateCriteria());
+            storyboardVideoFilterButton.Active.BindValueChanged(_ => updateCriteria());
 
             updateEzControlVisibility();
             updateVisibleResultsActionAvailability();
@@ -421,6 +433,7 @@ namespace osu.Game.Screens.Select
                 Collection = collectionDropdown.Current.Value?.Collection,
                 LocalUserId = isValidUser ? localUser.Value.Id : null,
                 LocalUserUsername = isValidUser ? localUser.Value.Username : null,
+                HasVideoOrStoryboard = storyboardVideoFilterButton.Active.Value ? true : null,
             };
 
             if (!difficultyRangeSlider.LowerBound.IsDefault)

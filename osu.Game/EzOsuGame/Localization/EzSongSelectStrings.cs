@@ -93,5 +93,13 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly LocalisableString RENAME_PLAYER_PLACEHOLDER = new EzLocalizationManager.EzLocalisableString(
             "输入新的玩家名称",
             "Enter new player name");
+
+        public static readonly LocalisableString STORYBOARD_VIDEO_FILTER = new EzLocalizationManager.EzLocalisableString(
+            "视频/故事板",
+            "Video/Storyboard");
+
+        public static readonly LocalisableString STORYBOARD_VIDEO_FILTER_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "仅显示有视频或故事板的谱面",
+            "Only show beatmaps with video or storyboard");
     }
 }

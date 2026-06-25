@@ -177,11 +177,15 @@ namespace osu.Game.Screens.Select
 
             match &= !criteria.UserStarDifficulty.HasFilter || criteria.UserStarDifficulty.IsInRange(starDifficultyForFilter);
 
-            // Ez: filter by HasVideo / HasStoryboard
+            // Ez: filter by HasVideo / HasStoryboard (AND logic, used by search keywords)
             if (criteria.HasVideo.HasValue)
                 match &= beatmap.HasVideo == criteria.HasVideo.Value;
             if (criteria.HasStoryboard.HasValue)
                 match &= beatmap.HasStoryboard == criteria.HasStoryboard.Value;
+
+            // Ez: filter by HasVideoOrStoryboard (OR logic, used by toggle button)
+            if (criteria.HasVideoOrStoryboard == true)
+                match &= beatmap.HasVideo == true || beatmap.HasStoryboard == true;
 
             if (!match) return false;
 

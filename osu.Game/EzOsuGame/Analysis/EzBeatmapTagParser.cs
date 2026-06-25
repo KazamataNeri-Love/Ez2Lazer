@@ -49,8 +49,14 @@ namespace osu.Game.EzOsuGame.Analysis
 
             scanMainStoryboardFile(beatmapSet, getStream, ref hasVideo, ref hasStoryboard);
 
+            // Scan the current beatmap's .osu file for [Events] section.
             if (!hasVideo || !hasStoryboard)
                 scanBeatmapEventLines(beatmapSet, beatmapPath, getStream, ref hasVideo, ref hasStoryboard);
+
+            // Also scan every .osu file in the set. Many beatmaps embed Video/Sprite/Animation
+            // events directly in .osu files rather than a separate .osb.
+            if (!hasVideo || !hasStoryboard)
+                scanAllOsuBeatmapFiles(beatmapSet, getStream, ref hasVideo, ref hasStoryboard);
 
             return new EzBeatmapTagSummary(hasVideo, hasStoryboard);
         }
@@ -167,6 +173,59 @@ namespace osu.Game.EzOsuGame.Analysis
                 return;
 
             scanBeatmapEventLines(beatmapSet, workingBeatmap.BeatmapInfo.Path, workingBeatmap.GetStream, ref hasVideo, ref hasStoryboard);
+        }
+
+        /// <summary>
+        /// Scan all .osu files in the beatmap set for Video/Sprite/Animation events in their [Events] sections.
+        /// Many beatmaps embed these events directly in .osu files rather than a separate .osb.
+        /// </summary>
+        private static void scanAllOsuBeatmapFiles(BeatmapSetInfo beatmapSet, Func<string, Stream?> getStream, ref bool hasVideo, ref bool hasStoryboard)
+        {
+            foreach (var namedFile in beatmapSet.Files)
+            {
+                if (!namedFile.Filename.EndsWith(".osu", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (hasVideo && hasStoryboard)
+                    break;
+
+                string? storagePath = beatmapSet.GetPathForFile(namedFile.Filename);
+
+                if (string.IsNullOrWhiteSpace(storagePath))
+                    continue;
+
+                using Stream? stream = getStream(storagePath);
+
+                if (stream == null)
+                    continue;
+
+                using var reader = new StreamReader(stream);
+                bool inEventsSection = false;
+
+                while (!reader.EndOfStream && (!hasVideo || !hasStoryboard))
+                {
+                    string? line = reader.ReadLine();
+
+                    if (line == null)
+                        break;
+
+                    string trimmed = line.Trim();
+
+                    if (trimmed.Length == 0)
+                        continue;
+
+                    if (trimmed[0] == '[')
+                    {
+                        inEventsSection = trimmed.Equals("[Events]", StringComparison.OrdinalIgnoreCase);
+                        continue;
+                    }
+
+                    if (!inEventsSection)
+                        continue;
+
+                    scanSingleEventLine(trimmed, ref hasVideo, ref hasStoryboard);
+                }
+            }
         }
 
         private static void scanEventLines(IEnumerable<string>? lines, ref bool hasVideo, ref bool hasStoryboard)
