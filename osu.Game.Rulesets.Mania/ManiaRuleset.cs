@@ -273,7 +273,6 @@ namespace osu.Game.Rulesets.Mania
                 case ModType.NeriMod:
                     return new Mod[]
                     {
-                        new ManiaModNeriSPRefiner(),
                         new ManiaModNeriBarrelRoll(),
                         new ManiaModNeriFasterBarrelRoll(),
                         new ManiaModNeriDance(),
