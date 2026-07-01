@@ -2,11 +2,14 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using osu.Game.EzOsuGame.Configuration;
-using osu.Game.Scoring;
 
 namespace osu.Game.EzOsuGame.Scoring
 {
-    public sealed class GameplayEnvironment : IGameplayEnvironment
+    /// <summary>
+    /// 单局游玩环境快照（纯数据 record）。
+    /// 环境构建由 <c>Ez2ConfigManager.GetGameplayEnvironment()</c> / <c>ResolveForReplay()</c> 负责。
+    /// </summary>
+    public sealed record GameplayEnvironment : IGameplayEnvironment
     {
         public EzEnumHitMode ManiaHitMode { get; init; }
 
@@ -16,28 +19,6 @@ namespace osu.Game.EzOsuGame.Scoring
 
         public double OffsetPlusMania { get; init; }
 
-        public static GameplayEnvironment FromLive(Ez2ConfigManager config) => new GameplayEnvironment
-        {
-            ManiaHitMode = config.Get<EzEnumHitMode>(Ez2Setting.ManiaHitMode),
-            ManiaHealthMode = config.Get<EzEnumHealthMode>(Ez2Setting.ManiaHealthMode),
-            JudgePrecedence = config.Get<EzEnumJudgePrecedence>(Ez2Setting.JudgePrecedence),
-            OffsetPlusMania = config.Get<double>(Ez2Setting.OffsetPlusMania),
-        };
-
-        public static GameplayEnvironment FromScore(ScoreInfo score, Ez2ConfigManager configFallback)
-        {
-            var live = FromLive(configFallback);
-
-            if (!score.TryGetManiaGameplayModes(out int hitMode, out int healthMode))
-                return live;
-
-            return new GameplayEnvironment
-            {
-                ManiaHitMode = (EzEnumHitMode)hitMode,
-                ManiaHealthMode = (EzEnumHealthMode)healthMode,
-                JudgePrecedence = live.JudgePrecedence,
-                OffsetPlusMania = live.OffsetPlusMania,
-            };
-        }
+        public bool BmsPoorHitResultEnable { get; init; }
     }
 }

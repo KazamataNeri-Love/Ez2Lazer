@@ -111,6 +111,8 @@ namespace osu.Game.EzOsuGame.HUD
         private EzScoreRaceState? boundState1;
         private EzScoreRaceState? boundState2;
 
+        private bool refreshScheduled;
+
         [Resolved]
         private OsuColour colours { get; set; } = null!;
 
@@ -208,7 +210,9 @@ namespace osu.Game.EzOsuGame.HUD
             updateCurrentAndTheoreticalBars();
             base.CornerRadius = CornerRadius.Value * Math.Min(DrawWidth, DrawHeight);
 
-            // 对齐官方 MultiSpectatorLeaderboardProvider：HUD 统一驱动 processor.UpdateScore。
+            // 对齐官方 MultiSpectatorLeaderboardProvider：每帧驱动 processor 的 UpdateScore。
+            // 不做节流：QueryAtTime 是 O(log n) 二分查找，开销可忽略；
+            // 框架 Bindable.Value setter 内置去重，值不变时不触发下游事件链。
             ghostProcessor1?.UpdateScore();
             ghostProcessor2?.UpdateScore();
         }
@@ -240,7 +244,19 @@ namespace osu.Game.EzOsuGame.HUD
 
         private void onStatesChanged(object? sender, NotifyDictionaryChangedEventArgs<string, EzScoreRaceState> e)
         {
-            Schedule(refreshPickedGhosts);
+            // 使用 AddOnce + 标志位合并同一帧内的多次字典变化事件，
+            // 避免 publishStates 的 Clear + N 次 Add 触发 N 次 refreshPickedGhosts。
+            if (!refreshScheduled)
+            {
+                refreshScheduled = true;
+                Scheduler.AddOnce(scheduleRefresh);
+            }
+        }
+
+        private void scheduleRefresh()
+        {
+            refreshScheduled = false;
+            refreshPickedGhosts();
         }
 
         protected override void OnSessionReady()

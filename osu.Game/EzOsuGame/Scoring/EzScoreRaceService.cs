@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using osu.Framework.Allocation;
@@ -83,6 +84,17 @@ namespace osu.Game.EzOsuGame.Scoring
 
         private readonly Dictionary<Guid, CancellationTokenSource> preloadingBeatmaps = new Dictionary<Guid, CancellationTokenSource>();
 
+        /// <summary>
+        /// 去抖版本号：每次 startPreload 递增，延迟回调通过比对版本号判断是否过期。
+        /// </summary>
+        private int preloadVersion;
+
+        /// <summary>
+        /// 预加载去抖延迟（毫秒）。快速切歌时，中间歌曲的预加载在延迟期间被取消，
+        /// 避免为每首过渡歌曲都启动昂贵的 buildPreloadedStates（Realm 查询 + 多 ghost timeline 构建）。
+        /// </summary>
+        private const int preload_debounce_delay_ms = 300;
+
         protected override void LoadComplete()
         {
             base.LoadComplete();
@@ -125,9 +137,42 @@ namespace osu.Game.EzOsuGame.Scoring
             currentPreloadCts = new CancellationTokenSource();
             currentPreloadBeatmapId = beatmapInfo.ID;
             var token = currentPreloadCts.Token;
-            preloadingBeatmaps[beatmapInfo.ID] = currentPreloadCts;
+            int version = ++preloadVersion;
 
-            Schedule(() => performPreloadAsync(beatmapInfo, workingBeatmap, token));
+            // 去抖：延迟启动预加载。快速切歌时，中间歌曲的回调发现版本号已过期，
+            // 直接返回而不启动昂贵的 buildPreloadedStates。
+            Schedule(() =>
+            {
+                if (token.IsCancellationRequested || version != preloadVersion)
+                    return;
+
+                performPreloadAsyncDebounced(beatmapInfo, workingBeatmap, token, version);
+            });
+        }
+
+        private async void performPreloadAsyncDebounced(BeatmapInfo beatmapInfo, WorkingBeatmap workingBeatmap, CancellationToken token, int version)
+        {
+            try
+            {
+                await Task.Delay(preload_debounce_delay_ms, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            if (version != preloadVersion || token.IsCancellationRequested)
+                return;
+
+            // 去抖结束：正式注册为"正在预加载"并启动后台工作。
+            Schedule(() =>
+            {
+                if (token.IsCancellationRequested || version != preloadVersion)
+                    return;
+
+                preloadingBeatmaps[beatmapInfo.ID] = currentPreloadCts!;
+                performPreloadAsync(beatmapInfo, workingBeatmap, token);
+            });
         }
 
         private async void performPreloadAsync(BeatmapInfo beatmapInfo, WorkingBeatmap workingBeatmap, CancellationToken token)
@@ -196,29 +241,34 @@ namespace osu.Game.EzOsuGame.Scoring
             var ghostScores = EzLocalScoreQueries.GetTopByTotalScore(allLocalScores, 10);
             token.ThrowIfCancellationRequested();
 
-            var environment = GameplayEnvironment.FromLive(GlobalConfigStore.EzConfig);
-            var sharedBeatmap = workingBeatmap.GetPlayableBeatmap(rulesetInfo, Array.Empty<Mod>());
+            var environment = GlobalConfigStore.EzConfig.GetGameplayEnvironment();
 
-            var result = new List<EzScoreRaceState>();
+            // 并行构建所有 ghost 的 timeline。每个 ghost 的 timeline 构建完全独立，
+            // 可充分利用多核 CPU。预期加载时间 ÷ min(ghost数量, CPU核心数)。
+            var results = new EzScoreRaceState?[ghostScores.Count];
 
-            foreach (var scoreInfo in ghostScores)
+            Parallel.For(0, ghostScores.Count, new ParallelOptions { CancellationToken = token }, i =>
             {
-                token.ThrowIfCancellationRequested();
+                var scoreInfo = ghostScores[i];
+
+                // 每个任务加载自己的 playable beatmap，避免多线程共享同一 IBeatmap 实例
+                // （HitEvents 路径的 ensureHitWindows 会修改 HitObject 状态，非线程安全）。
+                var taskBeatmap = workingBeatmap.GetPlayableBeatmap(rulesetInfo, Array.Empty<Mod>());
 
                 var timeline = EzScoreTimelineBuilder.TryBuild(
                     scoreManager,
                     beatmaps,
                     scoreInfo,
-                    sharedBeatmap,
+                    taskBeatmap,
                     cache: null,
                     environment,
                     token
                 );
 
-                result.Add(new EzScoreRaceState(scoreInfo, timeline));
-            }
+                results[i] = new EzScoreRaceState(scoreInfo, timeline);
+            });
 
-            return result;
+            return results.Where(r => r != null).Select(r => r!).ToList();
         }
 
         /// <summary>

@@ -64,9 +64,8 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
             ArgumentNullException.ThrowIfNull(score);
             ArgumentNullException.ThrowIfNull(score.Replay);
             ArgumentNullException.ThrowIfNull(beatmap);
-            // environment may be null when called via IEzReplaySession; resolved upstream by ManiaReplaySessionService
 
-            var ruleset = new ManiaRuleset();
+            var ruleset = score.ScoreInfo.Ruleset.CreateInstance();
             var scoreProcessor = ruleset.CreateScoreProcessor();
             scoreProcessor.Mods.Value = score.ScoreInfo.Mods;
             scoreProcessor.ApplyBeatmap(beatmap);
@@ -117,7 +116,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
 
             double gameplayRate = ModUtils.CalculateRateWithMods(score.ScoreInfo.Mods);
 
-            var pressTimesByColumn = ManiaReplaySessionSimulator.buildPressTimesByColumn(score.Replay);
+            var pressTimesByColumn = ManiaReplaySessionSimulator.BuildPressTimesByColumn(score.Replay);
 
             ManiaReplaySessionSimulator.Simulate(
                 score,
@@ -182,12 +181,12 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
                 state.Judged = true;
                 state.Result = HitResult.Miss;
 
-                double missEventTime = ManiaReplaySessionSimulator.resolveMissEventTime(state.Target, pressTimesByColumn);
+                double missEventTime = ManiaReplaySessionSimulator.ResolveMissEventTime(state.Target, pressTimesByColumn);
                 ManiaReplaySessionSimulator.ApplyFinalResult(
                     scoreProcessor,
                     state.Target,
                     HitResult.Miss,
-                    ManiaReplaySessionSimulator.resolveMissStoredOffset(state.Target, pressTimesByColumn),
+                    ManiaReplaySessionSimulator.ResolveMissStoredOffset(state.Target, pressTimesByColumn),
                     missEventTime,
                     gameplayRate,
                     recorder);
