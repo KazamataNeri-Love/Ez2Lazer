@@ -112,6 +112,9 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.BeatmapPreviewModeMania, EzBeatmapPreviewMode.StaticFullMap);
             SetDefault(Ez2Setting.BeatmapPreviewDensity, 1.0, 0.1, 5.0, 0.05);
             SetDefault(Ez2Setting.EditorSyncTimelineSpacing, true);
+            SetDefault(Ez2Setting.SkinEditorHudSnapEnabled, false);
+            SetDefault(Ez2Setting.SkinEditorHudSnapDistance, 20, 10, 50, 5);
+            SetDefault(Ez2Setting.SkinEditorHudSnapPixelFlush, false);
 
             SetDefault(Ez2Setting.EzAnalysisFilter, false);
             SetDefault(Ez2Setting.EzSelectCsMode, string.Empty);
@@ -292,11 +295,20 @@ namespace osu.Game.EzOsuGame.Configuration
         };
 
         /// <summary>
-        /// Replay 环境解析入口。
-        /// <para>ForLive: 直接读当前配置。</para>
-        /// <para>ForStored: 在配置基础上，用 ScoreInfo 中嵌入的 HitMode/HealthMode 覆盖。</para>
+        /// Drawable 判定环境：有 replay 成绩时用 ForStored 嵌入；否则实时全局（含 <see cref="GameplayEnvironment.OffsetPlusMania"/>）。
         /// </summary>
-        public GameplayEnvironment ResolveForReplay(ScoreInfo? score, ReplayRunPurpose purpose)
+        public GameplayEnvironment ResolveForDrawable(ScoreInfo? replayScore = null)
+        {
+            if (replayScore != null)
+                return ResolveForSession(ReplayRunPurpose.ForStored, replayScore);
+
+            return GetGameplayEnvironment();
+        }
+
+        /// <summary>
+        /// Replay 环境解析（含 OffsetPlusMania）。Session 路径请用 <see cref="ResolveForSession"/>。
+        /// </summary>
+        internal GameplayEnvironment ResolveForReplay(ReplayRunPurpose purpose, ScoreInfo? score = null)
         {
             var live = GetGameplayEnvironment();
 
@@ -304,19 +316,38 @@ namespace osu.Game.EzOsuGame.Configuration
             {
                 case ReplayRunPurpose.ForStored:
 
-                    if (score == null || !score.TryGetManiaGameplayModes(out int hitMode, out int healthMode))
-                        return live;
-
-                    return live with
+                    if (score != null && score.TryGetManiaGameplayModes(out int hitMode, out int healthMode))
                     {
-                        ManiaHitMode = (EzEnumHitMode)hitMode,
-                        ManiaHealthMode = (EzEnumHealthMode)healthMode,
-                    };
+                        return live with
+                        {
+                            ManiaHitMode = (EzEnumHitMode)hitMode,
+                            ManiaHealthMode = (EzEnumHealthMode)healthMode,
+                            OffsetPlusMania = 0,
+                        };
+                    }
+
+                    if (score?.Ruleset.OnlineID == 3)
+                    {
+                        return live with
+                        {
+                            ManiaHitMode = EzEnumHitMode.Lazer,
+                            ManiaHealthMode = EzEnumHealthMode.Lazer,
+                            OffsetPlusMania = 0,
+                        };
+                    }
+
+                    return live with { OffsetPlusMania = 0 };
 
                 default:
                     return live;
             }
         }
+
+        /// <summary>
+        /// 非对局 replay 环境：HitMode/HealthMode 等同 <see cref="ResolveForReplay"/>，且强制 <see cref="GameplayEnvironment.OffsetPlusMania"/> = 0。
+        /// </summary>
+        public GameplayEnvironment ResolveForSession(ReplayRunPurpose purpose, ScoreInfo score)
+            => ResolveForReplay(purpose, score) with { OffsetPlusMania = 0 };
 
         /// <summary>
         /// 获取列宽
@@ -844,6 +875,21 @@ namespace osu.Game.EzOsuGame.Configuration
         BeatmapPreviewModeMania,
         BeatmapPreviewDensity,
         EditorSyncTimelineSpacing,
+
+        /// <summary>
+        /// Skin editor HUD magnetic snap (overlay layout editor).
+        /// </summary>
+        SkinEditorHudSnapEnabled,
+
+        /// <summary>
+        /// First-stage HUD snap gap in SkinnableContainer parent pixels (10/15/20/25/50).
+        /// </summary>
+        SkinEditorHudSnapDistance,
+
+        /// <summary>
+        /// When enabled, snap uses rendered pixel bounds. When disabled (default), snap uses each HUD component's layout/container box.
+        /// </summary>
+        SkinEditorHudSnapPixelFlush,
 
         EzAnalysisFilter,
 

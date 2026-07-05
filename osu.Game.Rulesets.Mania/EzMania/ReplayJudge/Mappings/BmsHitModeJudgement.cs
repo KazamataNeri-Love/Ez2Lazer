@@ -9,17 +9,17 @@ using osu.Game.Rulesets.Mania.Objects;
 using osu.Game.Rulesets.Mania.Scoring;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Scoring;
-using static osu.Game.Rulesets.Mania.EzMania.ReplayJudge.ManiaColumnSimulator;
 
 namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings
 {
     /// <summary>
-    /// BMS 系（IIDX / LR2 / Raja）判定 — Mode 原生名 + MapTo；Session 与 Drawable 唯一源。
+    /// BMS 系（IIDX / LR2 / Raja）判定 — Mode 原生名 + MapTo；
+    /// Session 与 Drawable 唯一源。
     /// </summary>
     public enum BmsJudge
     {
         None,
-        PGreat,
+        Perfect,
         Great,
         Good,
         Bad,
@@ -34,7 +34,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings
         public static HitResult MapTo(BmsJudge judge)
             => judge switch
             {
-                BmsJudge.PGreat => HitResult.Perfect,
+                BmsJudge.Perfect => HitResult.Perfect,
                 BmsJudge.Great => HitResult.Great,
                 BmsJudge.Good => HitResult.Good,
                 BmsJudge.Bad => HitResult.Meh,
@@ -46,7 +46,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings
         public static BmsJudge FromHitResult(HitResult result)
             => result switch
             {
-                HitResult.Perfect => BmsJudge.PGreat,
+                HitResult.Perfect => BmsJudge.Perfect,
                 HitResult.Great => BmsJudge.Great,
                 HitResult.Good => BmsJudge.Good,
                 HitResult.Meh => BmsJudge.Bad,
@@ -128,9 +128,9 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings
             missLate = Math.Max(missLate, Math.Max(kPoorLateWindow, badLateWindow + kPoorEarlyWindow));
         }
 
-        public DrawableAction TryPostBadOnPressed(ManiaHitWindows windows, BmsRouteState state)
+        public DrawableAction TryPostBadOnPressed(ManiaHitWindows windows, BmsRouteState state, bool poorEnabled)
         {
-            if (!state.CanRouteToKPoor || !windows.IsHitResultAllowed(MapTo(BmsJudge.KPoor)))
+            if (!poorEnabled || !state.CanRouteToKPoor || !windows.IsHitResultAllowed(MapTo(BmsJudge.KPoor)))
                 return DrawableAction.NotHandled;
 
             return DrawableAction.Extra(BmsJudge.KPoor, clearCanRouteToKPoor: true);
@@ -146,11 +146,11 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings
             return DrawableAction.Ignore;
         }
 
-        public DrawableAction EvaluateDrawablePress(ManiaHitWindows windows, double timeOffset, BmsRouteState state, bool forcePoorOnTailHoldBreak = false)
+        public DrawableAction EvaluateDrawablePress(ManiaHitWindows windows, double timeOffset, BmsRouteState state, bool poorEnabled, bool forcePoorOnTailHoldBreak = false)
         {
             double badLate = WindowFor(windows, BmsJudge.Bad, false);
 
-            if (state.CanRouteToKPoor && windows.IsHitResultAllowed(MapTo(BmsJudge.KPoor)))
+            if (poorEnabled && state.CanRouteToKPoor && windows.IsHitResultAllowed(MapTo(BmsJudge.KPoor)))
                 return DrawableAction.Extra(BmsJudge.KPoor, clearCanRouteToKPoor: true);
 
             var judge = resolvePressedJudge(windows, timeOffset, badLate);
@@ -163,7 +163,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings
 
             if (judge == BmsJudge.KPoor)
             {
-                if (!windows.IsHitResultAllowed(MapTo(BmsJudge.KPoor)))
+                if (!poorEnabled || !windows.IsHitResultAllowed(MapTo(BmsJudge.KPoor)))
                     return DrawableAction.Ignore;
 
                 bool isLatePress = IsLateOutsideBad(timeOffset, badLate);
@@ -174,7 +174,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings
                 return DrawableAction.Ignore;
             }
 
-            return DrawableAction.Final(judge, setCanRouteToKPoor: judge == BmsJudge.Bad && timeOffset < 0);
+            return DrawableAction.Final(judge, setCanRouteToKPoor: judge == BmsJudge.Bad && timeOffset < 0 && poorEnabled);
         }
 
         public static void ApplyRouteState(BmsRouteState state, DrawableAction action)

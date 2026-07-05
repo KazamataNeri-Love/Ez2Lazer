@@ -6,16 +6,16 @@ using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
+using osu.Framework.Graphics.Colour;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Game.Configuration;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Localization;
-using osu.Game.Rulesets.Scoring;
 using osu.Game.Rulesets.Judgements;
 using osu.Game.Rulesets.Mania.EzMania.Localization;
-using osu.Game.Rulesets.Mania.Skinning;
 using osu.Game.Rulesets.Objects.Types;
+using osu.Game.Rulesets.Scoring;
 using osu.Game.Screens.Play.HUD;
 using osu.Game.Screens.Play.HUD.HitErrorMeters;
 using osu.Game.Skinning;
@@ -58,18 +58,41 @@ namespace osu.Game.Rulesets.Mania.EzMania.HUD
         [SettingSource(typeof(EzHUDManiaStrings), nameof(EzHUDManiaStrings.BACKGROUND_COLOUR_LABEL), nameof(EzHUDManiaStrings.BACKGROUND_COLOUR_DESCRIPTION))]
         public BindableColour4 BackgroundColour { get; } = new BindableColour4(Colour4.Gray);
 
+        [SettingSource(typeof(EzHUDManiaStrings), nameof(EzHUDManiaStrings.BACKGROUND_GRADIENT_LABEL), nameof(EzHUDManiaStrings.BACKGROUND_GRADIENT_DESCRIPTION))]
+        public BindableBool BackgroundGradient { get; } = new BindableBool();
+
         [SettingSource(typeof(EzHUDManiaStrings), nameof(EzHUDManiaStrings.UNIFIED_MOVEMENT_LABEL), nameof(EzHUDManiaStrings.UNIFIED_MOVEMENT_DESCRIPTION))]
         public BindableBool UnifiedMovement { get; } = new BindableBool();
 
+        [SettingSource(typeof(EzHUDManiaStrings), nameof(EzHUDManiaStrings.STOP_MOVEMENT_LABEL), nameof(EzHUDManiaStrings.STOP_MOVEMENT_DESCRIPTION))]
+        public BindableBool StopMovement { get; } = new BindableBool();
+
+        [SettingSource(typeof(EzHUDManiaStrings), nameof(EzHUDManiaStrings.MATCH_PANEL_WIDTH_LABEL), nameof(EzHUDManiaStrings.MATCH_PANEL_WIDTH_DESCRIPTION))]
+        public BindableBool MatchManiaPanelWidth { get; } = ManiaPlayfieldLayoutHelper.CreateDefaultMatchPanelWidthBindable();
+
+        [SettingSource(typeof(EzHUDManiaStrings), nameof(EzHUDManiaStrings.MATCH_HIT_POSITION_LAYOUT_LABEL), nameof(EzHUDManiaStrings.MATCH_HIT_POSITION_LAYOUT_DESCRIPTION))]
+        public BindableBool MatchManiaHitPositionLayout { get; } = new BindableBool();
+
         private Container[]? columns;
         private Box[] judgementMarkers = null!;
-        private Box? backgroundBox;
+        private Box? backgroundSolid;
+        private Box? backgroundGradientTop;
+        private Box? backgroundGradientBottom;
 
         private double[] floatingAverages = null!;
         private int keyCount;
 
         private Bindable<double> columnWidth = null!;
         private Bindable<double> specialFactor = null!;
+        private Bindable<ColumnWidthStyle> columnWidthStyle = null!;
+        private Bindable<bool> hitPositionGlobalEnable = null!;
+        private Bindable<double> hitPosition = null!;
+        private Ez2ConfigManager ezSkinConfig = null!;
+
+        private Anchor savedAnchor;
+        private Anchor savedOrigin;
+        private Vector2 savedPosition;
+        private bool savedLayout;
 
         [Resolved]
         private InputCountController controller { get; set; } = null!;
@@ -77,11 +100,18 @@ namespace osu.Game.Rulesets.Mania.EzMania.HUD
         [Resolved]
         private ISkinSource skin { get; set; } = null!;
 
+        [Resolved]
+        private SkinManager skinManager { get; set; } = null!;
+
         [BackgroundDependencyLoader]
         private void load(Ez2ConfigManager ezSkinConfig)
         {
+            this.ezSkinConfig = ezSkinConfig;
             columnWidth = ezSkinConfig.GetBindable<double>(Ez2Setting.ColumnWidth);
             specialFactor = ezSkinConfig.GetBindable<double>(Ez2Setting.SpecialFactor);
+            columnWidthStyle = ezSkinConfig.GetBindable<ColumnWidthStyle>(Ez2Setting.ColumnWidthStyle);
+            hitPositionGlobalEnable = ezSkinConfig.GetBindable<bool>(Ez2Setting.HitPositionGlobalEnable);
+            hitPosition = ezSkinConfig.GetBindable<double>(Ez2Setting.HitPosition);
             floatingAverages = Array.Empty<double>();
             judgementMarkers = Array.Empty<Box>();
             columns = Array.Empty<Container>();
@@ -97,7 +127,9 @@ namespace osu.Game.Rulesets.Mania.EzMania.HUD
                 floatingAverages = Array.Empty<double>();
                 judgementMarkers = Array.Empty<Box>();
                 columns = Array.Empty<Container>();
-                backgroundBox = null!;
+                backgroundSolid = null!;
+                backgroundGradientTop = null!;
+                backgroundGradientBottom = null!;
                 return;
             }
 
@@ -112,13 +144,25 @@ namespace osu.Game.Rulesets.Mania.EzMania.HUD
                 Margin = new MarginPadding(2),
                 Children = new Drawable[]
                 {
-                    backgroundBox = new Box
+                    backgroundSolid = new Box
                     {
                         RelativeSizeAxes = Axes.Both,
                         Anchor = Anchor.Centre,
                         Origin = Anchor.Centre,
-                        Colour = BackgroundColour.Value,
-                        Alpha = BackgroundAlpha.Value,
+                    },
+                    backgroundGradientTop = new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Height = 0.5f,
+                        Anchor = Anchor.Centre,
+                        Origin = Anchor.BottomCentre,
+                    },
+                    backgroundGradientBottom = new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Height = 0.5f,
+                        Anchor = Anchor.Centre,
+                        Origin = Anchor.TopCentre,
                     },
                     new FillFlowContainer
                     {
@@ -161,6 +205,38 @@ namespace osu.Game.Rulesets.Mania.EzMania.HUD
                 }
             };
             Height = MoveHeight.Value;
+            updateBackgroundAppearance();
+        }
+
+        private void updateBackgroundAppearance()
+        {
+            if (backgroundSolid == null || backgroundGradientTop == null || backgroundGradientBottom == null)
+                return;
+
+            var colour = BackgroundColour.Value;
+            float alpha = BackgroundAlpha.Value;
+
+            if (BackgroundGradient.Value)
+            {
+                backgroundSolid.Alpha = 0;
+
+                var centreColour = colour.Opacity(alpha);
+                var transparentColour = colour.Opacity(0);
+
+                backgroundGradientTop.Alpha = 1;
+                backgroundGradientTop.Colour = ColourInfo.GradientVertical(transparentColour, centreColour);
+
+                backgroundGradientBottom.Alpha = 1;
+                backgroundGradientBottom.Colour = ColourInfo.GradientVertical(centreColour, transparentColour);
+            }
+            else
+            {
+                backgroundSolid.Colour = colour;
+                backgroundSolid.Alpha = alpha;
+
+                backgroundGradientTop.Alpha = 0;
+                backgroundGradientBottom.Alpha = 0;
+            }
         }
 
         protected override void LoadComplete()
@@ -171,6 +247,15 @@ namespace osu.Game.Rulesets.Mania.EzMania.HUD
 
             columnWidth.BindValueChanged(_ => updateWidth(), true);
             specialFactor.BindValueChanged(_ => updateWidth(), true);
+            columnWidthStyle.BindValueChanged(_ => updateWidth(), true);
+            MatchManiaPanelWidth.BindValueChanged(_ => updateWidth(), true);
+
+            hitPositionGlobalEnable.BindValueChanged(_ => updateHitPositionLayout());
+            hitPosition.BindValueChanged(_ => updateHitPositionLayout());
+            MatchManiaHitPositionLayout.BindValueChanged(_ => updateHitPositionLayout(), true);
+
+            ezSkinConfig.ColumnTypeChanged += (_, __, ___) => updateWidth();
+            skin.SourceChanged += onSkinChanged;
 
             // 更新标识块高度
             MarkerHeight.BindValueChanged(height =>
@@ -194,25 +279,22 @@ namespace osu.Game.Rulesets.Mania.EzMania.HUD
                 Invalidate(Invalidation.DrawSize);
             }, true);
 
-            // 更新背景透明度
-            BackgroundAlpha.BindValueChanged(alpha =>
-            {
-                if (backgroundBox == null)
-                    return;
-
-                backgroundBox.Alpha = alpha.NewValue;
-            }, true);
-
-            // 更新背景颜色
-            BackgroundColour.BindValueChanged(colour =>
-            {
-                if (backgroundBox == null)
-                    return;
-
-                backgroundBox.Colour = colour.NewValue;
-            }, true);
+            BackgroundAlpha.BindValueChanged(_ => updateBackgroundAppearance(), true);
+            BackgroundColour.BindValueChanged(_ => updateBackgroundAppearance(), true);
+            BackgroundGradient.BindValueChanged(_ => updateBackgroundAppearance(), true);
 
             UnifiedMovement.BindValueChanged(_ => updateAllMarkerPositions());
+
+            StopMovement.BindValueChanged(e =>
+            {
+                if (e.NewValue)
+                {
+                    foreach (var marker in judgementMarkers)
+                        marker.ClearTransforms();
+                }
+                else
+                    updateAllMarkerPositions();
+            }, true);
         }
 
         private void updateWidth()
@@ -220,21 +302,62 @@ namespace osu.Game.Rulesets.Mania.EzMania.HUD
             if (keyCount <= 0 || columns == null)
                 return;
 
+            int keyMode = controller.Triggers.Count;
             float totalWidth = 0;
 
             for (int i = 0; i < keyCount; i++)
             {
-                float? widthS = skin.GetConfig<ManiaSkinConfigurationLookup, float>(
-                                        new ManiaSkinConfigurationLookup(LegacyManiaSkinConfigurationLookups.ColumnWidth, i))
-                                    ?.Value;
+                var columnSize = ManiaPlayfieldLayoutHelper.CalculateColumnSize(
+                    i,
+                    keyMode,
+                    skin,
+                    skinManager,
+                    ezSkinConfig,
+                    columnWidth.Value,
+                    specialFactor.Value,
+                    columnWidthStyle.Value,
+                    mobileAdjust: 1f,
+                    MatchManiaPanelWidth.Value);
 
-                float newWidth = widthS ?? (float)columnWidth.Value;
-
-                columns[i].Width = newWidth;
-                totalWidth += newWidth;
+                columns[i].Width = columnSize.Width;
+                columns[i].Margin = columnSize.Margin;
+                totalWidth += columnSize.TotalWidth;
             }
 
             Width = totalWidth;
+        }
+
+        private void onSkinChanged()
+        {
+            updateWidth();
+            updateHitPositionLayout();
+        }
+
+        private void updateHitPositionLayout()
+        {
+            if (MatchManiaHitPositionLayout.Value)
+            {
+                if (!savedLayout)
+                {
+                    savedAnchor = Anchor;
+                    savedOrigin = Origin;
+                    savedPosition = Position;
+                    savedLayout = true;
+                }
+
+                ManiaPlayfieldLayoutHelper.ApplyHitPositionPlacement(
+                    this,
+                    ManiaPlayfieldLayoutHelper.GetHitPosition(skin, hitPositionGlobalEnable.Value, hitPosition.Value));
+                return;
+            }
+
+            if (!savedLayout)
+                return;
+
+            Anchor = savedAnchor;
+            Origin = savedOrigin;
+            Position = savedPosition;
+            savedLayout = false;
         }
 
         protected override void OnNewJudgement(JudgementResult judgement)
@@ -295,7 +418,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.HUD
 
         private void updateAllMarkerPositions()
         {
-            if (judgementMarkers.Length == 0)
+            if (judgementMarkers.Length == 0 || StopMovement.Value)
                 return;
 
             if (UnifiedMovement.Value)
@@ -325,13 +448,16 @@ namespace osu.Game.Rulesets.Mania.EzMania.HUD
 
         private void moveMarker(Box marker, float targetY, HitResult? hitResult = null)
         {
+            if (hitResult != null)
+                marker.Colour = GetColourForHitResult(hitResult.Value);
+
+            if (StopMovement.Value)
+                return;
+
             const int marker_move_duration = 800;
 
             marker.Y = targetY;
             marker.MoveToY(targetY, marker_move_duration, Easing.OutQuint);
-
-            if (hitResult != null)
-                marker.Colour = GetColourForHitResult(hitResult.Value);
         }
 
         private float getRelativeJudgementPosition(double value)

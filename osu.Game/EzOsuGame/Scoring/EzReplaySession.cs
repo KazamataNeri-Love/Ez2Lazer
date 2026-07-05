@@ -3,43 +3,107 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using osu.Game.Beatmaps;
+using osu.Game.EzOsuGame.Configuration;
+using osu.Game.Rulesets.Scoring;
 using osu.Game.Scoring;
 
 namespace osu.Game.EzOsuGame.Scoring
 {
     public abstract partial class EzReplaySession : IEzReplaySession
     {
-        protected readonly ConcurrentDictionary<string, Lazy<Task<Score>>> ScoreCache = new ConcurrentDictionary<string, Lazy<Task<Score>>>();
-        protected readonly ConcurrentDictionary<string, Lazy<Task<EzScoreTimeline>>> TimelineCache = new ConcurrentDictionary<string, Lazy<Task<EzScoreTimeline>>>();
-        protected readonly ConcurrentDictionary<string, Lazy<Task<ReplayRunResult>>> CombinedCache = new ConcurrentDictionary<string, Lazy<Task<ReplayRunResult>>>();
+        private readonly ConcurrentDictionary<string, Lazy<Task<(Score Score, EzScoreTimeline Timeline)>>> sessionRunCache =
+            new ConcurrentDictionary<string, Lazy<Task<(Score Score, EzScoreTimeline Timeline)>>>();
 
-        protected abstract Task<Score> RunScoreAsyncFunc(Score score, IBeatmap beatmap, IGameplayEnvironment? environment, CancellationToken cancellationToken);
+        protected abstract (Score Score, EzScoreTimeline Timeline) RunWithTimeline(
+            Score score, IBeatmap beatmap, IGameplayEnvironment environment, CancellationToken cancellationToken);
 
-        protected abstract Task<EzScoreTimeline> RunTimelineAsyncFunc(Score score, IBeatmap beatmap, IGameplayEnvironment? environment, CancellationToken cancellationToken);
+        public async Task<Score> RunAsync(Score score, IBeatmap beatmap, ReplayRunPurpose purpose, CancellationToken cancellationToken = default)
+        {
+            var (resultScore, _, _) = await getOrRunSession(score, beatmap, purpose, cancellationToken).ConfigureAwait(false);
+            return resultScore;
+        }
 
-        protected abstract Task<ReplayRunResult> RunCombinedAsyncFunc(ReplayRunRequest request, CancellationToken cancellationToken);
+        public async Task<EzScoreTimeline> RunTimelineAsync(Score score, IBeatmap beatmap, ReplayRunPurpose purpose, CancellationToken cancellationToken = default)
+        {
+            var (_, timeline, _) = await getOrRunSession(score, beatmap, purpose, cancellationToken).ConfigureAwait(false);
+            return timeline;
+        }
 
-        public virtual Task<Score> RunAsync(Score score, IBeatmap beatmap, IGameplayEnvironment environment, CancellationToken cancellationToken = default)
-            => GetOrCreate(
-                ScoreCache,
-                BuildCacheKey("score", score, beatmap, environment),
-                () => RunScoreAsyncFunc(score, beatmap, environment, cancellationToken));
+        public async Task<EzScoreTimeline> RunTimelineDirectAsync(Score score, IBeatmap beatmap, ReplayRunPurpose purpose, CancellationToken cancellationToken = default)
+        {
+            var resolvedEnv = ResolveEnvironment(score, purpose);
+            var (_, timeline) = await runSessionDirect(score, beatmap, resolvedEnv, cancellationToken).ConfigureAwait(false);
+            return timeline;
+        }
 
-        public virtual Task<EzScoreTimeline> RunTimelineAsync(Score score, IBeatmap beatmap, IGameplayEnvironment environment, CancellationToken cancellationToken = default)
-            => GetOrCreate(
-                TimelineCache,
-                BuildCacheKey("timeline", score, beatmap, environment),
-                () => RunTimelineAsyncFunc(score, beatmap, environment, cancellationToken));
+        public async Task<ReplayRunResult> RunRequestAsync(ReplayRunRequest request, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var (score, timeline, environment) = await getOrRunSession(request, cancellationToken).ConfigureAwait(false);
 
-        public virtual Task<ReplayRunResult> RunRequestAsync(ReplayRunRequest request, CancellationToken cancellationToken = default)
-            => GetOrCreate(
-                CombinedCache,
-                BuildCacheKey($"combined:{request.Purpose}", request.Score, request.Beatmap, request.Environment),
-                () => RunCombinedAsyncFunc(request, cancellationToken));
+                return new ReplayRunResult(score, timeline, environment, hitCache: false, isValidReplay: true);
+            }
+            catch (OperationCanceledException)
+            {
+                return ReplayRunResult.Cancelled();
+            }
+            catch
+            {
+                return ReplayRunResult.InvalidReplay(request.Score);
+            }
+        }
+
+        public async Task<List<HitEvent>> RunHitEventsAsync(Score score, IBeatmap beatmap, CancellationToken cancellationToken = default)
+        {
+            var (resultScore, _, _) = await getOrRunSession(score, beatmap, ReplayRunPurpose.ForStored, cancellationToken).ConfigureAwait(false);
+            return resultScore.ScoreInfo.HitEvents.ToList();
+        }
+
+        private async Task<(Score Score, EzScoreTimeline Timeline, GameplayEnvironment Environment)> getOrRunSession(
+            ReplayRunRequest request,
+            CancellationToken cancellationToken)
+        {
+            var resolvedEnv = ResolveEnvironment(request);
+
+            var result = await GetOrCreate(
+                sessionRunCache,
+                BuildCacheKey($"session:{request.Purpose}", request.Score, request.Beatmap, resolvedEnv),
+                () => runSessionDirect(request.Score, request.Beatmap, resolvedEnv, cancellationToken)).ConfigureAwait(false);
+
+            return (result.Score, result.Timeline, resolvedEnv);
+        }
+
+        private async Task<(Score Score, EzScoreTimeline Timeline, GameplayEnvironment Environment)> getOrRunSession(
+            Score score,
+            IBeatmap beatmap,
+            ReplayRunPurpose purpose,
+            CancellationToken cancellationToken)
+            => await getOrRunSession(new ReplayRunRequest(score, beatmap, purpose), cancellationToken).ConfigureAwait(false);
+
+        private Task<(Score Score, EzScoreTimeline Timeline)> runSessionDirect(Score score, IBeatmap beatmap, IGameplayEnvironment environment, CancellationToken cancellationToken)
+        {
+            return Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return RunWithTimeline(score, beatmap, environment, cancellationToken);
+            }, cancellationToken);
+        }
+
+        protected static GameplayEnvironment ResolveEnvironment(ReplayRunRequest request)
+        {
+            var env = GlobalConfigStore.EzConfig.ResolveForSession(request.Purpose, request.Score.ScoreInfo);
+            return request.OffsetPlusMania == 0 ? env : env with { OffsetPlusMania = request.OffsetPlusMania };
+        }
+
+        protected static GameplayEnvironment ResolveEnvironment(Score score, ReplayRunPurpose purpose)
+            => GlobalConfigStore.EzConfig.ResolveForSession(purpose, score.ScoreInfo);
 
         protected static Task<T> GetOrCreate<T>(ConcurrentDictionary<string, Lazy<Task<T>>> cache, string cacheKey, Func<Task<T>> factory)
         {
@@ -47,20 +111,12 @@ namespace osu.Game.EzOsuGame.Scoring
             return lazy.Value;
         }
 
-        protected static string BuildCacheKey(string purpose, Score score, IBeatmap beatmap, IGameplayEnvironment? environment)
+        protected static string BuildCacheKey(string purpose, Score score, IBeatmap beatmap, IGameplayEnvironment environment)
         {
             string scoreKey = $"hash:{score.ScoreInfo.Hash}|id:{score.ScoreInfo.ID}";
             string beatmapKey = $"hash:{beatmap.BeatmapInfo.Hash}|id:{beatmap.BeatmapInfo.ID}";
-
-            string envKey;
-
-            if (environment == null)
-                envKey = "env:null";
-            else
-            {
-                string bmsPoorKey = environment.BmsPoorHitResultEnable.ToString();
-                envKey = $"hm:{(int)environment.ManiaHitMode}|health:{(int)environment.ManiaHealthMode}|judge:{(int)environment.JudgePrecedence}|offset:{environment.OffsetPlusMania:F3}|bmsPoor:{bmsPoorKey}";
-            }
+            string bmsPoorKey = environment.BmsPoorHitResultEnable.ToString();
+            string envKey = $"hm:{(int)environment.ManiaHitMode}|health:{(int)environment.ManiaHealthMode}|judge:{(int)environment.JudgePrecedence}|offset:{environment.OffsetPlusMania:F3}|bmsPoor:{bmsPoorKey}";
 
             string raw = $"{purpose}|{scoreKey}|{beatmapKey}|{envKey}|rule:{score.ScoreInfo.Ruleset.OnlineID}";
             return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(raw)));

@@ -17,6 +17,7 @@ using osu.Game.Configuration;
 using osu.Game.Graphics;
 using osu.Game.EzOsuGame.Mods.LAsMods;
 using osu.Game.EzOsuGame.Mods.CommunityMod;
+using osu.Game.EzOsuGame.Scoring;
 using osu.Game.EzOsuGame.Statistics;
 using osu.Game.Localisation;
 using osu.Game.Overlays.Settings;
@@ -37,6 +38,7 @@ using osu.Game.Rulesets.Osu.Scoring;
 using osu.Game.Rulesets.Osu.Skinning.Argon;
 using osu.Game.Rulesets.Osu.Skinning.Default;
 using osu.Game.Rulesets.Osu.Skinning.Legacy;
+using osu.Game.Rulesets.Osu.EzOsu.ReplayJudge;
 using osu.Game.Rulesets.Osu.Statistics;
 using osu.Game.Rulesets.Osu.UI;
 using osu.Game.Rulesets.Replays.Types;
@@ -57,6 +59,8 @@ namespace osu.Game.Rulesets.Osu
         public override DrawableRuleset CreateDrawableRulesetWith(IBeatmap beatmap, IReadOnlyList<Mod>? mods = null) => new DrawableOsuRuleset(this, beatmap, mods);
 
         public override ScoreProcessor CreateScoreProcessor() => new OsuScoreProcessor();
+
+        public override IEzReplaySession CreateEzReplaySession() => new OsuReplaySessionService();
 
         public override HealthProcessor CreateHealthProcessor(double drainStartTime) => new OsuHealthProcessor(drainStartTime);
 

@@ -7,21 +7,25 @@ using osu.Game.Scoring;
 namespace osu.Game.EzOsuGame.Scoring
 {
     /// <summary>
-    /// Replay Session 运行请求：统一封装 score、beatmap、environment 与用途。
+    /// Replay Session 运行请求：由 <see cref="ReplayRunPurpose"/> 驱动环境解析。
     /// </summary>
     public sealed class ReplayRunRequest
     {
         public Score Score { get; }
         public IBeatmap Beatmap { get; }
-        public IGameplayEnvironment? Environment { get; }
         public ReplayRunPurpose Purpose { get; }
 
-        public ReplayRunRequest(Score score, IBeatmap beatmap, IGameplayEnvironment? environment, ReplayRunPurpose purpose = ReplayRunPurpose.ForStored)
+        /// <summary>
+        /// Session 判定用 offset（毫秒）。0 与未传等价；Graph 落定后传当前滑条值。
+        /// </summary>
+        public double OffsetPlusMania { get; }
+
+        public ReplayRunRequest(Score score, IBeatmap beatmap, ReplayRunPurpose purpose, double offsetPlusMania = 0)
         {
             Score = score;
             Beatmap = beatmap;
-            Environment = environment;
             Purpose = purpose;
+            OffsetPlusMania = offsetPlusMania;
         }
     }
 }

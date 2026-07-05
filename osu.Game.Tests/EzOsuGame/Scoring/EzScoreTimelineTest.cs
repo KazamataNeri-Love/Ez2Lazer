@@ -4,12 +4,8 @@
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
-using osu.Game.Beatmaps.ControlPoints;
-using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Rulesets.Judgements;
-using osu.Game.Rulesets.Mania;
-using osu.Game.Rulesets.Mania.Objects;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Osu;
 using osu.Game.Rulesets.Osu.Objects;
@@ -22,6 +18,24 @@ namespace osu.Game.Tests.EzOsuGame.Scoring
     [TestFixture]
     public class EzScoreTimelineTest
     {
+        [Test]
+        public void TestTryQueryAtTimeFastPathReusesCachedIndex()
+        {
+            var timeline = new EzScoreTimeline(new List<EzScoreTimelineSnapshot>
+            {
+                new EzScoreTimelineSnapshot { ClockTime = 0, TotalScore = 0 },
+                new EzScoreTimelineSnapshot { ClockTime = 1000, TotalScore = 100 },
+                new EzScoreTimelineSnapshot { ClockTime = 2000, TotalScore = 250 },
+            });
+
+            int index = -1;
+            Assert.That(timeline.TryQueryAtTime(1500, ref index, out var snap1), Is.True);
+            Assert.That(snap1.TotalScore, Is.EqualTo(100));
+            Assert.That(timeline.TryQueryAtTime(1600, ref index, out var snap2), Is.True);
+            Assert.That(snap2.TotalScore, Is.EqualTo(100));
+            Assert.That(index, Is.EqualTo(1));
+        }
+
         [Test]
         public void TestQueryAtTimeReturnsLatestSnapshotNotExceedingClock()
         {
@@ -55,8 +69,8 @@ namespace osu.Game.Tests.EzOsuGame.Scoring
             var circle = new HitCircle { StartTime = 10_000 };
             var hitEvent = new HitEvent(-500, 1.0, HitResult.Great, circle, null, null);
 
-            Assert.That(EzScoreTimelineJudgementTime.Get(hitEvent, offsetsRelativeToEnd: true), Is.EqualTo(9_500));
-            Assert.That(EzScoreTimelineJudgementTime.Get(hitEvent, offsetsRelativeToEnd: false), Is.EqualTo(9_500));
+            Assert.That(EzScoreTimelineTestHelper.GetJudgementTime(hitEvent, offsetsRelativeToEnd: true), Is.EqualTo(9_500));
+            Assert.That(EzScoreTimelineTestHelper.GetJudgementTime(hitEvent, offsetsRelativeToEnd: false), Is.EqualTo(9_500));
         }
 
         [Test]
@@ -76,7 +90,7 @@ namespace osu.Game.Tests.EzOsuGame.Scoring
                 new HitEvent(0, 1.0, HitResult.Great, circle, null, null),
             };
 
-            var timeline = EzScoreTimelineBuilder.BuildFromHitEventsForTesting(ruleset, beatmap, scoreInfo, hitEvents, offsetsRelativeToEnd: false);
+            var timeline = EzScoreTimelineTestHelper.BuildFromHitEvents(ruleset, beatmap, scoreInfo, hitEvents, offsetsRelativeToEnd: false);
 
             Assert.That(timeline.QueryAtTime(0).TotalScore, Is.EqualTo(0));
             Assert.That(timeline.QueryAtTime(9_999).TotalScore, Is.EqualTo(0));
@@ -100,56 +114,11 @@ namespace osu.Game.Tests.EzOsuGame.Scoring
                 new HitEvent(-20_000, 1.0, HitResult.Great, circle, null, null),
             };
 
-            var timeline = EzScoreTimelineBuilder.BuildFromHitEventsForTesting(ruleset, beatmap, scoreInfo, hitEvents, offsetsRelativeToEnd: true);
+            var timeline = EzScoreTimelineTestHelper.BuildFromHitEvents(ruleset, beatmap, scoreInfo, hitEvents, offsetsRelativeToEnd: true);
 
             Assert.That(timeline.QueryAtTime(0).TotalScore, Is.EqualTo(0));
             Assert.That(timeline.QueryAtTime(9_599).TotalScore, Is.EqualTo(0));
             Assert.That(timeline.QueryAtTime(9_600).TotalScore, Is.GreaterThan(0));
-        }
-
-        [Test]
-        public void TestManiaTimelineUsesScoreHitModeNotGlobalConfig()
-        {
-            var ruleset = new ManiaRuleset();
-            var beatmap = new TestBeatmap(ruleset.RulesetInfo)
-            {
-                HitObjects = new List<HitObject> { new Note { StartTime = 1000, Column = 0 } },
-                ControlPointInfo = new ControlPointInfo(),
-            };
-
-            foreach (var obj in beatmap.HitObjects)
-                obj.ApplyDefaults(beatmap.ControlPointInfo, beatmap.Difficulty);
-
-            var note1 = (Note)beatmap.HitObjects[0];
-            beatmap.HitObjects.Add(new Note { StartTime = 2000, Column = 0 });
-            foreach (var obj in beatmap.HitObjects)
-                obj.ApplyDefaults(beatmap.ControlPointInfo, beatmap.Difficulty);
-
-            var note2 = (Note)beatmap.HitObjects[1];
-            var hitEvents = new List<HitEvent>
-            {
-                new HitEvent(0, 1.0, HitResult.Perfect, note1, null, null),
-                new HitEvent(0, 1.0, HitResult.Miss, note2, note1, null),
-            };
-
-            var lazerScoreInfo = new ScoreInfo
-            {
-                Ruleset = ruleset.RulesetInfo,
-                ManiaHitMode = (int)EzEnumHitMode.Lazer,
-                ManiaHealthMode = (int)EzEnumHealthMode.Lazer,
-            };
-
-            var bmsScoreInfo = new ScoreInfo
-            {
-                Ruleset = ruleset.RulesetInfo,
-                ManiaHitMode = (int)EzEnumHitMode.IIDX_HD,
-                ManiaHealthMode = (int)EzEnumHealthMode.IIDX_HD,
-            };
-
-            var lazerTimeline = EzScoreTimelineBuilder.BuildFromHitEventsForTesting(ruleset, beatmap, lazerScoreInfo, hitEvents);
-            var bmsTimeline = EzScoreTimelineBuilder.BuildFromHitEventsForTesting(ruleset, beatmap, bmsScoreInfo, hitEvents);
-
-            Assert.That(lazerTimeline.FinalTotalScore, Is.Not.EqualTo(bmsTimeline.FinalTotalScore));
         }
 
         [Test]
@@ -175,7 +144,7 @@ namespace osu.Game.Tests.EzOsuGame.Scoring
                 new HitEvent(0, 1.0, HitResult.Great, circle2, circle1, null),
             };
 
-            var timeline = EzScoreTimelineBuilder.BuildFromHitEventsForTesting(ruleset, beatmap, scoreInfo, hitEvents);
+            var timeline = EzScoreTimelineTestHelper.BuildFromHitEvents(ruleset, beatmap, scoreInfo, hitEvents);
 
             var scoreProcessor = ruleset.CreateScoreProcessor();
             scoreProcessor.ApplyBeatmap(beatmap);

@@ -6,10 +6,10 @@
 
 > 同一 score + 同一 environment 下，`ManiaReplaySession.Run` 产出的 **HitEvents + Score** 必须与「完整 Drawable 游玩或 ReplayPlayer 回放一遍，进入结算时 `ScoreProcessor` 已填充的结果」**字段级一致**。
 
-| 路径 | 是否绘制 | HitEvents 来源 |
-|------|---------|----------------|
-| 刚打完 / ReplayPlayer 回放 | 是 | `ScoreProcessor.PopulateScore` → 内存 HitEvents |
-| 排行榜 / 选歌重算 | **否** | `ManiaReplaySession.Run` → **必须等价于上表** |
+| 路径                    | 是否绘制  | HitEvents 来源                                  |
+|-----------------------|-------|-----------------------------------------------|
+| 刚打完 / ReplayPlayer 回放 | 是     | `ScoreProcessor.PopulateScore` → 内存 HitEvents |
+| 排行榜 / 选歌重算（Mania） | **否** | `ManiaReplaySession.Run`（原始环境或当前环境，`OffsetPlusMania=0`）→ 写回 Statistics；须等价于 Drawable 结算 |
 
 `ManiaScoreHitEventGenerator` 仅为 StatisticsPanel 薄壳委托 Session，**不是**参考实现；Drawable/Replay 游玩后的 `ScoreProcessor` 输出才是唯一黄金标准。
 
@@ -36,11 +36,11 @@ Parity 测试：`TestSceneReplaySessionParity`（Drawable replay vs Session，�
 
 ### 同环境等价（成绩嵌入配置 ≡ 当前全局）
 
-| 数据源 | 必须一致 |
-|--------|---------|
-| Realm `Statistics` | ✓ |
-| Graph Original | ✓ |
-| Graph Now（Session FromLive） | ✓ |
+| 数据源                                      | 必须一致              |
+|------------------------------------------|-------------------|
+| Realm `Statistics`                       | ✓                 |
+| Graph Original                           | ✓                 |
+| Graph Now（Session FromLive）              | ✓                 |
 | `aggregate(Session HitEvents by Result)` | ≡ SP `Statistics` |
 
 `ManiaReplaySession.Run` 经 `ScoreProcessor.PopulateScore` 写回传入的 `Score` 并返回；Graph / 测试读 `score.ScoreInfo`。`RunHitEvents` 为工具 API（`Run(...).ScoreInfo.HitEvents`），当前生产路径不调用。StatisticsPanel / Bridge **只** patch HitEvents，**不**用 Session 覆盖 Realm `Statistics`。
@@ -64,37 +64,67 @@ Parity 测试：`TestSceneReplaySessionParity`（Drawable replay vs Session，�
 
 ### 双轨
 
-| 路径                             | 判定源                                                               |
-|--------------------------------|-------------------------------------------------------------------|
-| Lazer/Classic 游玩               | 官方 `DrawableNote.CheckForResult` inline（不抽离）                      |
-| Lazer/Classic Session          | `Replicas/Lazer*JudgementReplica`                                 |
+| 路径                             | 判定源                                                                                                            |
+|--------------------------------|----------------------------------------------------------------------------------------------------------------|
+| Lazer/Classic 游玩               | 官方 `DrawableNote.CheckForResult` inline（不抽离）                                                                   |
+| Lazer/Classic Session          | `Replicas/Lazer*JudgementReplica`                                                                              |
 | Ez HitMode 游玩                  | `DrawableNote` 一行 Switcher → `ManiaEzDrawableJudgement` → Mapping（**禁止** HitMode 专用 Drawable 子类；Malody LN 等同理） |
-| Ez HitMode Session / Generator | `ManiaReplaySession` → `ManiaJudgementRegistry` → 同一 Mapping      |
+| Ez HitMode Session / Generator | `ManiaReplaySession` → `ManiaJudgementRegistry` → 同一 Mapping                                                   |
 
 Drawable replay 播放时，`ManiaEzDrawableJudgement` 优先从 `DrawableRuleset.ReplayScore.ScoreInfo` 取 HitMode（`FromScore`），无 embedded 时回退 `FromLive`。
+
+### KPoor 启用条件（BMS HitMode）
+
+KPoor 是 BMS 专有的 **post-Bad 二次 Poor**（`BmsJudge.KPoor` → `HitResult.Poor`，经 `CanRouteToKPoor` / `TryRoutePostBadKPoor` 状态机）。与窗口内的普通 `Poor` **不是同一机制**。
+
+**须同时满足**：
+
+1. **HitMode** 走 BMS 判定（IIDX / LR2 / raja 等；Lazer HitMode 无 BMS 路由 → 无 KPoor）
+2. **HealthMode** 为 BMS 血量表：`IIDX_HD` / `LR2_HD` / `Raja_HD`（`HealthModeHelper.IsBMSHealthMode`）
+3. **`BmsPoorHitResultEnable == true`**（全局配置，不写入 ScoreInfo）
+
+**统一 gate**（Session / Drawable / Rejudge 预览必须相同）：
+
+```csharp
+bool poorEnabled = HealthModeHelper.IsBMSHealthMode(environment.ManiaHealthMode)
+                   && environment.BmsPoorHitResultEnable;
+```
+
+| 场景 | KPoor |
+|------|-------|
+| BMS HitMode + **BMS HealthMode** + BmsPoor ON | 可产生 |
+| BMS HitMode + **Lazer HealthMode** + BmsPoor ON | **不产生** |
+| BMS HealthMode + BmsPoor OFF | 不产生 |
+
+**实现锚点**：
+
+- Session：`ManiaReplaySessionSimulator` → `EvaluateSessionPress(..., poorEnabled)`
+- Drawable：`EvaluateDrawablePress(..., poorEnabled)`（与 Session 同一公式）
+- Rejudge：`ManiaHitEventRejudgeHelper` 传入完整 `poorEnabled`（含 HealthMode）
+
+**Parity**：须覆盖 BMS HitMode + Lazer Health + BmsPoor ON → **KPoor 计数为 0 且 Drawable ≡ Session**。
 
 ### 成绩统计环境
 
 | 字段                                 | 来源                                                                                   |
 |------------------------------------|--------------------------------------------------------------------------------------|
 | HitMode / HealthMode（统计 HitEvents） | `ScoreInfo.ManiaHitMode` / `ManiaHealthMode`（提交时写入）→ `GameplayEnvironment.FromScore` |
-| HitMode / HealthMode（角逐时间线）     | **当前全局** `FromLive`；不读成绩嵌入字段                                                     |
+| HitMode / HealthMode（角逐时间线）        | **当前全局** `FromLive`；不读成绩嵌入字段                                                         |
 | JudgePrecedence / OffsetPlusMania  | 当前全局配置（`FromLive` fallback）                                                          |
-| **BmsPoorHitResultEnable (KPoor)** | **当前全局配置**（未写入 ScoreInfo；统计重算沿用打开成绩时的全局 KPoor 开关，与当时游玩可能不一致）                         |
+| **KPoor（post-Bad Poor）** | `poorEnabled = IsBMSHealthMode(HealthMode) && BmsPoorHitResultEnable`（见上 §KPoor）；**须 BMS HealthMode**，非 Lazer Health；JudgePrecedence 不参与；开关未写入 ScoreInfo |
+| **BmsPoorHitResultEnable** | 当前全局配置；单独为 true **不足以**产 KPoor |
 
-生产入口：`StatisticsPanel` → `EzScoreReloadBridge` → `ManiaScoreHitEventGenerator` → `ManiaReplaySession`。
-
-`ManiaRuleset.RunReplayAsync` 为无 UI 公开 API，返回 `Run` 填充后的 `Score`，与 Generator 同源。
+生产入口：`StatisticsPanel` / `ManiaScoreHitEventGenerator` → `ManiaReplaySessionService`（ForStored，env 由 Session 内 `ResolveForReplay` 解析）。
 
 ### 分数时间线（角逐 HUD 等下游消费）
 
-| 路径 | 数据源 |
-|------|--------|
-| 统计 / HitEvents | `ManiaReplaySession.Run` → `PopulateScore` → `ScoreInfo` |
-| **时间线** | `ManiaReplaySession.RunTimeline` → 同一遍 SP，每次 `ApplyResult` 后采 `TotalScore`/`Accuracy`/… 快照 → `EzScoreTimeline` |
+| 路径             | 数据源                                                                                                            |
+|----------------|----------------------------------------------------------------------------------------------------------------|
+| 统计 / HitEvents | `ManiaReplaySession.Run` → `PopulateScore` → `ScoreInfo`                                                       |
+| **时间线**        | `ManiaReplaySession.RunTimeline` → 同一遍 SP，每次 `ApplyResult` 后采 `TotalScore`/`Accuracy`/… 快照 → `EzScoreTimeline` |
 
 - **禁止** Mania 生产路径：`HitEvents` → `buildFromHitEvents` → 第二遍 SP。
-- 下游（如角逐 HUD）只调用 `EzScoreTimelineBuilder.TryBuild`；`EzScoreTimelineBridge` 在 Mania 侧注册 `RunTimeline`。
+- 下游（如角逐 HUD）只调用 `EzScoreTimelineBuilder.TryBuild`；Mania 经 `CreateEzReplaySession().RunTimelineDirectAsync`（不经 Bridge）。
 - 无本地 replay（`GetScore` 后 `Replay == null` 或空帧）→ `TryBuild` 返回 `null`；角逐 ghost 在 timeline 未就绪前显示 0，**禁止**用终局 `ScoreInfo.TotalScore` 充当实时分。
 - 时钟轴 = replay 输入时刻（`input.Time`），与游玩 `GameplayClock` 对齐。
 - Ez 满分制 `TotalScore` = 整谱 ex 累积（`MinimumAccuracy × 1M`），与正常游玩 ScoreProcessor 同源；ghost 分数轨 = 同一 SP 快照，HUD **只读** `QueryAtTime(...).TotalScore`，不在 EzOsuGame 复刻公式。
@@ -126,11 +156,11 @@ public static EzScoreTimeline RunTimeline(...);
 
 `Run` 末尾：`scoreProcessor.PopulateScore(score.ScoreInfo); return score;`
 
-**Phase 1 刻意保留（Phase 2 再改）**：
+**Phase 2 已完成（API 收敛）**：
 
-- Session 仍接受现有 `IGameplayEnvironment`（不新建 `IGameplayEnvironment`）
-- `ManiaReplaySessionSimulator` 内 `BmsPoorHitResultEnable` 读 `GlobalConfigStore` — 已知技术债
-- Generator / Graph 仍在调用侧 `FromScore` / `FromLive`（不经 Ruleset ResolveEnvironment）
+- `IEzReplaySession`：`environment` optional，null 时 Session 内 `Ez2ConfigManager.ResolveForReplay`
+- Graph / Race / Builder / Generator 传 null env + 正确 `ReplayRunPurpose`
+- 删 `CreateLiveAnalysisEnvironment`、`ManiaRuleset.RunReplayAsync` 等重复/dead API
 
 ---
 
@@ -142,6 +172,7 @@ public static EzScoreTimeline RunTimeline(...);
 - **Now**：`ManiaReplaySession.Run(env)` 返回的完整 `Score`；Graph 只读 `nowScore.ScoreInfo.*`
 - 禁止拆字段、禁止 `applyFallbackV2FromHitEvents` 二次喂 SP
 - 改 HitMode / HealthMode / JudgePrecedence / BmsPoor → `refreshFromService()` 重跑 Session
+- **HealthMode 从 BMS → Lazer**（或反向）会改变 `poorEnabled`，Now 的 Poor/KPoor 计数可能变化；与 Drawable 修后游玩行为一致。
 
 ### 1.5b — Miss TimeOffset 数据保真
 
@@ -149,11 +180,34 @@ public static EzScoreTimeline RunTimeline(...);
 - `buildPressTimesByColumn` + `resolveMissStoredOffset` / `resolveMissEventTime`：列内最近邻 press；无输入则 stored offset 为 0（Graph 压边展示）
 - 删除 `estimateUnjudgedMissOffset`（统一 `missLate-0.01`）
 
+### 1.5d — OffsetPlusMania 持久化与 baked-replay 语义
+
+| 字段 | Realm 持久化 | 分析 baseline |
+|------|-------------|--------------|
+| `ManiaHitMode` / `ManiaHealthMode` | 是（嵌入 ScoreInfo） | ForStored 读嵌入；ForLive 读全局 |
+| `SessionOffsetPlusMania` / `SessionOffsetPlusNonMania` | **否**（`[Ignored]`） | 不恢复「当时全局 offset」 |
+| `.osr` replay 帧 | Files 表 | 输入时间序列 |
+
+**产品语义（设计目标）**：replay 帧记录的是「已按当时 offset 修正后的有效输入」→ 历史分析默认 `OffsetPlusMania=0` 应复现 Original。
+
+**现行实现差距**：
+
+- Drawable / Session 均在**判定侧**加 `OffsetPlusMania`（`timeOffset = input.Time - target.StartTime + env.OffsetPlusMania`），帧时间**未**平移。
+- `ResolveForReplay` 的 OffsetPlusMania **始终来自当前全局配置**（ForStored 不像 HitMode 那样读 score 嵌入）。
+- 因此「游玩 offset=10 → 分析 env=0 即一致」在现行实现下**不自动成立**（需 env=10 才复现当时 Drawable 判定）；follow-up 可选：Realm 持久化 `SessionOffsetPlus*` 或录制时平移 replay 帧。
+
+**Graph 接线**：
+
+- `offset=0`：`OnOffsetChanged(0)` → `RefreshFromService()`；Now 读 Session `ScoreInfo.Accuracy/TotalScore/Statistics`。
+- `offset≠0`：debounce 后 `RefreshFromService()`；滑动阶段仅 `RefreshDisplayOnly` 平移 scatter，**不**用二次公式覆盖 Now 数字。
+
+**测试**：`ManiaCrossSourceInvariantTest.TestOffsetZeroSessionMatchesOriginalStatistics`；baked-replay follow-up 单列。
+
 ### 1.5c — OffsetPlusMania 性能
 
-- **滑动 offset**：不调 Session；缓存 HitEvents 的 stored TimeOffset + delta 做 UI 平移
-- `offsetPlusMania` bindable → `refreshDisplayOnly()`（仅 `Refresh()`）
-- Result 随 offset 重算 → **后续**；1.5 滑动阶段保持 `RecalculateV2Result => Result`
+- **滑动 offset**：debounce 前不调 Session；stored TimeOffset + delta 做 UI 平移
+- `offsetPlusMania` bindable → `RefreshDisplayOnly()`（scatter/health 预览）
+- **offset 落定或归零**：debounce / 立即 `RefreshFromService()`；Now 数字来自 Session SP 输出
 
 ```mermaid
 flowchart TD
@@ -184,10 +238,10 @@ flowchart LR
     P1B["Graph Now / Generator\n读 score.ScoreInfo"]
     P1C["跨源测试绿"]
   end
-  subgraph phase2 [Phase 2 后续 - Mania 服务纯度]
-    P2A["IGameplayEnvironment"]
-    P2B["Session 不读 GlobalConfig\nKPoor 等经 env 传入"]
-    P2C["ManiaRuleset 环境转换入口"]
+  subgraph phase2 [Phase 2 已完成 - API 收敛]
+    P2A["optional env + Purpose"]
+    P2B["Session 统一 ResolveForReplay"]
+    P2C["删重复调用/dead API"]
   end
   subgraph phase3 [Phase 3 远期 - 全模式]
     P3A["osu.Game EzReplayServer"]
@@ -196,16 +250,14 @@ flowchart LR
   phase1 --> phase2 --> phase3
 ```
 
-| 阶段 | 目标 |
-|------|------|
-| **Phase 1** | #66 UX：同环境 Realm ≡ Graph Original ≡ Graph Now；API 去臃肿（`Run → Score`） |
-| **Phase 1.5** | Graph Now 完整 Score；miss 真实 TimeOffset；OffsetPlusMania UI 快路径 |
-| **Phase 2** | Mania 环境分层、Session 零全局读、Ruleset 统一 ResolveEnvironment |
-| **Phase 3** | `osu.Game` EzReplayServer 框架 + Osu/Taiko/Catch/Mania 各模式 Session |
+| 阶段            | 目标                                                                   |
+|---------------|----------------------------------------------------------------------|
+| **Phase 1**   | #66 UX：同环境 Realm ≡ Graph Original ≡ Graph Now；API 去臃肿（`Run → Score`） |
+| **Phase 1.5** | Graph Now 完整 Score；miss 真实 TimeOffset；OffsetPlusMania UI 快路径         |
+| **Phase 2**   | API 收敛：optional env + Session 统一 ResolveForReplay；删重复/dead API                |
+| **Phase 3**   | `osu.Game` EzReplayServer 框架 + Osu/Taiko/Catch/Mania 各模式 Session     |
 
-**Phase 2 预览**：新增 `IGameplayEnvironment : IGameplayEnvironment`（含 `BmsPoorHitResultEnable` 等）；`ManiaRuleset.ResolveEnvironment` 在规则集边界转换；Session / Simulator 零 `GlobalConfigStore`。
-
-**Phase 3 预览**：`osu.Game/EzOsuGame/Replay/`（或等价路径）统一 `RunReplay(Score, IBeatmap, IGameplayEnvironment) → Score`；规则集注册 `IReplaySession` / 环境转换器；Mania 为首个完整实现。
+**Phase 3 预览**：`osu.Game/EzOsuGame/Replay/`（或等价路径）统一 Session 框架；各 ruleset 注册 `CreateEzReplaySession`；Osu/Taiko/Catch Session 实现；届时再评估 ruleset 级 `ResolveEnvironment` 是否值得。
 
 ---
 

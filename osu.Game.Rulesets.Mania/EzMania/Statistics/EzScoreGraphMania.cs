@@ -54,8 +54,6 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
         [Resolved]
         private Ez2ConfigManager ezConfig { get; set; } = null!;
 
-        // TODO(P3-Rest): resolveSessionInputScore() 应移除，改为通过 IEzReplaySession.RunRequestAsync(ForLive)
-        // 当前临时方案：保留 scoreManager 用于获取 databased score
         [Resolved]
         private ScoreManager scoreManager { get; set; } = null!;
 
@@ -68,12 +66,12 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
             originalTotalScore = score.TotalScore;
 
             // 帧量化检测：若所有 HitEvent 的 TimeOffset 都是帧间隔（约 16.67ms）的整数倍，
-            // 说明 HitEvents 已被帧量化污染，需要用 EzScoreReloadBridge 重新生成精确版本。
+            // 说明 HitEvents 已被帧量化污染，需要用 ManiaScoreHitEventGenerator 重新生成精确版本。
             originalHitEventsOverride = tryDetectAndRegenerateFrameQuantizedEvents(score, beatmap);
         }
 
         /// <summary>
-        /// 检测 HitEvents 是否被帧量化污染，若污染则通过 <see cref="EzScoreReloadBridge"/>
+        /// 检测 HitEvents 是否被帧量化污染，若污染则通过 <see cref="ManiaScoreHitEventGenerator"/>
         /// 重新生成精确 HitEvents（不写回 <c>ScoreInfo</c>）。
         /// </summary>
         private static IReadOnlyList<HitEvent>? tryDetectAndRegenerateFrameQuantizedEvents(ScoreInfo score, IBeatmap beatmap)
@@ -91,13 +89,17 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
             if (!allFrameQuantized)
                 return null;
 
-            // 帧量化版本 → 尝试用 EzScoreReloadBridge 重新生成精确事件
+            // 帧量化版本 → 用 ManiaScoreHitEventGenerator 重新生成精确事件
             try
             {
                 var scoreForBridge = new Score { ScoreInfo = score };
-                var precise = EzScoreReloadBridge.TryGenerate(scoreForBridge, beatmap);
-                if (precise != null && precise.Count > 0)
-                    return precise;
+
+                if (ManiaScoreHitEventGenerator.Instance.Validate(scoreForBridge))
+                {
+                    var precise = ManiaScoreHitEventGenerator.Instance.Generate(scoreForBridge, beatmap);
+                    if (precise.Count > 0)
+                        return precise;
+                }
             }
             catch
             {
@@ -132,16 +134,17 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
             return applyFakeOffsetToEvents(filtered);
         }
 
-        /// <summary>展示层叠加 OffsetPlusMania；Session 统计用 offset=0 环境。</summary>
+        /// <summary>展示层预览：相对已提交 Session offset 的 delta。</summary>
         private IReadOnlyList<HitEvent> applyFakeOffsetToEvents(IEnumerable<HitEvent> events)
         {
             var list = events.ToList();
+            double delta = offsetPlusMania.Value - CommittedSessionOffset;
 
-            if (offsetPlusMania.Value == 0)
+            if (delta == 0)
                 return list;
 
             return list.Select(e => new HitEvent(
-                e.TimeOffset + offsetPlusMania.Value,
+                e.TimeOffset + delta,
                 e.GameplayRate,
                 e.Result,
                 e.HitObject,
@@ -149,20 +152,22 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
                 e.Position)).ToList();
         }
 
+        protected override ReplayRunRequest CreateReplayRunRequest(Score score)
+            => new ReplayRunRequest(score, Beatmap, ReplayRunPurpose.ForLive, offsetPlusMania.Value);
+
         protected override void CalculateNowAccuracy()
         {
             var info = CommittedNowScore?.ScoreInfo;
 
             if (info == null)
             {
-                // CommittedNowScore 未就绪时：静默保持上一次有效 Now 数据，不走同步 fallback 分支。
-                // 异步 RefreshFromService 完成后更新 CommittedNowScore，届时自然触发本方法重算。
+                RecalculateNowFromDisplayEvents();
                 return;
             }
 
-            // Session 重放路径：从 Statistics 提取判定计数（已按当前 HitMode 重新判定）
             NowCounts = extractDisplayCounts(info.Statistics);
-            (NowAccuracy, NowScore) = computeNowAccuracyAndScore(NowCounts, currentHitMode);
+            NowAccuracy = info.Accuracy;
+            NowScore = info.TotalScore;
             logDiffIfMismatch(info);
         }
 
@@ -278,9 +283,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
                 // 切换到 O2Jam 时立即同步 BPM，确保后续判定窗口正确
                 if (currentHitMode == EzEnumHitMode.O2Jam && Beatmap.HitObjects.Count > 0)
                     hitWindowsNow.UpdateO2JamBpmFromTime(Beatmap.HitObjects[0].StartTime);
-                // 不清 CommittedNowScore，Now 数据静默保持上一次有效值。
-                // 异步 RefreshFromService 完成后自然刷新 Now 数据。
-                _ = RefreshFromService();
+                onReplayConfigChanged();
             });
 
             healthModeBindable.BindValueChanged(__ =>
@@ -289,17 +292,10 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
             });
 
             ezConfig.GetBindable<EzEnumJudgePrecedence>(Ez2Setting.JudgePrecedence)
-                    .BindValueChanged(__ =>
-                    {
-                        // CommittedNowScore 由 RefreshFromService 完成后刷新
-                        _ = RefreshFromService();
-                    });
+                    .BindValueChanged(__ => onReplayConfigChanged());
 
             ezConfig.GetBindable<bool>(Ez2Setting.BmsPoorHitResultEnable)
-                    .BindValueChanged(__ =>
-                    {
-                        _ = RefreshFromService();
-                    });
+                    .BindValueChanged(__ => onReplayConfigChanged());
 
             offsetPlusMania.BindValueChanged(v => OnOffsetChanged(v.NewValue), true);
 
@@ -349,14 +345,11 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
         }
 
         /// <summary>
-        /// 展示层判定结果。以下场景通过当前 <see cref="IManiaNoteJudgementStrategy.RejudgeHitEvent"/> 重新判定：
-        ///   1. offset 拖动（DisplayOffset != 0）：实时预览散点颜色变化
-        ///   2. 无 Session（CommittedNowScore == null）：HitMode 变更后重判
-        /// 有 Session 且 offset 归零时直接返回 Session 产出结果。
+        /// 展示层判定结果。滑条 offset 与已提交 Session offset 不一致时 Rejudge 预览；否则读 Session。
         /// </summary>
         protected override HitResult GetDisplayResult(HitEvent hitEvent)
         {
-            if (DisplayOffset != 0 || CommittedNowScore == null)
+            if (offsetPlusMania.Value != CommittedSessionOffset || CommittedNowScore == null)
             {
                 var strategy = ManiaJudgementRegistry.GetHitModeJudgement(currentHitMode)
                                ?? (IManiaNoteJudgementStrategy)LazerNoteJudgementReplica.Instance;
@@ -368,14 +361,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
             return hitEvent.Result;
         }
 
-        protected override IGameplayEnvironment CreateLiveAnalysisEnvironment() => GlobalConfigStore.EzConfig.ResolveForReplay(null, ReplayRunPurpose.ForLive);
-
-        // P3-Rest 前过渡：通过 scoreManager 获取 databased score
-        // TODO(P3-Rest): resolveSessionInputScore() 移除，改为通过 IEzReplaySession
-        protected override Score? ResolveInputScore() => resolveSessionInputScore();
-
-        // TODO(P3-Rest): resolveSessionInputScore() 移除，改为通过 IEzReplaySession
-        private Score? resolveSessionInputScore() => scoreManager.GetScore(Score);
+        protected override Score? ResolveInputScore() => scoreManager.GetScore(Score);
 
         private Dictionary<HitResult, int> extractDisplayCounts(IReadOnlyDictionary<HitResult, int> statistics) => ExtractDisplayCounts(statistics, currentHitMode);
 
@@ -396,6 +382,27 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
             }
 
             return counts;
+        }
+
+        /// <summary>
+        /// 左侧统计表应展示的判定行（跟随当前 HitMode 有效集合，含 KPoor、ComboBreak）。
+        /// </summary>
+        internal static IReadOnlyList<HitResult> GetOrderedStatHitResults(EzEnumHitMode hitMode)
+            => HitModeHelper.GetHitModeValidHitResults(hitMode)
+                            .Where(r => r is not (HitResult.IgnoreHit or HitResult.IgnoreMiss))
+                            .OrderBy(r => r.GetIndexForOrderedDisplay())
+                            .ToList();
+
+        /// <summary>
+        /// HitMode / 重判相关配置变更：清空 Session 缓存，即时 rejudge 展示，并异步重跑 Session。
+        /// </summary>
+        private void onReplayConfigChanged()
+        {
+            CommittedNowScore = null;
+            CommittedSessionOffset = 0;
+            InvalidateTextUi();
+            Refresh();
+            _ = RefreshFromService();
         }
 
         /// <summary>Graph 展示层时间轴：Now 为空时回退 Original。</summary>
@@ -478,10 +485,13 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
             OffsetOverlayText.Alpha = show ? 1 : 0;
         }
 
-        private SimpleStatisticItem<string>[]? statItems; // 缓存文本 item 引用，供 UpdateTextValues 只更新数值
+        private SimpleStatisticItem<string>[]? statItems; // 缓存固定行（Acc/Score/Pauses）引用
+        private readonly Dictionary<HitResult, SimpleStatisticItem<string>> judgementStatItems = new Dictionary<HitResult, SimpleStatisticItem<string>>();
 
         protected override void CreateTextUI()
         {
+            judgementStatItems.Clear();
+
             // 创建带默认占位值的 item 列表
             var items = new List<SimpleStatisticItem<string>>
             {
@@ -497,22 +507,15 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
                 makeSimpleStat("Now | V1", "↓", Colours.Gray8),
             };
 
-            // 从 Now+V1 判定集合构建每个判定行的 item
-            List<HitResult> results = NowCounts.Keys
-                                               .Concat(V1Counts.Keys)
-                                               .Distinct()
-                                               .Where(r => r.IsBasic() || r == HitResult.Poor)
-                                               .OrderBy(r => r.GetIndexForOrderedDisplay())
-                                               .ToList();
-
-            foreach (var r in results)
+            foreach (var r in GetOrderedStatHitResults(currentHitMode))
             {
-                string name = r.GetHitModeDisplayName().ToString();
+                string name = r.GetHitModeDisplayName(currentHitMode).ToString();
                 var c = Colours.ForHitResult(r);
-                items.Add(makeSimpleStat("—", name, c));
+                var item = makeSimpleStat("—", name, c);
+                judgementStatItems[r] = item;
+                items.Add(item);
             }
 
-            // 缓存所有文本 item 引用
             statItems = items.ToArray();
 
             const float label_area_width = 35f;
@@ -581,24 +584,14 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
             // statItems[6] = Pauses（pauses 不随 offset 变化，无需更新）
             // statItems[7] = "↓" 分隔线，不需更新
 
-            int idx = 8; // 静态行之后是动态判定行
-            List<HitResult> results = NowCounts.Keys
-                                               .Concat(V1Counts.Keys)
-                                               .Distinct()
-                                               .Where(r => r.IsBasic() || r == HitResult.Poor)
-                                               .OrderBy(r => r.GetIndexForOrderedDisplay())
-                                               .ToList();
-
-            foreach (var r in results)
+            foreach (var r in GetOrderedStatHitResults(currentHitMode))
             {
-                int v2Count = NowCounts.GetValueOrDefault(r, 0);
-                int v1Count = V1Counts.GetValueOrDefault(r, 0);
+                if (!judgementStatItems.TryGetValue(r, out var item))
+                    continue;
 
-                if (idx < statItems.Length)
-                {
-                    statItems[idx].Value = $"{v2Count} | {v1Count}";
-                    idx++;
-                }
+                int nowCount = NowCounts.GetValueOrDefault(r, 0);
+                int v1Count = V1Counts.GetValueOrDefault(r, 0);
+                item.Value = $"{nowCount} | {v1Count}";
             }
         }
 

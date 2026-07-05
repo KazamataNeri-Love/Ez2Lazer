@@ -14,11 +14,8 @@ using osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings;
 using osu.Game.Rulesets.Mania.Objects;
 using osu.Game.Rulesets.Mania.Scoring;
 using osu.Game.Rulesets.Objects;
-using osu.Game.Rulesets.Scoring;
-using osu.Game.Replays;
 using osu.Game.Rulesets.Objects.Types;
-using osu.Game.Scoring;
-using osu.Game.Utils;
+using osu.Game.Rulesets.Scoring;
 using static osu.Game.Rulesets.Mania.EzMania.ReplayJudge.ManiaColumnSimulator;
 
 namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
@@ -26,10 +23,8 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
     internal static class ManiaReplaySessionSimulator
     {
         internal static void Simulate(
-            Score score,
             IBeatmap beatmap,
             IGameplayEnvironment environment,
-            List<LaneTargetState> targets,
             Dictionary<int, List<LaneTargetState>> pressColumns,
             Dictionary<int, List<LaneTargetState>> releaseColumns,
             Dictionary<HeadNote, HoldNote> holdByHead,
@@ -37,6 +32,8 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
             IManiaNoteJudgementStrategy noteStrategy,
             IManiaHoldJudgementStrategy holdStrategy,
             ScoreProcessor scoreProcessor,
+            double gameplayRate,
+            ManiaReplayInputData inputData,
             ManiaReplayTimelineRecorder? timelineRecorder,
             CancellationToken cancellationToken)
         {
@@ -55,10 +52,8 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
             var judgementState = new ManiaReplayJudgementState();
             var headWasHit = new Dictionary<HeadNote, bool>();
             var keyHeldByColumn = new Dictionary<int, bool>();
-            var pressTimesByColumn = BuildPressTimesByColumn(score.Replay);
-            double gameplayRate = ModUtils.CalculateRateWithMods(score.ScoreInfo.Mods);
 
-            foreach (var input in ManiaReplayInputParser.Parse(score.Replay))
+            foreach (var input in inputData.SortedEvents)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -186,6 +181,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
                         ComputeStoredTimeOffset(input.Time, forced.Target),
                         input.Time,
                         gameplayRate,
+                        environment.ManiaHitMode,
                         timelineRecorder);
                 }
 
@@ -199,7 +195,30 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
                     ComputeStoredTimeOffset(input.Time, target),
                     input.Time,
                     gameplayRate,
+                    environment.ManiaHitMode,
                     timelineRecorder);
+
+                // After tail judgement, also apply HoldNote parent and Body auxiliary results
+                // to match live play behaviour (DrawableHoldNote.CheckForResult + DrawableHoldNoteBody.TriggerResult).
+                // These produce IgnoreHit / ComboBreak / IgnoreMiss entries in ScoreResultCounts
+                // that affect displayed statistics but not score, accuracy, or combo.
+                if (target is TailNote judgedTail
+                    && headByTail.TryGetValue(judgedTail, out var tailLinkedHead)
+                    && holdByHead.TryGetValue(tailLinkedHead, out var tailHold))
+                {
+                    // HoldNoteBody: IgnoreHit on hit, ComboBreak on miss
+                    // (matches DrawableHoldNoteBody.TriggerResult → ApplyMaxResult/ApplyMinResult)
+                    if (tailHold.Body != null)
+                    {
+                        HitResult bodyResult = result.IsHit() ? HitResult.IgnoreHit : HitResult.ComboBreak;
+                        ApplyAuxiliaryResult(scoreProcessor, tailHold.Body, bodyResult, input.Time, gameplayRate, timelineRecorder);
+                    }
+
+                    // HoldNote parent: IgnoreHit on hit, IgnoreMiss on miss
+                    // (matches DrawableHoldNote.CheckForResult → ApplyMaxResult/MissForcefully)
+                    HitResult holdAuxResult = result.IsHit() ? HitResult.IgnoreHit : HitResult.IgnoreMiss;
+                    ApplyAuxiliaryResult(scoreProcessor, tailHold, holdAuxResult, input.Time, gameplayRate, timelineRecorder);
+                }
 
                 if (target is HeadNote head)
                     headWasHit[head] = result.IsHit();
@@ -418,6 +437,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
             double timeOffset,
             double eventTime,
             double gameplayRate,
+            EzEnumHitMode hitMode,
             ManiaReplayTimelineRecorder? timelineRecorder = null)
         {
             var judgementResult = new JudgementResult(target, target.Judgement)
@@ -427,11 +447,14 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
 
             JudgementResultTimingHelper.ApplyTiming(judgementResult, timeOffset, gameplayRate);
 
-            if (result == HitResult.Meh || result == HitResult.Miss)
+            if (result == HitResult.Miss
+                || (result == HitResult.Meh && HitModeHelper.MehBreaksCombo(hitMode)))
+            {
                 judgementResult.IsComboHit = false;
+            }
 
             scoreProcessor.ApplyResult(judgementResult);
-            timelineRecorder?.Record(scoreProcessor, eventTime, result);
+            timelineRecorder?.Record(scoreProcessor, eventTime, gameplayRate);
         }
 
         internal static void ApplyTransientResult(
@@ -452,35 +475,33 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
             JudgementResultTimingHelper.ApplyTiming(judgementResult, timeOffset, gameplayRate);
 
             scoreProcessor.ApplyResult(judgementResult);
-            timelineRecorder?.Record(scoreProcessor, eventTime, result);
+            timelineRecorder?.Record(scoreProcessor, eventTime, gameplayRate);
+        }
+
+        /// <summary>
+        /// Applies an auxiliary (non-gameplay-affecting) judgement result for HoldNote parent or HoldNoteBody,
+        /// matching live play behaviour where these produce IgnoreHit/ComboBreak/IgnoreMiss entries
+        /// in ScoreResultCounts despite having no effect on score, accuracy, or combo.
+        /// </summary>
+        internal static void ApplyAuxiliaryResult(
+            ScoreProcessor scoreProcessor,
+            HitObject target,
+            HitResult result,
+            double eventTime,
+            double gameplayRate,
+            ManiaReplayTimelineRecorder? timelineRecorder)
+        {
+            var judgementResult = new JudgementResult(target, target.Judgement)
+            {
+                Type = result,
+            };
+            JudgementResultTimingHelper.ApplyTiming(judgementResult, 0, gameplayRate);
+            scoreProcessor.ApplyResult(judgementResult);
+            timelineRecorder?.Record(scoreProcessor, eventTime, gameplayRate);
         }
 
         internal static double ComputeStoredTimeOffset(double eventTime, HitObject target)
             => eventTime - target.GetEndTime();
-
-        internal static Dictionary<int, List<double>> BuildPressTimesByColumn(Replay replay)
-        {
-            var dict = new Dictionary<int, List<double>>();
-
-            foreach (var input in ManiaReplayInputParser.Parse(replay))
-            {
-                if (!input.IsPress)
-                    continue;
-
-                if (!dict.TryGetValue(input.Column, out var list))
-                {
-                    list = new List<double>();
-                    dict[input.Column] = list;
-                }
-
-                list.Add(input.Time);
-            }
-
-            foreach (var list in dict.Values)
-                list.Sort();
-
-            return dict;
-        }
 
         /// <summary>
         /// Miss 存储偏移：优先该列 replay 最近邻 press；无输入则 0（Graph 侧 projectOffsetToY 压边）。

@@ -12,7 +12,6 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Lines;
 using osu.Framework.Graphics.Shapes;
 using osu.Game.Beatmaps;
-using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
@@ -69,10 +68,10 @@ namespace osu.Game.EzOsuGame.Statistics
         // Graph-UX: 双轨刷新状态管理
         // displayOffset 由 RefreshDisplayOnly 管理（拖动时），RefreshFromService 成功后重置为 0
         protected Score? CommittedNowScore;
-#pragma warning disable IDE0051 // committedEnvironment 为 P3-Rest 阶段预留，当前暂未使用
-        private IGameplayEnvironment? committedEnvironment;
-#pragma warning restore IDE0051
         protected double DisplayOffset;
+
+        /// <summary>上次 Session 完成时的 offset（来自 <see cref="ReplayRunResult.ResolvedEnvironment"/>）。</summary>
+        protected double CommittedSessionOffset;
 
         // Debounce 控制 — offset 拖动时仅展示，落定后触发 Session
         private CancellationTokenSource? debounceCancellation;
@@ -406,6 +405,11 @@ namespace osu.Game.EzOsuGame.Statistics
         private bool textInitialized;
 
         /// <summary>
+        /// 标记文本统计 UI 需在下次 <see cref="UpdateText"/> 时重建（例如 HitMode 切换导致判定行集合变化）。
+        /// </summary>
+        protected void InvalidateTextUi() => textInitialized = false;
+
+        /// <summary>
         /// 更新文本显示。首次调用或 <see cref="UpdateDisplay"/> 全量刷新后调用 <see cref="CreateTextUI"/> 重建 UI，
         /// 后续调用（如 offset 拖动时）仅调用 <see cref="UpdateTextValues"/> 更新数值。
         /// </summary>
@@ -448,22 +452,21 @@ namespace osu.Game.EzOsuGame.Statistics
 
         // ==================== Graph-UX: 双轨刷新机制 ====================
 
+        /// <summary>Graph Session 请求；Mania 覆写以传入当前 offset。</summary>
+        protected virtual ReplayRunRequest CreateReplayRunRequest(Score score)
+            => new ReplayRunRequest(score, Beatmap, ReplayRunPurpose.ForLive);
+
         /// <summary>
-        /// 轻量重绘：仅应用 fake offset 到展示层，不触发 Session
-        /// Graph-UX: 用于拖动时的即时反馈，实时更新统计和 scatter/health，不清边界线
+        /// 轻量重绘：拖动时仅更新 scatter/health，Now 数字等 debounce Session。
         /// </summary>
-        /// <param name="fakeOffset">展示的偏移量（毫秒）</param>
         protected void RefreshDisplayOnly(double fakeOffset)
         {
             DisplayOffset = fakeOffset;
 
-            // 实时重算 Now 统计（无 committed score 时预览，有 committed score 时跳过）
-            RecalculateNowFromDisplayEvents();
+            if (CommittedNowScore == null)
+                RecalculateNowFromDisplayEvents();
 
-            // 重建左侧统计（只改数值）
             UpdateText();
-
-            // 重绘 scatter 和 health（不清边界线）
             redrawScatterAndHealthWithOffset(fakeOffset);
         }
 
@@ -473,7 +476,6 @@ namespace osu.Game.EzOsuGame.Statistics
         /// </summary>
         protected async Task RefreshFromService()
         {
-            committedEnvironment = CreateLiveAnalysisEnvironment();
             var inputScore = ResolveInputScore();
 
             if (inputScore == null)
@@ -481,20 +483,17 @@ namespace osu.Game.EzOsuGame.Statistics
 
             try
             {
-                // TODO(P3-Rest): 应使用 ReplayRunRequest(ForLive) 统一入口
-                // 当前暂时直接调用 RunAsync，P3-Rest 阶段改为 RunRequestAsync
-                if (committedEnvironment != null)
-                {
-                    CommittedNowScore = await ReplaySession.RunAsync(
-                        inputScore.DeepClone(),
-                        Beatmap,
-                        committedEnvironment
-                    ).ConfigureAwait(false);
-                }
+                var result = await ReplaySession.RunRequestAsync(
+                    CreateReplayRunRequest(inputScore.DeepClone())
+                ).ConfigureAwait(false);
 
-                DisplayOffset = 0; // 重置展示 offset
+                if (!result.IsValidReplay)
+                    return;
 
-                // 全量刷新（现在基于新的 committedNowScore）
+                CommittedNowScore = result.Score;
+                CommittedSessionOffset = result.ResolvedEnvironment?.OffsetPlusMania ?? 0;
+                DisplayOffset = 0;
+
                 Schedule(Refresh);
             }
             catch (OperationCanceledException)
@@ -503,18 +502,11 @@ namespace osu.Game.EzOsuGame.Statistics
             }
             catch
             {
-                // Session 失败时清空 committedNowScore
                 CommittedNowScore = null;
-                committedEnvironment = null;
+                CommittedSessionOffset = 0;
                 Schedule(Refresh);
             }
         }
-
-        /// <summary>
-        /// 创建 ForLive 环境（offset=0）
-        /// 子类应重写以提供规则集特定的环境解析
-        /// </summary>
-        protected virtual IGameplayEnvironment CreateLiveAnalysisEnvironment() => GlobalConfigStore.EzConfig.ResolveForReplay(null, ReplayRunPurpose.ForLive);
 
         /// <summary>
         /// 解析输入 Score（用于 Session 运行）
@@ -529,29 +521,22 @@ namespace osu.Game.EzOsuGame.Statistics
         /// <param name="newOffset">新的 offset 值</param>
         protected void OnOffsetChanged(double newOffset)
         {
-            // 取消之前的 debounce
             debounceCancellation?.Cancel();
             debounceCancellation = new CancellationTokenSource();
 
             var token = debounceCancellation.Token;
 
-            // 立即应用 display-only（轻量重绘）
             RefreshDisplayOnly(newOffset);
 
-            // offset=0 时不调度 Session：无需重放 replay 帧（帧时间量化会引入偏差）
-            if (newOffset == 0)
-                return;
-
-            // debounce 后触发 service（真实重算）
-            // fire-and-forget：故意不等待，由 CancellationToken 控制生命周期
 #pragma warning disable CS4014
             _ = Task.Run(async () =>
             {
                 try
                 {
                     await Task.Delay(debounce_ms, token).ConfigureAwait(false);
+
                     if (!token.IsCancellationRequested)
-                        RefreshFromService();
+                        await RefreshFromService().ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {

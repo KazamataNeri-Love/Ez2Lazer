@@ -67,7 +67,24 @@ namespace osu.Game.Rulesets.Mania.EzMania.Localization
         public static readonly LocalisableString BACKGROUND_COLOUR_LABEL = new EzLocalizationManager.EzLocalisableString("背景颜色", "Background Colour");
         public static readonly LocalisableString BACKGROUND_COLOUR_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("背景框的颜色", "Colour of the background box.");
 
+        public static readonly LocalisableString BACKGROUND_GRADIENT_LABEL = new EzLocalizationManager.EzLocalisableString("背景渐变", "Background Gradient");
+        public static readonly LocalisableString BACKGROUND_GRADIENT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("背景由中间向上下渐变至透明", "Fade the background from the centre to transparent at the top and bottom.");
+
         public static readonly LocalisableString UNIFIED_MOVEMENT_LABEL = new EzLocalizationManager.EzLocalisableString("整体移动", "Unified Movement");
         public static readonly LocalisableString UNIFIED_MOVEMENT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("所有标记按全键平均偏差一起移动", "Move all markers together based on the average deviation across all keys.");
+
+        public static readonly LocalisableString STOP_MOVEMENT_LABEL = new EzLocalizationManager.EzLocalisableString("停止移动", "Stop Movement");
+        public static readonly LocalisableString STOP_MOVEMENT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("开启后判定标记不再移动", "When enabled, judgement markers stay fixed and no longer move.");
+
+        public static readonly LocalisableString MATCH_PANEL_WIDTH_LABEL = new EzLocalizationManager.EzLocalisableString("关联Mania面板总宽", "Match Mania Stage Width");
+        public static readonly LocalisableString MATCH_PANEL_WIDTH_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("开启后 HUD 列宽与 Mania 面板一致", "When enabled, HUD column widths match the Mania playfield panel.");
+
+        public static readonly LocalisableString MATCH_HIT_POSITION_LABEL = new EzLocalizationManager.EzLocalisableString("关联判定线高度", "Match Hit Position Height");
+        public static readonly LocalisableString MATCH_HIT_POSITION_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("开启后高度与 Ez 判定线高度设置一致", "When enabled, height follows the Ez HitPosition setting.");
+
+        public static readonly LocalisableString MATCH_HIT_POSITION_LAYOUT_LABEL = new EzLocalizationManager.EzLocalisableString("关联判定线位置", "Match Hit Position Layout");
+        public static readonly LocalisableString MATCH_HIT_POSITION_LAYOUT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "开启后锚点为底部中心、原点为中心，纵坐标对齐判定线高度",
+            "When enabled, uses bottom-centre anchor, centre origin, and aligns Y to the hit position.");
     }
 }
