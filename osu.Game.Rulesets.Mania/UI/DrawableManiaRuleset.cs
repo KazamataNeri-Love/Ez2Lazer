@@ -27,6 +27,7 @@ using osu.Game.Replays;
 using osu.Game.Rulesets.Mania.Beatmaps;
 using osu.Game.Rulesets.Mania.Configuration;
 using osu.Game.Rulesets.Mania.EzMania;
+using osu.Game.Rulesets.Mania.EzMania.ReplayJudge;
 using osu.Game.Rulesets.Mania.Objects;
 using osu.Game.Rulesets.Mania.Objects.EzCurrentHitObject;
 using osu.Game.Rulesets.Mania.Replays;
@@ -100,6 +101,17 @@ namespace osu.Game.Rulesets.Mania.UI
 
         int IManiaGameplayModeSnapshot.HitMode => (int)gameplayHitMode;
         int IManiaGameplayModeSnapshot.HealthMode => (int)ManiaHealthProcessor.ActiveHealthMode;
+
+        /// <summary>
+        /// 列级按键输入由 <see cref="UI.Column"/> 路由到单一 press 目标（C2 COLUMN-INPUT）。
+        /// 本地游玩与回放均使用同一路由，以保持 Drawable 与 Session 输入模型一致。
+        /// </summary>
+        public bool ColumnRoutesInput => JudgementRound != null;
+
+        /// <summary>
+        /// 本局冻结的判定上下文；热路径读取此实例，禁止再解析全局配置。
+        /// </summary>
+        public ManiaJudgementRound? JudgementRound { get; private set; }
 
         private readonly Bindable<EzManiaScrollingStyle> scrollingStyle = new Bindable<EzManiaScrollingStyle>();
         private readonly BindableDouble configBaseMs = new BindableDouble();
@@ -186,6 +198,12 @@ namespace osu.Game.Rulesets.Mania.UI
 
             gameplayHitMode = hitModeBindable.Value;
 
+            JudgementRound = ManiaJudgementRound.Create(
+                ezConfig.ResolveEnvironment(ReplayRunPurpose.ForLive, ReplayScore?.ScoreInfo, ignoreOffset: ReplayScore != null),
+                Beatmap);
+            ManiaWindowBaker.AlignForLive(Beatmap, JudgementRound.Environment);
+            ManiaEnvironmentJudgements.ApplyToBeatmap(Beatmap, JudgementRound.Environment.ManiaHitMode);
+
             hitModeBindable.BindValueChanged(h =>
             {
                 // 仅在“本局本地游玩尚未完成”期间锁定 HitMode，避免中途更改破坏一致性。
@@ -215,11 +233,7 @@ namespace osu.Game.Rulesets.Mania.UI
                 O2HitModeExtension.PILL_COUNT.Value = 0;
 
                 if (h.NewValue == EzEnumHitMode.O2Jam)
-                {
-                    O2HitModeExtension.SetOriginalBPM(Beatmap.BeatmapInfo.BPM);
-                    O2HitModeExtension.SetControlPoints(Beatmap.ControlPointInfo);
-                    O2HitModeExtension.PillActivated = true;
-                }
+                    O2HitModeExtension.InitializeRuntime(Beatmap, resetPillCount: false);
             }, true);
             barLinesBindable.BindValueChanged(b =>
             {

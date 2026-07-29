@@ -63,35 +63,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings
 
             public ManiaReplayJudgementState State { get; init; }
 
-            public bool PillCheckPassed { get; init; }
-
-            public bool UpgradeToPerfect { get; init; }
-        }
-
-        public readonly struct DrawableNoteContext
-        {
-            public double CurrentTime { get; init; }
-
-            public bool PillCheckPassed { get; init; }
-
-            public bool UpgradeToPerfect { get; init; }
-        }
-
-        public readonly struct DrawableTailContext
-        {
-            public double CurrentTime { get; init; }
-
-            public bool PillCheckPassed { get; init; }
-
-            public bool UpgradeToPerfect { get; init; }
-
-            public bool HeadHit { get; init; }
-
-            public bool HoldBroken { get; init; }
-
-            public bool WasHolding { get; init; }
-
-            public bool PillModeEnabled { get; init; }
+            public bool UsePressTimeBpmForJudgement { get; init; }
         }
 
         public sealed class HoldBreakState
@@ -99,55 +71,16 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings
             public Func<DrawableHitObject, double, bool>? CheckHittableBackup;
         }
 
-        public ManiaNoteJudgementOutcome? EvaluateDrawableNotePress(double timeOffset, HitWindows hitWindows, in DrawableNoteContext context, ManiaReplayJudgementState state)
-        {
-            if (!context.PillCheckPassed)
-                return ManiaNoteJudgementOutcome.Ignore;
-
-            var outcome = EvaluatePress(timeOffset, hitWindows, new NotePressContext
-            {
-                RawOffset = timeOffset,
-                Bpm = O2HitModeExtension.GetBPMAtTime(context.CurrentTime),
-                PillModeEnabled = true,
-                PillCheckPassed = true,
-                UpgradeToPerfect = context.UpgradeToPerfect,
-                State = state,
-            });
-
-            return outcome;
-        }
-
-        public HitResult? EvaluateDrawableTailPress(double timeOffset, HitWindows hitWindows, in DrawableTailContext context, ManiaReplayJudgementState state)
-        {
-            if (!context.PillCheckPassed)
-                return null;
-
-            var judge = EvaluateTailJudge(new HoldTailEvaluationContext
-            {
-                RawOffset = timeOffset,
-                TimeOffsetForJudgement = timeOffset,
-                HitWindows = hitWindows,
-                HeadHit = context.HeadHit,
-                HoldBreak = IsHoldBreak(timeOffset, hitWindows),
-                HoldBroken = context.HoldBroken,
-                WasHoldingBeforeRelease = context.WasHolding,
-                PillModeEnabled = context.PillModeEnabled,
-                Bpm = O2HitModeExtension.GetBPMAtTime(context.CurrentTime),
-                State = state,
-            });
-
-            if (judge == O2Judge.None)
-                return null;
-
-            if (context.UpgradeToPerfect)
-                return MapTo(O2Judge.Cool);
-
-            return MapTo(judge);
-        }
-
         public ManiaNoteJudgementOutcome EvaluateAutoMiss(double timeOffset, HitWindows hitWindows)
+            => EvaluateAutoMiss(timeOffset, hitWindows, bpm: 0);
+
+        public ManiaNoteJudgementOutcome EvaluateAutoMiss(double timeOffset, HitWindows hitWindows, double bpm)
         {
-            if (!hitWindows.CanBeHit(timeOffset))
+            bool canHit = bpm > 0
+                ? O2HitModeExtension.CanBeHit(timeOffset, bpm, ManiaJudgementRound.GetTotalMultiplier(hitWindows))
+                : hitWindows.CanBeHit(timeOffset);
+
+            if (!canHit)
                 return ManiaNoteJudgementOutcome.ApplyResult(MapTo(O2Judge.Miss));
 
             return ManiaNoteJudgementOutcome.Ignore;
@@ -157,16 +90,13 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings
 
         public ManiaNoteJudgementOutcome EvaluatePress(double timeOffset, HitWindows hitWindows, in NotePressContext context)
         {
-            var judge = FromHitResult(hitWindows.ResultFor(timeOffset));
+            var judge = FromHitResult(resolvePressResult(timeOffset, hitWindows, context.UsePressTimeBpmForJudgement, context.Bpm));
 
             if (judge == O2Judge.None)
                 return ManiaNoteJudgementOutcome.Ignore;
 
             if (context.PillModeEnabled)
                 ApplyPillLogic(Math.Abs(context.RawOffset), context.Bpm, context.State, ref judge);
-
-            if (context.UpgradeToPerfect)
-                judge = O2Judge.Cool;
 
             return ManiaNoteJudgementOutcome.ApplyResult(MapTo(judge));
         }
@@ -175,7 +105,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings
 
         public O2Judge EvaluateTailJudge(in HoldTailEvaluationContext context)
         {
-            var judge = FromHitResult(context.HitWindows.ResultFor(context.TimeOffsetForJudgement));
+            var judge = FromHitResult(resolvePressResult(context.TimeOffsetForJudgement, context.HitWindows, context.UsePressTimeBpmForJudgement, context.Bpm));
 
             if (context.PillModeEnabled)
                 ApplyPillLogic(Math.Abs(context.RawOffset), context.Bpm, context.State, ref judge);
@@ -221,11 +151,21 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings
 
         public bool IsHoldBreak(double rawOffset, HitWindows hitWindows) => LazerHoldJudgementReplica.Instance.IsHoldBreak(rawOffset, hitWindows);
 
+        private static HitResult resolvePressResult(double timeOffset, HitWindows hitWindows, bool usePressTimeBpm, double bpm)
+        {
+            if (usePressTimeBpm && bpm > 0)
+                return O2HitModeExtension.ResultFor(timeOffset, bpm, ManiaJudgementRound.GetTotalMultiplier(hitWindows));
+
+            return hitWindows.ResultFor(timeOffset);
+        }
+
         public HitResult RejudgeHitEvent(HitEvent hitEvent, HitWindows hitWindows)
         {
-            // TailNote 保留原始结果（尾判依赖 Pill 状态和 headHit/holdBreak 等上下文）
             if (hitEvent.HitObject is TailNote)
-                return hitEvent.Result;
+            {
+                var tailOutcome = EvaluatePress(hitEvent.TimeOffset, hitWindows);
+                return tailOutcome.Kind == ManiaNoteJudgementOutcomeKind.Apply ? tailOutcome.Result : HitResult.Miss;
+            }
 
             var outcome = EvaluatePress(hitEvent.TimeOffset, hitWindows);
             return outcome.Kind == ManiaNoteJudgementOutcomeKind.Apply ? outcome.Result : HitResult.Miss;

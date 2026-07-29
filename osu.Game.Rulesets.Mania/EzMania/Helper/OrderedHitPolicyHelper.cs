@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using osu.Framework.Logging;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.Rulesets.Mania.EzMania.ReplayJudge;
 using osu.Game.Rulesets.Mania.Objects.Drawables;
 using osu.Game.Rulesets.Mania.Scoring;
 using osu.Game.Rulesets.Objects.Drawables;
@@ -21,25 +22,23 @@ namespace osu.Game.Rulesets.Mania.EzMania.Helper
     public class OrderedHitPolicyHelper
     {
         private readonly HitObjectContainer hitObjectContainer;
+        private readonly ManiaLaneController? laneController;
         private readonly Ez2ConfigManager ezConfig;
         private const string log_prefix = "[JudgeDiag][PolicyHelper]";
 
-        public OrderedHitPolicyHelper(HitObjectContainer hitObjectContainer)
+        public OrderedHitPolicyHelper(HitObjectContainer hitObjectContainer, ManiaLaneController? laneController = null)
         {
             this.hitObjectContainer = hitObjectContainer;
+            this.laneController = laneController;
             ezConfig = GlobalConfigStore.EzConfig;
         }
 
-        /// <summary>
-        /// 判断一个 <see cref="DrawableHitObject"/> 在某个时间点是否可以被击中，
-        /// 考虑判定优先级设置。
-        /// </summary>
-        /// <param name="hitObject">要检查的 <see cref="DrawableHitObject"/>。</param>
-        /// <param name="time">要检查的时间点。</param>
-        /// <returns><paramref name="hitObject"/> 是否可以在给定的 <paramref name="time"/> 被击中。</returns>
-        public bool IsHittableWithPrecedence(DrawableHitObject hitObject, double time)
+        public bool IsHittableWithPrecedence(DrawableHitObject hitObject, double time, EzEnumJudgePrecedence? precedenceOverride = null)
         {
-            var judgePrecedence = ezConfig.Get<EzEnumJudgePrecedence>(Ez2Setting.JudgePrecedence);
+            var judgePrecedence = precedenceOverride ?? ezConfig.Get<EzEnumJudgePrecedence>(Ez2Setting.JudgePrecedence);
+
+            if (laneController != null && hitObject is not (DrawableHoldNoteTail or DrawableHoldNote))
+                return laneController.IsHittable(hitObject, time, judgePrecedence);
 
             if (isBMS())
             {
@@ -280,10 +279,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.Helper
         }
 
         private bool isBMS()
-        {
-            var mode = ezConfig.Get<EzEnumHitMode>(Ez2Setting.ManiaHitMode);
-            return HitModeHelper.IsBMSHitMode(mode);
-        }
+            => HitModeHelper.IsBMSHitMode(ezConfig.Get<EzEnumHitMode>(Ez2Setting.ManiaHitMode));
 
         public static DrawableHitObject? SelectFoldDrawable(IReadOnlyList<DrawableHitObject> sortedByStartTime, double pressTime, bool comboAlgorithm)
         {

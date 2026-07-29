@@ -1,7 +1,7 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 //
-// Replica of UI.OrderedHitPolicy Earliest behaviour — sync when merging ppy/osu master.
+// Offline column target state used by Session simulation.
 
 using System.Collections.Generic;
 using osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings;
@@ -31,18 +31,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
     internal static class ManiaColumnSimulator
     {
         internal static bool IsHittableEarliest(IReadOnlyList<LaneTargetState> column, int index, double time)
-        {
-            for (int i = index + 1; i < column.Count; i++)
-            {
-                if (column[i].Judged)
-                    continue;
-
-                if (time >= column[i].Target.StartTime)
-                    return false;
-            }
-
-            return true;
-        }
+            => ManiaLanePressSelector.IsHittableEarliest(column, index, time, static s => s.Judged, static s => s.Target.StartTime);
 
         internal static IEnumerable<LaneTargetState> ForceMissEarlier(IReadOnlyList<LaneTargetState> column, double targetStartTime)
         {
@@ -54,8 +43,6 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
                 if (state.Target.StartTime >= targetStartTime)
                     break;
 
-                state.Judged = true;
-                state.Result = HitResult.Miss;
                 yield return state;
             }
         }

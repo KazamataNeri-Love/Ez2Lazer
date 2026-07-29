@@ -23,15 +23,18 @@ using osu.Game.Audio;
 using osu.Game.Audio.Effects;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
+using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Input;
 using osu.Game.Localisation;
+using osu.Game.Online.API;
 using osu.Game.Online.Leaderboards;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Notifications;
 using osu.Game.Overlays.Volume;
 using osu.Game.Performance;
+using osu.Game.Resources.Localisation.Web;
 using osu.Game.Screens.Footer;
 using osu.Game.Screens.Menu;
 using osu.Game.Screens.Play.HUD;
@@ -42,6 +45,7 @@ using osu.Game.Users;
 using osu.Game.Utils;
 using osuTK;
 using osuTK.Graphics;
+using NotificationsStrings = osu.Game.Localisation.NotificationsStrings;
 
 namespace osu.Game.Screens.Play
 {
@@ -190,13 +194,16 @@ namespace osu.Game.Screens.Play
         [Resolved]
         private LeaderboardManager? leaderboardManager { get; set; }
 
+        [Resolved(canBeNull: true)]
+        private IEzScoreRacePlayerStartGate? scoreRacePlayerStartGate { get; set; }
+
         public PlayerLoader(Func<Player> createPlayer)
         {
             this.createPlayer = createPlayer;
         }
 
         [BackgroundDependencyLoader]
-        private void load(SessionStatics sessionStatics, OsuConfigManager config)
+        private void load(SessionStatics sessionStatics, OsuConfigManager config, IAPIProvider api)
         {
             muteWarningShownOnce = sessionStatics.GetBindable<bool>(Static.MutedAudioNotificationShownOnce);
             batteryWarningShownOnce = sessionStatics.GetBindable<bool>(Static.LowBatteryNotificationShownOnce);
@@ -307,6 +314,18 @@ namespace osu.Game.Screens.Play
             if (Beatmap.Value.Beatmap.EpilepsyWarning)
             {
                 disclaimers.Add(epilepsyWarning = new PlayerLoaderDisclaimer(PlayerLoaderStrings.EpilepsyWarningTitle, PlayerLoaderStrings.EpilepsyWarningContent));
+            }
+
+            if (!string.IsNullOrEmpty(api.ScoreProcessingNoticeUrl))
+            {
+                disclaimers.Add(new PlayerLoaderDisclaimer(
+                    UsersStrings.ShowScoreProcessingTitle(UsersStrings.ShowScoreProcessingTitleLink),
+                    UsersStrings.ShowScoreProcessingMessage
+                )
+                {
+                    Action = () => (Game as OsuGame)?.OpenUrlExternally(api.ScoreProcessingNoticeUrl),
+                    IsImportant = true,
+                });
             }
 
             switch (Beatmap.Value.BeatmapInfo.Status)
@@ -495,6 +514,7 @@ namespace osu.Game.Screens.Play
                 return;
 
             MetadataInfo.UserBlocked = !ReadyForGameplay && CurrentPlayer?.LoadState == LoadState.Ready;
+            updateLoaderLoadingState();
 
             // We need to perform this check here rather than in OnHover as any number of children of VisualSettings
             // may also be handling the hover events.
@@ -543,7 +563,7 @@ namespace osu.Game.Screens.Play
 
             LoadTask = LoadComponentAsync(CurrentPlayer, _ =>
             {
-                MetadataInfo.Loading = false;
+                updateLoaderLoadingState();
                 OnPlayerLoaded();
             });
         }
@@ -654,6 +674,13 @@ namespace osu.Game.Screens.Play
             highPassFilter?.CutoffTo(0, CONTENT_OUT_DURATION);
         }
 
+        private void updateLoaderLoadingState()
+        {
+            bool scoreRacePreparing = scoreRacePlayerStartGate != null && !scoreRacePlayerStartGate.CanStartPlayer;
+            bool playerLoading = CurrentPlayer == null || CurrentPlayer.LoadState < LoadState.Ready;
+            MetadataInfo.Loading = playerLoading || scoreRacePreparing;
+        }
+
         private void pushWhenLoaded()
         {
             Debug.Assert(ThreadSafety.IsUpdateThread);
@@ -664,6 +691,8 @@ namespace osu.Game.Screens.Play
                 !playerConsumed
                 // don't push unless the player is completely loaded
                 && CurrentPlayer?.LoadState == LoadState.Ready
+                // don't push until optional score-race timeline preparation completes
+                && (scoreRacePlayerStartGate?.CanStartPlayer ?? true)
                 // don't push unless the player is ready to start gameplay
                 && ReadyForGameplay;
 

@@ -6,8 +6,8 @@ using System.Collections.Generic;
 using System.Linq;
 using JetBrains.Annotations;
 using Newtonsoft.Json;
-using osu.Framework.Logging;
 using osu.Framework.Localisation;
+using osu.Framework.Logging;
 using osu.Game.Beatmaps;
 using osu.Game.Database;
 using osu.Game.Models;
@@ -490,7 +490,7 @@ namespace osu.Game.Scoring
 
         public IEnumerable<HitResultDisplayStatistic> GetStatisticsForDisplay()
         {
-            foreach (var r in Ruleset.CreateInstance().GetHitResultsForDisplay())
+            foreach (var r in Ruleset.CreateInstance().GetHitResultsForDisplay(this))
             {
                 int value = Statistics.GetValueOrDefault(r.result);
 

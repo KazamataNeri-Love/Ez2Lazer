@@ -31,8 +31,8 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
 {
     /// <summary>
     /// Mania 判定偏移分布图。Original 用 Realm 静态 <see cref="ScoreInfo"/>；
-    /// Now 经 <see cref="ManiaReplaySession"/>（ForLive，含 live config offset）；
-    /// offset 滑条同步控制展示层 fake 平移与 Session 真实 offset。
+    /// Now 经 <see cref="ManiaReplaySession"/>（ForLive）；拖动中使用展示层 fake 平移，
+    /// debounce 后的 Session 通过 replay frame 时间偏移得到最终值。
     /// </summary>
     public partial class EzScoreGraphMania : EzScoreGraphBase
     {
@@ -66,12 +66,12 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
             originalTotalScore = score.TotalScore;
 
             // 帧量化检测：若所有 HitEvent 的 TimeOffset 都是帧间隔（约 16.67ms）的整数倍，
-            // 说明 HitEvents 已被帧量化污染，需要用 ManiaScoreHitEventGenerator 重新生成精确版本。
+            // 说明 HitEvents 已被帧量化污染，需要用 RunHitEventsAsync 重新生成精确版本。
             originalHitEventsOverride = tryDetectAndRegenerateFrameQuantizedEvents(score, beatmap);
         }
 
         /// <summary>
-        /// 检测 HitEvents 是否被帧量化污染，若污染则通过 <see cref="ManiaScoreHitEventGenerator"/>
+        /// 检测 HitEvents 是否被帧量化污染，若污染则通过 <see cref="EzReplaySession.RunHitEventsAsync"/>
         /// 重新生成精确 HitEvents（不写回 <c>ScoreInfo</c>）。
         /// </summary>
         private static IReadOnlyList<HitEvent>? tryDetectAndRegenerateFrameQuantizedEvents(ScoreInfo score, IBeatmap beatmap)
@@ -89,17 +89,24 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
             if (!allFrameQuantized)
                 return null;
 
-            // 帧量化版本 → 用 ManiaScoreHitEventGenerator 重新生成精确事件
+            // 冗余分支清理：无 Replay 即无法重算
             try
             {
+                if (score.Ruleset.OnlineID != 3)
+                    return null;
+
                 var scoreForBridge = new Score { ScoreInfo = score };
 
-                if (ManiaScoreHitEventGenerator.Instance.Validate(scoreForBridge))
-                {
-                    var precise = ManiaScoreHitEventGenerator.Instance.Generate(scoreForBridge, beatmap);
-                    if (precise.Count > 0)
-                        return precise;
-                }
+                if (scoreForBridge.Replay == null || !ManiaReplayFrameEdgeParser.IsManiaReplay(scoreForBridge.Replay))
+                    return null;
+
+                var precise = new ManiaReplaySessionService()
+                    .RunHitEventsAsync(scoreForBridge, beatmap)
+                    .GetAwaiter()
+                    .GetResult();
+
+                if (precise is { Count: > 0 })
+                    return precise;
             }
             catch
             {
@@ -116,22 +123,30 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
 
         protected override IReadOnlyList<HitEvent> FilterHitEvents()
         {
-            // Session 产出时使用 Session HitEvents
             if (CommittedNowScore?.ScoreInfo.HitEvents is { } sessionEvents)
                 return filterForCurrentHitMode(sessionEvents);
 
-            // 无 Session 时使用全部 OriginalHitEvents，不做结果有效性过滤。
-            // GetDisplayResult 会通过 hitWindowsNow 对每个事件重新判定，
-            // 确保散点颜色和血量线反映当前 HitMode 的判定结果。
-            return applyFakeOffsetToEvents(getEffectiveOriginalHitEvents());
+            return Array.Empty<HitEvent>();
         }
 
         private IReadOnlyList<HitEvent> filterForCurrentHitMode(IEnumerable<HitEvent> events)
         {
             var validResults = HitModeHelper.GetHitModeValidHitResults(currentHitMode).ToHashSet();
-            var filtered = events.Where(e => validResults.Contains(e.Result) || e.Result is HitResult.Miss or HitResult.Poor);
+            var filtered = events.Where(e => isTimingScatterEvent(e)
+                                             && (validResults.Contains(e.Result) || e.Result is HitResult.Miss or HitResult.Poor));
 
             return applyFakeOffsetToEvents(filtered);
+        }
+
+        /// <summary>
+        /// 散点图只展示有真实按键时序的物件（Note/Head/Tail）；排除 LN auxiliary（Body/HoldNote）与 Ignore 类结果。
+        /// </summary>
+        private static bool isTimingScatterEvent(HitEvent hitEvent)
+        {
+            if (hitEvent.HitObject is HoldNoteBody or HoldNote)
+                return false;
+
+            return hitEvent.Result.AffectsAccuracy();
         }
 
         /// <summary>展示层预览：相对已提交 Session offset 的 delta。</summary>
@@ -152,14 +167,12 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
                 e.Position)).ToList();
         }
 
-        protected override ReplayRunRequest CreateReplayRunRequest(Score score)
-            => new ReplayRunRequest(score, Beatmap, ReplayRunPurpose.ForLive, offsetPlusMania.Value);
-
         protected override void CalculateNowAccuracy()
         {
             var info = CommittedNowScore?.ScoreInfo;
 
-            if (info == null)
+            // Debounce 前的拖动预览仍走 HitEvent 偏移重判；Session 提交后直接使用其完整重算结果。
+            if (info == null || offsetPlusMania.Value != CommittedSessionOffset)
             {
                 RecalculateNowFromDisplayEvents();
                 return;
@@ -289,6 +302,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
             healthModeBindable.BindValueChanged(__ =>
             {
                 currentHealthMode = healthModeBindable.Value;
+                onReplayConfigChanged();
             });
 
             ezConfig.GetBindable<EzEnumJudgePrecedence>(Ez2Setting.JudgePrecedence)
@@ -316,7 +330,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
             return result == HitResult.None ? HitResult.Miss : result;
         }
 
-        /// <summary>Session 成功时 Now 判定已由 Session 产出。</summary>
+        /// <summary>Session 基准判定已产出；fake offset 重判由 <see cref="GetDisplayResult"/> 负责。</summary>
         protected override HitResult RecalculateNowResult(HitEvent hitEvent) => hitEvent.Result;
 
         /// <summary>
@@ -345,21 +359,28 @@ namespace osu.Game.Rulesets.Mania.EzMania.Statistics
         }
 
         /// <summary>
-        /// 展示层判定结果。滑条 offset 与已提交 Session offset 不一致时 Rejudge 预览；否则读 Session。
+        /// 展示层判定结果：zero offset 直接使用 Session 结果；fake offset 时只对 Session HitEvents 重判。
+        /// 不读取或拼贴原始 Score 的 Statistics / HitEvents。
         /// </summary>
         protected override HitResult GetDisplayResult(HitEvent hitEvent)
         {
-            if (offsetPlusMania.Value != CommittedSessionOffset || CommittedNowScore == null)
-            {
-                var strategy = ManiaJudgementRegistry.GetHitModeJudgement(currentHitMode)
-                               ?? (IManiaNoteJudgementStrategy)LazerNoteJudgementReplica.Instance;
+            if (offsetPlusMania.Value == CommittedSessionOffset)
+                return hitEvent.Result;
 
-                var result = strategy.RejudgeHitEvent(hitEvent, hitWindowsNow);
-                return result == HitResult.None ? HitResult.Miss : result;
-            }
+            if (currentHitMode == EzEnumHitMode.O2Jam)
+                hitWindowsNow.UpdateO2JamBpmFromTime(hitEvent.HitObject.StartTime);
 
-            return hitEvent.Result;
+            var strategy = ManiaJudgementRegistry.GetHitModeJudgement(currentHitMode)
+                           ?? (IManiaNoteJudgementStrategy)LazerNoteJudgementReplica.Instance;
+
+            return strategy.RejudgeHitEvent(hitEvent, hitWindowsNow);
         }
+
+        protected override ReplayRunRequest CreateReplayRunRequest(Score score)
+            => new ReplayRunRequest(score, Beatmap, ReplayRunPurpose.ForLive)
+            {
+                IncludeGlobalManiaOffset = true
+            };
 
         protected override Score? ResolveInputScore() => scoreManager.GetScore(Score);
 

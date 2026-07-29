@@ -730,11 +730,17 @@ namespace osu.Game.Rulesets.Objects.Drawables
 
         public override bool UpdateSubTreeMasking() => false;
 
+        /// <summary>
+        /// Whether automiss timing is driven by an owning ruleset scheduler.
+        /// </summary>
+        protected bool AutomissHandledExternally { get; set; }
+
         protected override void UpdateAfterChildren()
         {
             base.UpdateAfterChildren();
 
-            UpdateResult(false);
+            if (!AutomissHandledExternally)
+                UpdateResult(false);
         }
 
         /// <summary>

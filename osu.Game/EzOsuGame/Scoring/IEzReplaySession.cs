@@ -13,7 +13,7 @@ namespace osu.Game.EzOsuGame.Scoring
     /// <summary>
     /// 统一 Replay Session 入口：负责 async、环境解析与共享 cache。
     /// 进程内由 <see cref="EzReplaySessionRouter"/> 按 <see cref="ScoreInfo.Ruleset"/> 分发；Panel / Graph / Race 注入本接口即可。
-    /// <para>环境由 Session 按 <see cref="ReplayRunPurpose"/> 经 <see cref="Configuration.Ez2ConfigManager.ResolveForSession"/> 解析。</para>
+    /// <para>环境由 Session 按 <see cref="ReplayRunPurpose"/> 经 <see cref="Configuration.Ez2ConfigManager.ResolveEnvironment"/> 解析。</para>
     /// </summary>
     public interface IEzReplaySession
     {
@@ -33,14 +33,21 @@ namespace osu.Game.EzOsuGame.Scoring
         Task<EzScoreTimeline> RunTimelineDirectAsync(Score score, IBeatmap beatmap, ReplayRunPurpose purpose, CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// <see cref="RunTimelineDirectAsync"/> 的同步版本：直接在当前线程运行判定，不额外开 <c>Task.Run</c>。
+        /// 供已在后台线程串行构建的角逐热路径调用，避免「嵌套 Task.Run + 同步阻塞」占用两个线程池线程。
+        /// </summary>
+        EzScoreTimeline RunTimelineDirect(Score score, IBeatmap beatmap, ReplayRunPurpose purpose, CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// 统一请求入口：支持更复杂的场景（如同时需要 Score + Timeline）。
         /// </summary>
         Task<ReplayRunResult> RunRequestAsync(ReplayRunRequest request, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 从 replay 生成 HitEvents（不含 Statistics），供「补空 HitEvents」场景使用。
-        /// 规则集没有 Session 时（如 OsuReplaySession 尚未实现）返回 null。
+        /// 从 replay 生成 HitEvents（与对应 Purpose 的 <see cref="RunAsync"/> 共 cache）。
+        /// StatisticsPanel 补空 HitEvents 使用 <see cref="ReplayRunPurpose.ForStored"/>；Graph Now 使用 ForLive。
+        /// 规则集没有 Session 时返回空列表。
         /// </summary>
-        Task<List<HitEvent>> RunHitEventsAsync(Score score, IBeatmap beatmap, CancellationToken cancellationToken = default);
+        Task<List<HitEvent>> RunHitEventsAsync(Score score, IBeatmap beatmap, ReplayRunPurpose purpose = ReplayRunPurpose.ForLive, CancellationToken cancellationToken = default);
     }
 }

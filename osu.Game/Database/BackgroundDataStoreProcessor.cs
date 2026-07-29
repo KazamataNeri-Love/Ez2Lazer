@@ -12,6 +12,7 @@ using System.IO;
 using Newtonsoft.Json;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
+using osu.Framework.Development;
 using osu.Framework.Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Logging;
@@ -83,6 +84,14 @@ namespace osu.Game.Database
 
         protected virtual int TimeToSleepDuringGameplay => 30000;
 
+        protected virtual bool SkipProcessing => DebugUtils.IsNUnitRunning;
+
+        /// <summary>
+        /// 进主循环前等待，避免选歌刚出现就遭遇 Ez/官方 backfill 的 Invalidate/Replace 风暴。
+        /// 测试覆写为 <see cref="TimeSpan.Zero"/>。
+        /// </summary>
+        protected virtual TimeSpan StartupBackfillDelay => TimeSpan.FromSeconds(5);
+
         /// <summary>
         /// Queue Ez Realm metadata backfill (Tag / XxySR / PP) on a background thread.
         /// </summary>
@@ -145,6 +154,9 @@ namespace osu.Game.Database
         {
             base.LoadComplete();
 
+            if (SkipProcessing)
+                return;
+
             localMetadataSource = new LocalCachedBeatmapMetadataSource(storage);
 
             ProcessingTask = Task.Factory.StartNew(() =>
@@ -152,6 +164,11 @@ namespace osu.Game.Database
                 try
                 {
                     Logger.Log("Beginning background data store processing..");
+
+                    // Let SongSelect settle before Invalidate storms from Ez/official backfill
+                    // (users see a 3–5s FPS cliff when unlimited carousel Replaces land in one burst).
+                    Thread.Sleep(StartupBackfillDelay);
+                    sleepIfRequired();
 
                     clearOutdatedStarRatings();
                     clearOutdatedXxyStarRatings();
@@ -1297,7 +1314,7 @@ namespace osu.Game.Database
         {
             if (!localMetadataSource.Available || !localMetadataSource.IsAtLeastVersion(3))
             {
-                Logger.Log(@"Local metadata cache has too low version to backpopulate user tags, attempting refetch...");
+                Logger.Log(@"Local metadata cache doesn't exist, or has too low version to backpopulate user tags, attempting refetch...");
                 localMetadataSource.FetchCache().WaitSafely();
 
                 if (!localMetadataSource.Available || !localMetadataSource.IsAtLeastVersion(3))

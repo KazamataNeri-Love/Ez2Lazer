@@ -467,15 +467,19 @@ namespace osu.Game.Rulesets.Mania
         }
 
         public override IEnumerable<HitResult> GetValidHitResults()
-        {
-            return HitModeHelper.GetHitModeValidHitResults();
-        }
+            => HitModeHelper.GetHitModeValidHitResults();
+
+        public override IEnumerable<HitResult> GetValidHitResults(ScoreInfo? score)
+            => HitModeHelper.GetHitModeValidHitResultsForDisplay(score);
 
         public override LocalisableString GetDisplayNameForHitResult(HitResult result)
         {
             // 获取对应 HitMode 的显示名称
             return result.GetHitModeDisplayName();
         }
+
+        public override LocalisableString GetDisplayNameForHitResult(HitResult result, ScoreInfo? score)
+            => result.GetHitModeDisplayName(EzManiaScoreModeExtensions.ResolveDisplayHitMode(score));
 
         public override StatisticItem[] CreateStatisticsForScore(ScoreInfo score, IBeatmap playableBeatmap) => new[]
         {

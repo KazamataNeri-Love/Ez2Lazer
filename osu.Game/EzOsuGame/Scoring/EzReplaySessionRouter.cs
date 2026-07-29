@@ -40,6 +40,9 @@ namespace osu.Game.EzOsuGame.Scoring
         public Task<EzScoreTimeline> RunTimelineDirectAsync(Score score, IBeatmap beatmap, ReplayRunPurpose purpose, CancellationToken cancellationToken = default)
             => requireSession(score).RunTimelineDirectAsync(score, beatmap, purpose, cancellationToken);
 
+        public EzScoreTimeline RunTimelineDirect(Score score, IBeatmap beatmap, ReplayRunPurpose purpose, CancellationToken cancellationToken = default)
+            => requireSession(score).RunTimelineDirect(score, beatmap, purpose, cancellationToken);
+
         public Task<ReplayRunResult> RunRequestAsync(ReplayRunRequest request, CancellationToken cancellationToken = default)
         {
             var session = tryResolve(request.Score);
@@ -50,14 +53,14 @@ namespace osu.Game.EzOsuGame.Scoring
             return session.RunRequestAsync(request, cancellationToken);
         }
 
-        public Task<List<HitEvent>> RunHitEventsAsync(Score score, IBeatmap beatmap, CancellationToken cancellationToken = default)
+        public Task<List<HitEvent>> RunHitEventsAsync(Score score, IBeatmap beatmap, ReplayRunPurpose purpose = ReplayRunPurpose.ForLive, CancellationToken cancellationToken = default)
         {
             var session = tryResolve(score);
 
             if (session == null)
                 return Task.FromResult(new List<HitEvent>());
 
-            return session.RunHitEventsAsync(score, beatmap, cancellationToken);
+            return session.RunHitEventsAsync(score, beatmap, purpose, cancellationToken);
         }
 
         private IEzReplaySession requireSession(Score score)

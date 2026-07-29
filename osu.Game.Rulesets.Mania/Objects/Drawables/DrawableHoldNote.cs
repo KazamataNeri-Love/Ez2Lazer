@@ -13,11 +13,11 @@ using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
 using osu.Game.Audio;
 using osu.Game.Rulesets.Judgements;
+using osu.Game.Rulesets.Mania.EzMania.ReplayJudge;
 using osu.Game.Rulesets.Mania.Judgements;
 using osu.Game.Rulesets.Mania.Skinning.Default;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Objects.Drawables;
-using osu.Game.Rulesets.Mania.EzMania.ReplayJudge;
 using osu.Game.Rulesets.Scoring;
 using osu.Game.Rulesets.UI.Scrolling;
 using osu.Game.Screens.Play;
@@ -281,11 +281,14 @@ namespace osu.Game.Rulesets.Mania.Objects.Drawables
 
         protected override void CheckForResult(bool userTriggered, double timeOffset)
         {
-            if (ManiaEzDrawableJudgement.TryMalodyHoldCheckForResult(this, userTriggered, timeOffset))
-                return;
+            if (UsesEzJudgement)
+            {
+                if (ManiaEzDrawableJudgement.TryMalodyHoldCheckForResult(this, userTriggered, timeOffset))
+                    return;
 
-            if (ManiaEzDrawableJudgement.TryO2HoldCheckForResult(this, userTriggered, timeOffset))
-                return;
+                if (ManiaEzDrawableJudgement.TryO2HoldCheckForResult(this, userTriggered, timeOffset))
+                    return;
+            }
 
             if (Tail.AllJudged)
             {
@@ -313,6 +316,9 @@ namespace osu.Game.Rulesets.Mania.Objects.Drawables
 
         public bool OnPressed(KeyBindingPressEvent<ManiaAction> e)
         {
+            if (ShouldSkipColumnRoutedPress?.Invoke(this) == true)
+                return false;
+
             if (AllJudged)
                 return false;
 
@@ -323,16 +329,40 @@ namespace osu.Game.Rulesets.Mania.Objects.Drawables
             if ((Clock as IGameplayClock)?.IsRewinding == true)
                 return false;
 
-            if (CheckHittable?.Invoke(this, Time.Current) == false)
+            return TryBeginHoldPress(Time.Current);
+        }
+
+        internal bool TryBeginHoldPress(double currentTime)
+        {
+            if (CheckHittable?.Invoke(this, currentTime) == false)
                 return false;
 
             // The tail has a lenience applied to it which is factored into the miss window (i.e. the miss judgement will be delayed).
             // But the hold cannot ever be started within the late-lenience window, so we should skip trying to begin the hold during that time.
             // Note: Unlike below, we use the tail's start time to determine the time offset.
-            if (Time.Current > Tail.HitObject.StartTime && !Tail.HitObject.HitWindows.CanBeHit(Time.Current - Tail.HitObject.StartTime))
+            if (currentTime > Tail.HitObject.StartTime && !Tail.HitObject.HitWindows.CanBeHit(currentTime - Tail.HitObject.StartTime))
                 return false;
 
-            beginHoldAt(Time.Current - Head.HitObject.StartTime);
+            beginHoldAt(currentTime - Head.HitObject.StartTime);
+
+            return Head.UpdateResult();
+        }
+
+        /// <summary>
+        /// 列级路由已选中本 hold，跳过重复的 <see cref="DrawableManiaHitObject.CheckHittable"/>。
+        /// </summary>
+        internal bool TryBeginHoldPressFromColumn(double currentTime)
+        {
+            if (AllJudged)
+                return false;
+
+            if ((Clock as IGameplayClock)?.IsRewinding == true)
+                return false;
+
+            if (currentTime > Tail.HitObject.StartTime && !Tail.HitObject.HitWindows.CanBeHit(currentTime - Tail.HitObject.StartTime))
+                return false;
+
+            beginHoldAt(currentTime - Head.HitObject.StartTime);
 
             return Head.UpdateResult();
         }
@@ -367,11 +397,22 @@ namespace osu.Game.Rulesets.Mania.Objects.Drawables
             if (isHolding.Value)
             {
                 Tail.UpdateResult();
-                Body.TriggerResult(Tail.IsHit);
+                EzTriggerBodyAfterTailRelease();
 
                 Result.ReportHoldState(Time.Current, false);
             }
         }
+
+        internal void EzTriggerBodyAfterTailRelease()
+        {
+            if (Tail.AllJudged)
+                Body.TriggerResult(Tail.IsHit);
+            else if (isEarlyHoldRelease())
+                Body.TriggerResult(false);
+        }
+
+        private bool isEarlyHoldRelease()
+            => Time.Current < Tail.HitObject.StartTime;
 
         protected override void LoadSamples()
         {

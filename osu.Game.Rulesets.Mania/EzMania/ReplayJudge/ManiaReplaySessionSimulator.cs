@@ -12,6 +12,7 @@ using osu.Game.Rulesets.Judgements;
 using osu.Game.Rulesets.Mania.EzMania.Helper;
 using osu.Game.Rulesets.Mania.EzMania.ReplayJudge.Mappings;
 using osu.Game.Rulesets.Mania.Objects;
+using osu.Game.Rulesets.Mania.Objects.EzCurrentHitObject;
 using osu.Game.Rulesets.Mania.Scoring;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Objects.Types;
@@ -37,19 +38,18 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
             ManiaReplayTimelineRecorder? timelineRecorder,
             CancellationToken cancellationToken)
         {
-            bool poorEnabled = HealthModeHelper.IsBMSHealthMode(environment.ManiaHealthMode)
-                               && environment.BmsPoorHitResultEnable;
+            bool poorEnabled = HealthModeHelper.ComputeKPoorEnabled(environment.ManiaHealthMode, environment.BmsPoorHitResultEnable);
 
             bool pillModeEnabled = environment.ManiaHealthMode.ToString().Contains("O2Jam");
             var bms = noteStrategy as BmsHitModeJudgement;
+            var judgementRound = createJudgementRound(environment, beatmap);
 
             var hitWindowHelper = new HitModeHelper(environment.ManiaHitMode)
             {
                 OverallDifficulty = beatmap.Difficulty.OverallDifficulty,
-                BPM = getBpmAtTime(beatmap, 0),
+                BPM = resolveSimulationBpm(beatmap, 0, environment.ManiaHitMode),
             };
 
-            var judgementState = new ManiaReplayJudgementState();
             var headWasHit = new Dictionary<HeadNote, bool>();
             var keyHeldByColumn = new Dictionary<int, bool>();
 
@@ -64,11 +64,14 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
                 if (!perColumnDict.TryGetValue(input.Column, out var laneStates))
                     continue;
 
-                hitWindowHelper.BPM = getBpmAtTime(beatmap, input.Time);
+                if (judgementRound.IsO2Jam)
+                    judgementRound.NotifyO2InputAt(input.Time);
+
+                hitWindowHelper.BPM = resolveSimulationBpm(beatmap, input.Time, environment.ManiaHitMode);
 
                 var candidates = collectCandidatesForInput(laneStates, beatmap, input.Time, hitWindowHelper, environment.ManiaHitMode).ToList();
 
-                if (input.IsPress && bms != null)
+                if (input.IsPress && bms != null && poorEnabled)
                 {
                     bms.TryRoutePostBadKPoor(
                         laneStates,
@@ -90,7 +93,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
                     continue;
 
                 var selected = selectCandidate(
-                    candidates, laneStates, beatmap, input.Time, environment, noteStrategy, hitWindowHelper);
+                    candidates, laneStates, input.Time, environment);
 
                 if (selected == null || selected.Judged)
                     continue;
@@ -116,27 +119,54 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
                         continue;
                 }
 
+                double pressBpm = judgementRound.IsO2Jam ? judgementRound.O2PressBpm : hitWindowHelper.BPM;
+
                 HitResult result;
 
                 if (isTail)
                 {
-                    result = holdStrategy.EvaluateTail(new HoldTailEvaluationContext
+                    if (judgementRound.IsEzHitMode)
                     {
-                        RawOffset = rawOffset,
-                        TimeOffsetForJudgement = timeOffsetForJudgement,
-                        HitWindows = target.HitWindows!,
-                        HeadHit = headHit,
-                        HoldBreak = holdBreak,
-                        HoldBroken = selected.HoldBroken,
-                        WasHoldingBeforeRelease = wasHoldingBeforeEvent,
-                        State = judgementState,
-                        EventTime = input.Time,
-                        Bpm = hitWindowHelper.BPM,
-                        PillModeEnabled = pillModeEnabled,
-                    });
+                        var tailEval = ManiaJudgementKernel.EvaluateHoldTail(new ManiaJudgementKernel.HoldTailEvaluationRequest
+                        {
+                            Round = judgementRound,
+                            TimeOffset = timeOffsetForJudgement,
+                            RawOffset = rawOffset,
+                            HitWindows = target.HitWindows!,
+                            UserTriggered = true,
+                            HeadHit = headHit,
+                            HoldBroken = selected.HoldBroken,
+                            WasHolding = wasHoldingBeforeEvent,
+                            HasHoldBreak = holdBreak,
+                            EventTime = input.Time,
+                            PressBpm = pressBpm,
+                            FrameStableId = (long)(input.Time * 1000),
+                            BmsState = bms != null ? selected.BmsRoute : null,
+                        });
 
-                    if (environment.ManiaHitMode == EzEnumHitMode.Lazer && result == HitResult.None)
-                        continue;
+                        if (!tryMapTailEvaluation(tailEval, out result))
+                            continue;
+                    }
+                    else
+                    {
+                        result = holdStrategy.EvaluateTail(new HoldTailEvaluationContext
+                        {
+                            RawOffset = rawOffset,
+                            TimeOffsetForJudgement = timeOffsetForJudgement,
+                            HitWindows = target.HitWindows!,
+                            HeadHit = headHit,
+                            HoldBreak = holdBreak,
+                            HoldBroken = selected.HoldBroken,
+                            WasHoldingBeforeRelease = wasHoldingBeforeEvent,
+                            State = judgementRound.MutableState,
+                            EventTime = input.Time,
+                            Bpm = hitWindowHelper.BPM,
+                            PillModeEnabled = pillModeEnabled,
+                        });
+
+                        if (environment.ManiaHitMode == EzEnumHitMode.Lazer && result == HitResult.None)
+                            continue;
+                    }
                 }
                 else if (bms != null && target.HitWindows is ManiaHitWindows bmsWindows)
                 {
@@ -161,17 +191,39 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
                     result = BmsHitModeJudgement.MapTo(sessionOutcome.Judge);
                     selected.BmsRoute.CanRouteToKPoor = sessionOutcome.EnableCanRouteToKPoor;
                 }
+                else if (judgementRound.IsEzHitMode)
+                {
+                    var noteEval = ManiaJudgementKernel.EvaluateNote(new ManiaJudgementKernel.NoteEvaluationRequest
+                    {
+                        Round = judgementRound,
+                        TimeOffset = timeOffsetForJudgement,
+                        HitWindows = target.HitWindows!,
+                        UserTriggered = true,
+                        IsLnHead = target is HeadNote,
+                        EventTime = input.Time,
+                        PressBpm = pressBpm,
+                        FrameStableId = (long)(input.Time * 1000),
+                        BmsState = bms != null ? selected.BmsRoute : null,
+                    });
+
+                    if (!tryMapNoteEvaluation(noteEval, out result))
+                        continue;
+                }
                 else
                 {
-                    result = evaluateNotePress(
-                        target, noteStrategy, timeOffsetForJudgement, rawOffset, judgementState, hitWindowHelper.BPM, pillModeEnabled, environment.ManiaHitMode);
+                    var outcome = noteStrategy.EvaluatePress(timeOffsetForJudgement, target.HitWindows!);
 
-                    if (result == HitResult.None)
+                    if (outcome.Kind != ManiaNoteJudgementOutcomeKind.Apply)
                         continue;
+
+                    result = outcome.Result;
                 }
 
                 foreach (var forced in ForceMissEarlier(laneStates, target.StartTime))
                 {
+                    if (!IsWithinMissWindow(forced.Target, input.Time, useTailReleaseLenience: false))
+                        continue;
+
                     forced.Judged = true;
                     forced.Result = HitResult.Miss;
                     ApplyFinalResult(
@@ -208,16 +260,18 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
                 {
                     // HoldNoteBody: IgnoreHit on hit, ComboBreak on miss
                     // (matches DrawableHoldNoteBody.TriggerResult → ApplyMaxResult/ApplyMinResult)
+                    double tailStoredOffset = ComputeStoredTimeOffset(input.Time, judgedTail);
+
                     if (tailHold.Body != null)
                     {
                         HitResult bodyResult = result.IsHit() ? HitResult.IgnoreHit : HitResult.ComboBreak;
-                        ApplyAuxiliaryResult(scoreProcessor, tailHold.Body, bodyResult, input.Time, gameplayRate, timelineRecorder);
+                        ApplyAuxiliaryResult(scoreProcessor, tailHold.Body, bodyResult, tailStoredOffset, input.Time, gameplayRate, timelineRecorder);
                     }
 
                     // HoldNote parent: IgnoreHit on hit, IgnoreMiss on miss
                     // (matches DrawableHoldNote.CheckForResult → ApplyMaxResult/MissForcefully)
                     HitResult holdAuxResult = result.IsHit() ? HitResult.IgnoreHit : HitResult.IgnoreMiss;
-                    ApplyAuxiliaryResult(scoreProcessor, tailHold, holdAuxResult, input.Time, gameplayRate, timelineRecorder);
+                    ApplyAuxiliaryResult(scoreProcessor, tailHold, holdAuxResult, tailStoredOffset, input.Time, gameplayRate, timelineRecorder);
                 }
 
                 if (target is HeadNote head)
@@ -225,120 +279,98 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
             }
         }
 
-        private static HitResult evaluateNotePress(
-            HitObject target,
-            IManiaNoteJudgementStrategy noteStrategy,
-            double timeOffsetForJudgement,
-            double rawOffset,
-            ManiaReplayJudgementState state,
-            double bpm,
-            bool pillModeEnabled,
-            EzEnumHitMode hitMode)
+        private static ManiaJudgementRound createJudgementRound(IGameplayEnvironment environment, IBeatmap beatmap)
         {
-            ManiaNoteJudgementOutcome outcome;
-
-            if (hitMode == EzEnumHitMode.O2Jam && noteStrategy is O2HitModeJudgement o2)
+            GameplayEnvironment gameplay = environment as GameplayEnvironment ?? new GameplayEnvironment
             {
-                outcome = o2.EvaluatePress(timeOffsetForJudgement, target.HitWindows!, new O2HitModeJudgement.NotePressContext
-                {
-                    RawOffset = rawOffset,
-                    Bpm = bpm,
-                    PillModeEnabled = pillModeEnabled,
-                    State = state,
-                });
-            }
-            else if (hitMode == EzEnumHitMode.EZ2AC && noteStrategy is Ez2AcHitModeJudgement ez2Ac)
+                ManiaHitMode = environment.ManiaHitMode,
+                ManiaHealthMode = environment.ManiaHealthMode,
+                JudgePrecedence = environment.JudgePrecedence,
+                OffsetPlusMania = environment.OffsetPlusMania,
+                BmsPoorHitResultEnable = environment.BmsPoorHitResultEnable,
+            };
+
+            return ManiaJudgementRound.Create(gameplay, beatmap);
+        }
+
+        private static bool tryMapNoteEvaluation(ManiaJudgementKernel.NoteEvaluationResult evaluation, out HitResult result)
+        {
+            result = default;
+
+            switch (evaluation.Kind)
             {
-                outcome = ez2Ac.EvaluatePress(timeOffsetForJudgement, target.HitWindows!, target is HeadNote);
+                case ManiaJudgementKernel.NoteEvaluationKind.ApplyNoteOutcome:
+                    if (evaluation.NoteOutcome.Kind != ManiaNoteJudgementOutcomeKind.Apply)
+                        return false;
+
+                    result = evaluation.NoteOutcome.Result;
+                    return true;
+
+                case ManiaJudgementKernel.NoteEvaluationKind.ApplyBmsAction:
+                    if (!evaluation.BmsAction.Handled || !evaluation.BmsAction.ApplyFinal)
+                        return false;
+
+                    result = BmsHitModeJudgement.MapTo(evaluation.BmsAction.Judge);
+                    return result != HitResult.None;
+
+                default:
+                    return false;
             }
-            else
+        }
+
+        private static bool tryMapTailEvaluation(ManiaJudgementKernel.HoldTailEvaluationResult evaluation, out HitResult result)
+        {
+            result = default;
+
+            if (!evaluation.Handled)
+                return false;
+
+            if (evaluation.ApplyMinResult)
             {
-                outcome = noteStrategy.EvaluatePress(timeOffsetForJudgement, target.HitWindows!);
+                result = HitResult.Miss;
+                return true;
             }
 
-            if (outcome.Kind == ManiaNoteJudgementOutcomeKind.None)
-                return HitResult.None;
+            if (evaluation.FinalResult != null)
+            {
+                result = evaluation.FinalResult.Value;
+                return result != HitResult.None;
+            }
 
-            return outcome.Result;
+            if (evaluation.BmsAction.Handled && evaluation.BmsAction.ApplyFinal)
+            {
+                result = BmsHitModeJudgement.MapTo(evaluation.BmsAction.Judge);
+                return result != HitResult.None;
+            }
+
+            return false;
         }
 
         private static LaneTargetState? selectCandidate(
             List<LaneTargetState> candidates,
             IReadOnlyList<LaneTargetState> laneStates,
-            IBeatmap beatmap,
             double inputTime,
-            IGameplayEnvironment environment,
-            IManiaNoteJudgementStrategy noteStrategy,
-            HitModeHelper hitWindowHelper)
-        {
-            if (environment.JudgePrecedence == EzEnumJudgePrecedence.Earliest
-                && environment.ManiaHitMode is EzEnumHitMode.Lazer or EzEnumHitMode.Classic)
-            {
-                return selectEarliestCandidate(candidates, laneStates, inputTime, noteStrategy, environment);
-            }
-
-            return selectCandidateByPrecedence(candidates, beatmap, inputTime, environment, hitWindowHelper, noteStrategy);
-        }
-
-        private static LaneTargetState? selectEarliestCandidate(
-            List<LaneTargetState> candidates,
-            IReadOnlyList<LaneTargetState> laneStates,
-            double time,
-            IManiaNoteJudgementStrategy noteStrategy,
             IGameplayEnvironment environment)
-        {
-            candidates.Sort((a, b) => a.Target.StartTime.CompareTo(b.Target.StartTime));
+            => selectCandidateByPrecedence(candidates, laneStates, inputTime, environment);
 
-            foreach (var candidate in candidates)
-            {
-                int index = laneStates.ToList().FindIndex(s => ReferenceEquals(s, candidate));
-                if (index < 0 || !IsHittableEarliest(laneStates, index, time))
-                    continue;
-
-                if (candidate.IsTail)
-                    return candidate;
-
-                double judgedOffset = time - candidate.Target.GetEndTime() + environment.OffsetPlusMania;
-                var outcome = noteStrategy.EvaluatePress(judgedOffset, candidate.Target.HitWindows!);
-
-                if (outcome.Kind == ManiaNoteJudgementOutcomeKind.Apply)
-                    return candidate;
-            }
-
-            return null;
-        }
-
+        /// <summary>
+        /// Earliest note-lock：与 <see cref="ManiaLaneController.SelectPressEntry"/> 一致，仅检查游标可打性，不在此预判 EvaluatePress。
+        /// </summary>
         private static LaneTargetState? selectCandidateByPrecedence(
             List<LaneTargetState> candidates,
-            IBeatmap beatmap,
+            IReadOnlyList<LaneTargetState> laneStates,
             double inputTime,
-            IGameplayEnvironment environment,
-            HitModeHelper hitWindowHelper,
-            IManiaNoteJudgementStrategy noteStrategy)
+            IGameplayEnvironment environment)
         {
             if (candidates.Count == 0)
                 return null;
 
-            candidates.Sort((a, b) => a.Target.StartTime.CompareTo(b.Target.StartTime));
-
-            return environment.JudgePrecedence switch
-            {
-                EzEnumJudgePrecedence.Combo => OrderedHitPolicyHelper.SelectFold(
-                    candidates,
-                    s => s.Judged,
-                    s => s.Target.StartTime,
-                    s => s.Target.HitWindows as ManiaHitWindows,
-                    inputTime,
-                    comboAlgorithm: true),
-                EzEnumJudgePrecedence.Duration => OrderedHitPolicyHelper.SelectFold(
-                    candidates,
-                    s => s.Judged,
-                    s => s.Target.StartTime,
-                    s => s.Target.HitWindows as ManiaHitWindows,
-                    inputTime,
-                    comboAlgorithm: false),
-                _ => candidates[0]
-            } ?? candidates[0];
+            return ManiaLanePressSelector.SelectSessionTarget(
+                candidates,
+                laneStates,
+                inputTime,
+                environment.JudgePrecedence,
+                HitModeHelper.IsBMSHitMode(environment.ManiaHitMode));
         }
 
         private static IEnumerable<LaneTargetState> collectCandidatesForInput(
@@ -354,7 +386,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
             // 使用基准判定（非 tail lenience）计算时间窗口边界。
             // 对于 tail release，实际窗口更大，但二分查找只用于快速定位起始位置，
             // 后续线性扫描会逐条检查实际窗口（含 lenience）。
-            hitWindowHelper.BPM = getBpmAtTime(beatmap, eventTime);
+            hitWindowHelper.BPM = resolveSimulationBpm(beatmap, eventTime, hitMode);
 
             double baseEarlyWindow = hitWindowHelper.WindowFor(HitResult.Miss, true);
             double baseLateWindow = hitWindowHelper.WindowFor(HitResult.Miss, false);
@@ -416,6 +448,14 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
 
         private static bool usesTailReleaseLenience(EzEnumHitMode hitMode)
             => hitMode == EzEnumHitMode.Lazer || hitMode == EzEnumHitMode.Classic;
+
+        private static double resolveSimulationBpm(IBeatmap beatmap, double time, EzEnumHitMode hitMode)
+        {
+            if (hitMode == EzEnumHitMode.O2Jam)
+                return O2HitModeExtension.GetBPMAtTime(time);
+
+            return getBpmAtTime(beatmap, time);
+        }
 
         private static double getBpmAtTime(IBeatmap beatmap, double time)
         {
@@ -487,6 +527,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
             ScoreProcessor scoreProcessor,
             HitObject target,
             HitResult result,
+            double storedTimeOffset,
             double eventTime,
             double gameplayRate,
             ManiaReplayTimelineRecorder? timelineRecorder)
@@ -495,7 +536,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
             {
                 Type = result,
             };
-            JudgementResultTimingHelper.ApplyTiming(judgementResult, 0, gameplayRate);
+            JudgementResultTimingHelper.ApplyTiming(judgementResult, storedTimeOffset, gameplayRate);
             scoreProcessor.ApplyResult(judgementResult);
             timelineRecorder?.Record(scoreProcessor, eventTime, gameplayRate);
         }
@@ -503,15 +544,29 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
         internal static double ComputeStoredTimeOffset(double eventTime, HitObject target)
             => eventTime - target.GetEndTime();
 
-        /// <summary>
-        /// Miss 存储偏移：优先该列 replay 最近邻 press；无输入则 0（Graph 侧 projectOffsetToY 压边）。
-        /// </summary>
         internal static double ResolveMissStoredOffset(
             HitObject target,
             IReadOnlyDictionary<int, List<double>> pressTimesByColumn,
             double? beforeTimeInclusive = null)
         {
-            double eventTime = ResolveMissEventTime(target, pressTimesByColumn, beforeTimeInclusive);
+            if (target is not IHasColumn hasColumn)
+                return ComputeStoredTimeOffset(ResolveMissEventTime(target, pressTimesByColumn, beforeTimeInclusive), target);
+
+            if (!pressTimesByColumn.TryGetValue(hasColumn.Column, out var times) || times.Count == 0)
+                return ComputeStoredTimeOffset(target.GetEndTime(), target);
+
+            return ResolveMissStoredOffset(target, times, beforeTimeInclusive);
+        }
+
+        /// <summary>
+        /// Drawable 列 press 列表专用；避免 Dictionary/List 快照分配。
+        /// </summary>
+        internal static double ResolveMissStoredOffset(
+            HitObject target,
+            IReadOnlyList<double> columnPressTimes,
+            double? beforeTimeInclusive = null)
+        {
+            double eventTime = ResolveMissEventTime(target, columnPressTimes, beforeTimeInclusive);
             return ComputeStoredTimeOffset(eventTime, target);
         }
 
@@ -526,18 +581,50 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
             if (!pressTimesByColumn.TryGetValue(hasColumn.Column, out var times) || times.Count == 0)
                 return target.GetEndTime();
 
-            IEnumerable<double> candidates = times;
+            return ResolveMissEventTime(target, times, beforeTimeInclusive);
+        }
 
-            if (beforeTimeInclusive.HasValue)
-                candidates = times.Where(t => t <= beforeTimeInclusive.Value);
-
-            var candidateList = candidates.ToList();
-
-            if (candidateList.Count == 0)
-                return beforeTimeInclusive ?? target.GetEndTime();
+        internal static double ResolveMissEventTime(
+            HitObject target,
+            IReadOnlyList<double> columnPressTimes,
+            double? beforeTimeInclusive = null)
+        {
+            if (columnPressTimes.Count == 0)
+                return target.GetEndTime();
 
             double reference = target.GetEndTime();
-            return candidateList.MinBy(t => Math.Abs(t - reference));
+            double bestTime = double.NaN;
+            double bestDistance = double.PositiveInfinity;
+
+            foreach (double pressTime in columnPressTimes)
+            {
+                if (pressTime > beforeTimeInclusive)
+                    continue;
+
+                double distance = Math.Abs(pressTime - reference);
+
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestTime = pressTime;
+                }
+            }
+
+            if (double.IsNaN(bestTime))
+                return beforeTimeInclusive ?? target.GetEndTime();
+
+            return bestTime;
+        }
+
+        private static int indexOf(IReadOnlyList<LaneTargetState> laneStates, LaneTargetState candidate)
+        {
+            for (int i = 0; i < laneStates.Count; i++)
+            {
+                if (ReferenceEquals(laneStates[i], candidate))
+                    return i;
+            }
+
+            return -1;
         }
     }
 }

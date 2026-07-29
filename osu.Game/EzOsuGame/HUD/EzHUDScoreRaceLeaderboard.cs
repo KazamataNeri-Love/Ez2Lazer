@@ -14,6 +14,7 @@ using osu.Game.Configuration;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Graphics.Containers;
+using osu.Game.Scoring;
 using osu.Game.Screens.Play;
 using osu.Game.Screens.Play.HUD;
 using osu.Game.Screens.Play.Leaderboards;
@@ -27,7 +28,7 @@ namespace osu.Game.EzOsuGame.HUD
     /// 本地多成绩实时角逐排行榜。对齐官方 Leaderboard 架构：
     /// - <see cref="EzScoreRaceService"/> 提供 ghost 元数据（选歌）与进局 timeline build
     /// - 本组件订阅字典变化，按需创建/销毁 processor，每个 processor 绑定到一个 ghost state
-    /// - HUD 直接绑定 processor 的 bindable，不需要 Session/Entry 中间层
+    /// - 服务未注册时：当前玩家实时绑定 ScoreProcessor，ghost 展示 ScoreInfo 静态终值
     /// </summary>
     public partial class EzHUDScoreRaceLeaderboard : EzHUDScoreRaceComponent, ISerialisableDrawable
     {
@@ -56,7 +57,10 @@ namespace osu.Game.EzOsuGame.HUD
         private readonly Cached sorting = new Cached();
 
         private IBindableDictionary<string, EzScoreRaceState>? stateLookup;
-        private EzScoreRaceService? scoreRaceService;
+        private bool interestRegistered;
+        private bool passiveMode;
+        private bool passiveSettingsBound;
+        private bool sortTimerScheduled;
 
         private LeaderboardEntryState? currentPlayerEntry;
         private double lastUpdateScoreDisplayScroll = double.MinValue;
@@ -77,6 +81,7 @@ namespace osu.Game.EzOsuGame.HUD
                 {
                     ClampExtension = 0,
                     RelativeSizeAxes = Axes.Both,
+                    Alpha = 0,
                     Child = Flow = new FillFlowContainer<DrawableGameplayLeaderboardScore>
                     {
                         RelativeSizeAxes = Axes.X,
@@ -102,31 +107,85 @@ namespace osu.Game.EzOsuGame.HUD
             EnsureLoadingOverlay();
 
             base.LoadComplete();
-
-            Scheduler.AddDelayed(sort, 1000, true);
         }
 
         private void bindStateLookupWhenAvailable()
         {
-            if (stateLookup != null)
-                return;
+            if (IsScoreRaceServiceAvailable)
+                activateLive();
+            else
+                activatePassive();
+        }
 
-            var service = (EzScoreRaceService?)Dependencies.Get(typeof(EzScoreRaceService));
+        private void activateLive()
+        {
+            passiveMode = false;
+            var service = ScoreRaceService!;
 
-            if (service == null)
-            {
-                Schedule(bindStateLookupWhenAvailable);
-                return;
-            }
-
-            scoreRaceService = service;
             ModFilterSetting.BindTo(service.ModFilter);
             MaxEntriesSetting.BindTo(service.MaxEntries);
 
-            stateLookup = service.States;
-            stateLookup!.BindCollectionChanged(onStatesChanged, true);
+            if (!interestRegistered)
+            {
+                service.RegisterInterest();
+                interestRegistered = true;
+            }
+
+            if (stateLookup == null)
+            {
+                stateLookup = service.States;
+                stateLookup.BindCollectionChanged(onStatesChanged, true);
+            }
+
+            scroll.Alpha = 1;
+
+            if (!sortTimerScheduled)
+            {
+                sortTimerScheduled = true;
+                Scheduler.AddDelayed(sort, 1000, true);
+            }
 
             updateLoadingState();
+            rebuildRowsIfNeeded();
+        }
+
+        private void activatePassive()
+        {
+            passiveMode = true;
+
+            if (interestRegistered && ScoreRaceService != null)
+            {
+                ScoreRaceService.UnregisterInterest();
+                interestRegistered = false;
+            }
+
+            stateLookup = null;
+
+            bindPassiveSettingsIfNeeded();
+
+            scroll.Alpha = 1;
+
+            if (LoadingText != null)
+                LoadingText.Alpha = 0;
+
+            if (!sortTimerScheduled)
+            {
+                sortTimerScheduled = true;
+                Scheduler.AddDelayed(sort, 1000, true);
+            }
+
+            rebuildPassiveRows();
+        }
+
+        private void bindPassiveSettingsIfNeeded()
+        {
+            if (passiveSettingsBound)
+                return;
+
+            passiveSettingsBound = true;
+
+            ModFilterSetting.BindValueChanged(_ => rebuildPassiveRows());
+            MaxEntriesSetting.BindValueChanged(_ => rebuildPassiveRows());
         }
 
         private void onStatesChanged(object? sender, NotifyDictionaryChangedEventArgs<string, EzScoreRaceState> e)
@@ -148,7 +207,7 @@ namespace osu.Game.EzOsuGame.HUD
 
         private void updateLoadingState()
         {
-            if (LoadingText == null)
+            if (LoadingText == null || passiveMode)
                 return;
 
             LoadingText.Alpha = SupportsGhostRace && shouldShowLoading() ? 1 : 0;
@@ -156,16 +215,24 @@ namespace osu.Game.EzOsuGame.HUD
 
         private bool shouldShowLoading()
         {
-            if (stateLookup == null || stateLookup.Count == 0)
-                return true;
+            if (!SupportsGhostRace || stateLookup == null || stateLookup.Count == 0)
+                return false;
+
+            bool anyPendingTimeline = false;
 
             foreach (var state in stateLookup)
             {
-                if (state.Value.Timeline != null)
-                    return false;
+                if (state.Value.Timeline == null)
+                {
+                    anyPendingTimeline = true;
+                    break;
+                }
             }
 
-            return true;
+            if (!anyPendingTimeline)
+                return false;
+
+            return ScoreRaceService?.IsTimelineBuildInProgress == true;
         }
 
         protected override void OnSessionReady()
@@ -188,22 +255,25 @@ namespace osu.Game.EzOsuGame.HUD
         {
             base.Update();
 
-            // 对齐官方 MultiSpectatorLeaderboardProvider：每帧驱动 processor 的 UpdateScore。
-            // Pause 时 GameplayClockContainer.CurrentTime 停止前进，processor 自然停止 ghost 推進。
-            // 不做节流：QueryAtTime 是 O(log n) 二分查找，开销可忽略；
-            // 框架 Bindable.Value setter 内置去重，值不变时不触发下游事件链。
-            if (Time.Current - lastProcessorUpdateTime >= 50)
-            {
-                foreach (var entry in entryStates)
-                    entry.Processor?.UpdateScore();
+            if (scroll.Alpha <= 0)
+                return;
 
-                lastProcessorUpdateTime = Time.Current;
+            if (!passiveMode)
+            {
+                // 对齐官方 MultiSpectatorLeaderboardProvider：每帧驱动 processor 的 UpdateScore。
+                if (Time.Current - lastProcessorUpdateTime >= 50)
+                {
+                    foreach (var entry in entryStates)
+                        entry.Processor?.UpdateScore();
+
+                    lastProcessorUpdateTime = Time.Current;
+                }
+
+                if (LoadingText?.Alpha > 0)
+                    updateLoadingState();
             }
 
             updateScoreDisplay();
-
-            if (LoadingText?.Alpha > 0)
-                updateLoadingState();
         }
 
         private void updateScoreDisplay()
@@ -276,12 +346,54 @@ namespace osu.Game.EzOsuGame.HUD
             }
         }
 
+        private void rebuildPassiveRows()
+        {
+            foreach (var entry in entryStates)
+            {
+                if (entry.Processor != null)
+                    RemoveInternal(entry.Processor, true);
+            }
+
+            Flow.Clear();
+            entryStates.Clear();
+            currentPlayerEntry = null;
+            trackedScore = null;
+            scroll.ScrollToStart(false);
+
+            createCurrentPlayerEntry();
+
+            var ghostScores = QueryStaticGhostScores(ModFilterSetting.Value, MaxEntriesSetting.Value);
+
+            foreach (var scoreInfo in ghostScores)
+            {
+                var drawable = createDrawableForScoreInfo(scoreInfo, out var entryState);
+                entryStates.Add(entryState);
+                Flow.Add(drawable);
+            }
+
+            sorting.Invalidate();
+            sort();
+        }
+
         private void rebuildRowsIfNeeded()
         {
+            if (passiveMode)
+            {
+                rebuildPassiveRows();
+                return;
+            }
+
             if (!needsStructuralRebuild())
             {
+                ensureCurrentPlayerEntry();
                 refreshExistingRows();
                 return;
+            }
+
+            foreach (var entry in entryStates)
+            {
+                if (entry.Processor != null)
+                    RemoveInternal(entry.Processor, true);
             }
 
             Flow.Clear();
@@ -326,8 +438,22 @@ namespace osu.Game.EzOsuGame.HUD
 
             var entry = new LeaderboardEntryState(playerScore, drawable);
             currentPlayerEntry = entry;
+            trackedScore = drawable;
             entryStates.Add(entry);
             Flow.Add(drawable);
+        }
+
+        private bool shouldHaveCurrentPlayerEntry() => GameplayState != null && ScoreProcessor != null;
+
+        private void ensureCurrentPlayerEntry()
+        {
+            if (currentPlayerEntry != null || !shouldHaveCurrentPlayerEntry())
+                return;
+
+            createCurrentPlayerEntry();
+            sorting.Invalidate();
+            sort();
+            updateLoadingState();
         }
 
         private void refreshExistingRows()
@@ -342,6 +468,18 @@ namespace osu.Game.EzOsuGame.HUD
 
             sorting.Invalidate();
             sort();
+        }
+
+        private DrawableGameplayLeaderboardScore createDrawableForScoreInfo(ScoreInfo scoreInfo, out LeaderboardEntryState entryState)
+        {
+            var leaderboardScore = new GameplayLeaderboardScore(scoreInfo, false, GameplayLeaderboardScore.ComboDisplayMode.Highest);
+            var drawable = new DrawableGameplayLeaderboardScore(leaderboardScore);
+            drawable.Expanded.BindTo(expanded);
+            drawable.DisplayOrder.BindValueChanged(_ => Scheduler.AddOnce(sort), true);
+
+            entryState = new LeaderboardEntryState(scoreInfo, leaderboardScore, drawable);
+
+            return drawable;
         }
 
         private DrawableGameplayLeaderboardScore createDrawableForState(EzScoreRaceState state, out LeaderboardEntryState entryState)
@@ -381,6 +519,9 @@ namespace osu.Game.EzOsuGame.HUD
             // currentPlayerEntry 不参与 ID 比较（它不是 ghost 条目）。
             // 只比较 ghost 条目数量：entryStates 含 player + ghosts，stateLookup 仅含 ghosts。
             int ghostCount = entryStates.Count - (currentPlayerEntry != null ? 1 : 0);
+
+            if (shouldHaveCurrentPlayerEntry() && currentPlayerEntry == null)
+                return true;
 
             if (stateLookup!.Count == 0)
                 return ghostCount > 0;
@@ -431,15 +572,18 @@ namespace osu.Game.EzOsuGame.HUD
             }
         }
 
-        private int getMissCount(LeaderboardEntryState state)
-        {
-            return state.Processor?.MissCount.Value ?? 0;
-        }
+        private int getMissCount(LeaderboardEntryState state) => state.MissCount;
 
         protected override void Dispose(bool isDisposing)
         {
             if (isDisposing)
             {
+                if (interestRegistered && ScoreRaceService != null)
+                {
+                    ScoreRaceService.UnregisterInterest();
+                    interestRegistered = false;
+                }
+
                 foreach (var entry in entryStates)
                     entry.Processor?.Dispose();
 
@@ -454,6 +598,7 @@ namespace osu.Game.EzOsuGame.HUD
         {
             public string ScoreInfoId { get; }
             public long Tiebreaker { get; }
+            public int MissCount { get; }
             public EzScoreRaceTimelineScoreProcessor? Processor { get; }
             public GameplayLeaderboardScore LeaderboardScore { get; }
             public DrawableGameplayLeaderboardScore Drawable { get; }
@@ -465,7 +610,19 @@ namespace osu.Game.EzOsuGame.HUD
             {
                 ScoreInfoId = state.ScoreInfo.ID.ToString();
                 Tiebreaker = state.ScoreInfo.Date.ToUnixTimeSeconds();
+                MissCount = EzLocalScoreQueries.GetMissCount(state.ScoreInfo);
                 Processor = processor;
+                LeaderboardScore = leaderboardScore;
+                Drawable = drawable;
+            }
+
+            public LeaderboardEntryState(ScoreInfo scoreInfo,
+                                         GameplayLeaderboardScore leaderboardScore,
+                                         DrawableGameplayLeaderboardScore drawable)
+            {
+                ScoreInfoId = scoreInfo.ID.ToString();
+                Tiebreaker = scoreInfo.Date.ToUnixTimeSeconds();
+                MissCount = EzLocalScoreQueries.GetMissCount(scoreInfo);
                 LeaderboardScore = leaderboardScore;
                 Drawable = drawable;
             }

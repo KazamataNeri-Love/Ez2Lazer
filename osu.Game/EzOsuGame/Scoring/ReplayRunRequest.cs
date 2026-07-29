@@ -14,18 +14,13 @@ namespace osu.Game.EzOsuGame.Scoring
         public Score Score { get; }
         public IBeatmap Beatmap { get; }
         public ReplayRunPurpose Purpose { get; }
+        public bool IncludeGlobalManiaOffset { get; init; }
 
-        /// <summary>
-        /// Session 判定用 offset（毫秒）。0 与未传等价；Graph 落定后传当前滑条值。
-        /// </summary>
-        public double OffsetPlusMania { get; }
-
-        public ReplayRunRequest(Score score, IBeatmap beatmap, ReplayRunPurpose purpose, double offsetPlusMania = 0)
+        public ReplayRunRequest(Score score, IBeatmap beatmap, ReplayRunPurpose purpose)
         {
             Score = score;
             Beatmap = beatmap;
             Purpose = purpose;
-            OffsetPlusMania = offsetPlusMania;
         }
     }
 }

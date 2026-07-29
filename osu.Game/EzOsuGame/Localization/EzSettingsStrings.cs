@@ -257,6 +257,62 @@ namespace osu.Game.EzOsuGame.Localization
             "When enabled, 14K beatmaps display as 13K (last column hidden) for Ez2Ac arcade maps with an empty last column."
             + "\nDisable this if the last column contains notes.");
 
+        public static readonly LocalisableString MANIA_SCRATCH_AXIS_ENABLED = new EzLocalizationManager.EzLocalisableString(
+            "启用转盘轴模板（L/R Scratch）",
+            "Enable turntable axis template (L/R Scratch)");
+
+        public static readonly LocalisableString MANIA_SCRATCH_AXIS_ENABLED_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "开启后，按键数模板将 L/R 转盘轴运行时注入首尾列（不改写键位配置）："
+            + "\n12K：列 0 / 11；16K：列 0 / 15；"
+            + "\n14K：列 0 / 13；开启 10k2s1p 时为列 0 / 12。"
+            + "\n转动=按下，停止转动=松开。请勿把同一轴再绑到其它 Mania 键。",
+            "When enabled, L/R turntable axes are injected into edge columns at runtime (key bindings are not rewritten):"
+            + "\n12K: cols 0 / 11; 16K: cols 0 / 15;"
+            + "\n14K: cols 0 / 13; with 10k2s1p: cols 0 / 12."
+            + "\nSpinning = pressed, stop = released. Do not also bind the same axis to other Mania keys.");
+
+        public static readonly LocalisableString SCRATCH_AXIS_L = new EzLocalizationManager.EzLocalisableString("L-Scratch 轴", "L-Scratch Axis");
+
+        public static readonly LocalisableString SCRATCH_AXIS_R = new EzLocalizationManager.EzLocalisableString("R-Scratch 轴", "R-Scratch Axis");
+
+        public static readonly LocalisableString SCRATCH_AXIS_BIND_HINT = new EzLocalizationManager.EzLocalisableString(
+            "转动转盘以绑定…（再点取消 / Esc）",
+            "Spin turntable to bind… (click again / Esc to cancel)");
+
+        public static readonly LocalisableString SCRATCH_AXIS_BIND_IDLE_HINT = new EzLocalizationManager.EzLocalisableString(
+            "点击 L/R 后转动对应转盘；仅累计位移，停靠位置不会触发绑定。",
+            "Click L/R then spin the turntable; only movement is counted, resting position does not bind.");
+
+        public static readonly LocalisableString SCRATCH_AXIS_BIND_LISTENING_HINT = new EzLocalizationManager.EzLocalisableString(
+            "正在听轴… 累计位移 {0} / {1}",
+            "Listening… travel {0} / {1}");
+
+        public static readonly LocalisableString SCRATCH_AXIS_DEADZONE = new EzLocalizationManager.EzLocalisableString(
+            "最小位移阈值",
+            "Min movement delta");
+
+        public static readonly LocalisableString SCRATCH_AXIS_STOP_THRESHOLD = new EzLocalizationManager.EzLocalisableString(
+            "停转判定（毫秒）",
+            "Stop threshold (ms)");
+
+        public static readonly LocalisableString SCRATCH_AXIS_STOP_THRESHOLD_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "距上次有效转动超过此时长后视为松开。停靠在任意轴位置都不是按下，只有转动位移才算。",
+            "Release after this many milliseconds without significant spin. Resting at any axis position is idle; only movement counts.");
+
+        public static readonly LocalisableString SCRATCH_AXIS_DEADZONE_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "相邻两次采样之间的最小 |Δ|（轴约 [-1,1]，对应 0–100 归一化后）。"
+            + "\n不是摇杆「离中心」死区。beatoraja tick≈0.009；推荐 0.001–0.01。"
+            + "\n过大（如 0.02+）会导致转盘无响应；过小（0）易被噪声连打。",
+            "Minimum |Δ| between consecutive samples (axis ≈ [-1,1], i.e. normalised 0–100)."
+            + "\nNot stick-from-centre deadzone. beatoraja tick ≈ 0.009; try 0.001–0.01."
+            + "\nToo large (e.g. 0.02+) ignores real spins; 0 lets noise spam presses.");
+
+        public static readonly LocalisableString SCRATCH_AXIS_STATUS_IDLE = new EzLocalizationManager.EzLocalisableString("状态：空闲", "Status: Idle");
+
+        public static readonly LocalisableString SCRATCH_AXIS_STATUS_CW = new EzLocalizationManager.EzLocalisableString("状态：顺时针（按下）", "Status: Clockwise (pressed)");
+
+        public static readonly LocalisableString SCRATCH_AXIS_STATUS_CCW = new EzLocalizationManager.EzLocalisableString("状态：逆时针（按下）", "Status: Counter-clockwise (pressed)");
+
         public static readonly LocalisableString SKIP_WITH_GAMEPLAY_KEYS = new EzLocalizationManager.EzLocalisableString(
             "跳过可由游戏按键触发",
             "Allow gameplay keys to trigger skip");

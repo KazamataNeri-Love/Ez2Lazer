@@ -3,6 +3,8 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
+using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Rulesets.Scoring;
 using osu.Game.Scoring.Legacy;
@@ -13,6 +15,7 @@ namespace osu.Game.Scoring
     {
         /// <summary>
         /// Ez2Lazer: 用户显式「成绩重算」— 将 Session 产出写回 Realm 与调用方快照。
+        /// Gameplay 入库不经此方法；StatisticsJson 须同步以便 list / hover 重载时读到重算结果。
         /// </summary>
         public void ApplyEzSessionRecalculation(ScoreInfo scoreInfo, ScoreInfo sessionInfo, ReplayRunPurpose purpose, GameplayEnvironment environment)
         {
@@ -22,6 +25,7 @@ namespace osu.Game.Scoring
             long? totalScore = null;
             Dictionary<HitResult, int>? statistics = null;
             Dictionary<HitResult, int>? maximumStatistics = null;
+            List<HitEvent>? hitEvents = null;
             int? maniaHitMode = null;
             int? maniaHealthMode = null;
 
@@ -31,32 +35,7 @@ namespace osu.Game.Scoring
                 if (managed == null)
                     return;
 
-                managed.Statistics.Clear();
-                foreach (var kvp in sessionInfo.Statistics)
-                    managed.Statistics[kvp.Key] = kvp.Value;
-
-                managed.MaximumStatistics.Clear();
-                foreach (var kvp in sessionInfo.MaximumStatistics)
-                    managed.MaximumStatistics[kvp.Key] = kvp.Value;
-
-                managed.Accuracy = sessionInfo.Accuracy;
-                managed.Rank = sessionInfo.Rank;
-                managed.MaxCombo = sessionInfo.MaxCombo;
-                managed.TotalScore = sessionInfo.TotalScore;
-                managed.TotalScoreWithoutMods = sessionInfo.TotalScoreWithoutMods;
-                managed.TotalScoreVersion = LegacyScoreEncoder.LATEST_VERSION;
-
-                if (purpose == ReplayRunPurpose.ForLive)
-                {
-                    managed.ManiaHitMode = (int)environment.ManiaHitMode;
-                    managed.ManiaHealthMode = (int)environment.ManiaHealthMode;
-                }
-
-                if (managed.OnlineID > 0 || managed.LegacyOnlineID > 0)
-                {
-                    managed.OnlineID = -1;
-                    managed.LegacyOnlineID = -1;
-                }
+                ApplyEzSessionRecalculationToDetachedScoreInfo(managed, sessionInfo, purpose, environment);
 
                 accuracy = managed.Accuracy;
                 rank = managed.Rank;
@@ -64,6 +43,7 @@ namespace osu.Game.Scoring
                 totalScore = managed.TotalScore;
                 statistics = managed.Statistics.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
                 maximumStatistics = managed.MaximumStatistics.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+                hitEvents = managed.HitEvents.ToList();
                 maniaHitMode = managed.ManiaHitMode;
                 maniaHealthMode = managed.ManiaHealthMode;
             });
@@ -77,6 +57,7 @@ namespace osu.Game.Scoring
             scoreInfo.TotalScore = totalScore!.Value;
             scoreInfo.TotalScoreWithoutMods = sessionInfo.TotalScoreWithoutMods;
             scoreInfo.TotalScoreVersion = LegacyScoreEncoder.LATEST_VERSION;
+            scoreInfo.HitEvents = hitEvents!;
 
             scoreInfo.Statistics.Clear();
             foreach (var kvp in statistics!)
@@ -86,17 +67,57 @@ namespace osu.Game.Scoring
             foreach (var kvp in maximumStatistics!)
                 scoreInfo.MaximumStatistics[kvp.Key] = kvp.Value;
 
-            if (purpose == ReplayRunPurpose.ForLive)
-            {
-                scoreInfo.ManiaHitMode = maniaHitMode!.Value;
-                scoreInfo.ManiaHealthMode = maniaHealthMode!.Value;
-            }
+            scoreInfo.ManiaHitMode = maniaHitMode!.Value;
+            scoreInfo.ManiaHealthMode = maniaHealthMode!.Value;
 
             if (scoreInfo.OnlineID > 0 || scoreInfo.LegacyOnlineID > 0)
             {
                 scoreInfo.OnlineID = -1;
                 scoreInfo.LegacyOnlineID = -1;
             }
+        }
+
+        public static void ApplyEzSessionRecalculationToDetachedScoreInfo(ScoreInfo scoreInfo, ScoreInfo sessionInfo, ReplayRunPurpose purpose, GameplayEnvironment environment)
+        {
+            var statistics = sessionInfo.Statistics.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            scoreInfo.Statistics = statistics;
+            scoreInfo.StatisticsJson = JsonConvert.SerializeObject(statistics);
+
+            var maximumStatistics = sessionInfo.MaximumStatistics.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            scoreInfo.MaximumStatistics = maximumStatistics;
+            scoreInfo.MaximumStatisticsJson = JsonConvert.SerializeObject(maximumStatistics);
+
+            scoreInfo.HitEvents = sessionInfo.HitEvents.ToList();
+            scoreInfo.Accuracy = sessionInfo.Accuracy;
+            scoreInfo.Rank = sessionInfo.Rank;
+            scoreInfo.MaxCombo = sessionInfo.MaxCombo;
+            scoreInfo.TotalScore = sessionInfo.TotalScore;
+            scoreInfo.TotalScoreWithoutMods = sessionInfo.TotalScoreWithoutMods;
+            scoreInfo.TotalScoreVersion = LegacyScoreEncoder.LATEST_VERSION;
+
+            if (purpose == ReplayRunPurpose.ForLive)
+            {
+                scoreInfo.ManiaHitMode = (int)environment.ManiaHitMode;
+                scoreInfo.ManiaHealthMode = (int)environment.ManiaHealthMode;
+            }
+
+            normalizeLazerGameplayModes(scoreInfo);
+
+            if (scoreInfo.OnlineID > 0 || scoreInfo.LegacyOnlineID > 0)
+            {
+                scoreInfo.OnlineID = -1;
+                scoreInfo.LegacyOnlineID = -1;
+            }
+        }
+
+        private static void normalizeLazerGameplayModes(ScoreInfo scoreInfo)
+        {
+            if (scoreInfo.ManiaHitMode != (int)EzEnumHitMode.Lazer
+                || scoreInfo.ManiaHealthMode != (int)EzEnumHealthMode.Lazer)
+                return;
+
+            scoreInfo.ManiaHitMode = EzManiaScoreModeExtensions.UNSET_MODE;
+            scoreInfo.ManiaHealthMode = EzManiaScoreModeExtensions.UNSET_MODE;
         }
     }
 }

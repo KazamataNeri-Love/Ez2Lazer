@@ -8,6 +8,7 @@ using osu.Game.Database;
 using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Localization;
+using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Settings;
@@ -57,6 +58,24 @@ namespace osu.Game.EzOsuGame.Overlays
                 {
                     Keywords = new[] { "latency", "audio", "input" }
                 },
+                new SettingsItemV2(new FormCheckBox
+                {
+                    Current = ezConfig.GetBindable<bool>(Ez2Setting.EzScoreRaceServiceEnabled),
+                    Caption = EZ_SCORE_RACE_SERVICE_ENABLED,
+                    HintText = EZ_SCORE_RACE_SERVICE_ENABLED_TOOLTIP,
+                })
+                {
+                    Keywords = new[] { "race", "timeline", "角逐", "时间线", "fps" }
+                },
+                new SettingsItemV2(new FormEnumDropdown<EzReplayFeedMode>
+                {
+                    Current = ezConfig.GetBindable<EzReplayFeedMode>(Ez2Setting.EzScoreRaceFeedMode),
+                    Caption = EZ_SCORE_RACE_FEED_MODE,
+                    HintText = EZ_SCORE_RACE_FEED_MODE_TOOLTIP,
+                })
+                {
+                    Keywords = new[] { "race", "feed", "batch", "stream", "角逐", "预建" }
+                },
             });
         }
 
@@ -103,5 +122,27 @@ namespace osu.Game.EzOsuGame.Overlays
             "(Testing feature) When enabled, it can track the latency between key input and audio, used for debugging and optimizing the synchronization of hit sound effects. "
             + "A statistics window will pop up after the game ends. More detailed information can be found in the runtime.log file."
             + "\nLatency detection pipeline: Key Press → Check Hit and Apply → Apply Hit Result → Play Note Audio");
+
+        internal static readonly LocalisableString EZ_SCORE_RACE_SERVICE_ENABLED = new EzLocalizationManager.EzLocalisableString(
+            "启用角逐/时间线全局服务", "Enable Score Race / Timeline Global Service");
+
+        internal static readonly LocalisableString EZ_SCORE_RACE_SERVICE_ENABLED_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "关闭后不再进行选歌界面的本地成绩查询，以及进局时的 ghost 时间线构建。"
+            + "\n角逐排行榜 / 分数对比 HUD 将不可用。"
+            + "\n用于排查启动间全程帧率异常时，可跨多次冷启动做 A/B 对比。",
+            "When disabled, skips local score queries on song select and ghost timeline builds when entering play."
+            + "\nScore race / compare HUD components will not work."
+            + "\nUse for A/B isolation of startup-wide FPS regressions across cold launches.");
+
+        internal static readonly LocalisableString EZ_SCORE_RACE_FEED_MODE = new EzLocalizationManager.EzLocalisableString(
+            "角逐时间线喂入模式", "Score Race Timeline Feed Mode");
+
+        internal static readonly LocalisableString EZ_SCORE_RACE_FEED_MODE_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "BatchAllEvents：进局前阻塞直至 ghost timeline 预建完成（默认）。"
+            + "\nStreamByClock：进局不阻塞；timeline 后台就绪后 HUD 再按时钟插值。"
+            + "\n仅在启用角逐服务时生效。",
+            "BatchAllEvents: block PlayerLoader until ghost timelines are prebuilt (default)."
+            + "\nStreamByClock: do not block entering play; HUD interpolates once timelines arrive."
+            + "\nOnly applies when the score-race service is enabled.");
     }
 }

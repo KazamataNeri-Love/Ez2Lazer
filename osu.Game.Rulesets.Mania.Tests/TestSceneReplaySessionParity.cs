@@ -34,6 +34,7 @@ namespace osu.Game.Rulesets.Mania.Tests
         private IReadOnlyList<HitEvent> drawableHitEvents = null!;
         private IBeatmap playableBeatmap = null!;
         private Score replayScore = null!;
+        private ScoreInfo recalculatedScoreInfo = null!;
         private GameplayEnvironment parityEnvironment = null!;
 
         [TearDown]
@@ -151,6 +152,24 @@ namespace osu.Game.Rulesets.Mania.Tests
         }
 
         [Test]
+        public void TestEz2AcManyNoteTapDrawableMatchesSession()
+        {
+            runDrawableParityTestFromFixture(HitModeReplayFixtures.CreateEz2AcManyNoteTap());
+        }
+
+        [Test]
+        public void TestMalodyETapDrawableMatchesSession()
+        {
+            runDrawableParityTestFromFixture(HitModeReplayFixtures.CreateMalodyManyNoteTap());
+        }
+
+        [Test]
+        public void TestO2VariableBpmTapDrawableMatchesSession()
+        {
+            runDrawableParityTestFromFixture(HitModeReplayFixtures.CreateO2VariableBpmTap());
+        }
+
+        [Test]
         public void TestMalodyHoldDrawableMatchesSession()
         {
             parityEnvironment = ReplayJudgeTestConfig.Create(EzEnumHitMode.Malody_E, EzEnumHealthMode.Lazer);
@@ -221,6 +240,38 @@ namespace osu.Game.Rulesets.Mania.Tests
                 });
         }
 
+        // ==================== POLICY-PARITY: JudgePrecedence × 叠键 ====================
+
+        [TestCase(EzEnumJudgePrecedence.Earliest)]
+        [TestCase(EzEnumJudgePrecedence.Combo)]
+        [TestCase(EzEnumJudgePrecedence.Duration)]
+        public void TestLazerOverlappingJackDrawableMatchesSession(EzEnumJudgePrecedence precedence)
+        {
+            var fixture = JudgePrecedenceReplayFixtures.CreateOverlappingJack(
+                EzEnumHitMode.Lazer, EzEnumHealthMode.Lazer, precedence);
+            runDrawableParityTestFromFixture(fixture);
+        }
+
+        [TestCase(EzEnumJudgePrecedence.Earliest)]
+        [TestCase(EzEnumJudgePrecedence.Combo)]
+        [TestCase(EzEnumJudgePrecedence.Duration)]
+        public void TestIidxOverlappingJackDrawableMatchesSession(EzEnumJudgePrecedence precedence)
+        {
+            var fixture = JudgePrecedenceReplayFixtures.CreateOverlappingJack(
+                EzEnumHitMode.IIDX_HD, EzEnumHealthMode.IIDX_HD, precedence);
+            runDrawableParityTestFromFixture(fixture);
+        }
+
+        [TestCase(EzEnumJudgePrecedence.Earliest)]
+        [TestCase(EzEnumJudgePrecedence.Combo)]
+        [TestCase(EzEnumJudgePrecedence.Duration)]
+        public void TestIidxOverlappingJackDrawableMatchesSession_LazerHealth(EzEnumJudgePrecedence precedence)
+        {
+            var fixture = JudgePrecedenceReplayFixtures.CreateOverlappingJack(
+                EzEnumHitMode.IIDX_HD, EzEnumHealthMode.Lazer, precedence);
+            runDrawableParityTestFromFixture(fixture);
+        }
+
         // ==================== P2-B: Parity 扩到完整 Score ====================
 
         [Test]
@@ -272,6 +323,58 @@ namespace osu.Game.Rulesets.Mania.Tests
                 });
         }
 
+        [Test]
+        public void TestReplayAfterRecalcEz2AcMatchesNow()
+        {
+            runReplayAfterRecalcParityTest(HitModeReplayFixtures.CreateEz2AcManyNoteTap());
+        }
+
+        [Test]
+        public void TestReplayAfterRecalcMalodyEMatchesNow()
+        {
+            runReplayAfterRecalcParityTest(HitModeReplayFixtures.CreateMalodyManyNoteTap());
+        }
+
+        [Test]
+        public void TestReplayAfterRecalcO2VariableBpmMatchesNow()
+        {
+            runReplayAfterRecalcParityTest(HitModeReplayFixtures.CreateO2VariableBpmTap());
+        }
+
+        [Test]
+        public void TestIidxManyNoteTapDrawableMatchesSession_LazerHealth()
+        {
+            runFullScoreParityTestFromFixture(HitModeReplayFixtures.CreateBmsManyNoteTap(EzEnumHitMode.IIDX_HD));
+        }
+
+        [Test]
+        public void TestLr2ManyNoteTapDrawableMatchesSession_LazerHealth()
+        {
+            runFullScoreParityTestFromFixture(HitModeReplayFixtures.CreateBmsManyNoteTap(EzEnumHitMode.LR2_HD));
+        }
+
+        [Test]
+        public void TestRajaManyNoteTapDrawableMatchesSession_LazerHealth()
+        {
+            runFullScoreParityTestFromFixture(HitModeReplayFixtures.CreateBmsManyNoteTap(EzEnumHitMode.Raja_NM));
+        }
+
+        private void runFullScoreParityTestFromFixture((Score score, IBeatmap beatmap, GameplayEnvironment environment) fixture)
+        {
+            parityEnvironment = fixture.environment;
+            runFullScoreParityTest(
+                fixture.beatmap.HitObjects.Cast<ManiaHitObject>().ToList(),
+                fixture.score.Replay.Frames);
+        }
+
+        private void runDrawableParityTestFromFixture((Score score, IBeatmap beatmap, GameplayEnvironment environment) fixture)
+        {
+            parityEnvironment = fixture.environment;
+            runDrawableParityTest(
+                fixture.beatmap.HitObjects.Cast<ManiaHitObject>().ToList(),
+                fixture.score.Replay.Frames);
+        }
+
         private void runDrawableParityTest(List<ManiaHitObject> hitObjects, List<ReplayFrame> frames)
         {
             AddStep("configure environment", () => ReplayJudgeTestConfig.ApplyToGlobalConfig(parityEnvironment));
@@ -290,6 +393,7 @@ namespace osu.Game.Rulesets.Mania.Tests
                 Beatmap.Value.Beatmap.ControlPointInfo.Add(0, new EffectControlPoint { ScrollSpeed = 0.1f });
 
                 replayScore = new Score { Replay = new Replay { Frames = frames } };
+                ReplayJudgeTestConfig.ApplyEmbeddedModes(replayScore, parityEnvironment);
                 LoadScreen(currentPlayer = new ScoreAccessibleReplayPlayer(replayScore));
             });
 
@@ -332,6 +436,7 @@ namespace osu.Game.Rulesets.Mania.Tests
                 Beatmap.Value.Beatmap.ControlPointInfo.Add(0, new EffectControlPoint { ScrollSpeed = 0.1f });
 
                 replayScore = new Score { Replay = new Replay { Frames = frames } };
+                ReplayJudgeTestConfig.ApplyEmbeddedModes(replayScore, parityEnvironment);
                 LoadScreen(currentPlayer = new ScoreAccessibleReplayPlayer(replayScore));
             });
 
@@ -395,6 +500,62 @@ namespace osu.Game.Rulesets.Mania.Tests
                     {
                         throw new AssertionException(
                             $"session has extra statistic {kvp.Key}={kvp.Value} not in drawable");
+                    }
+                }
+
+                return true;
+            });
+        }
+
+        private void runReplayAfterRecalcParityTest((Score score, IBeatmap beatmap, GameplayEnvironment environment) fixture)
+        {
+            parityEnvironment = fixture.environment;
+
+            AddStep("configure environment", () => ReplayJudgeTestConfig.ApplyToGlobalConfig(parityEnvironment));
+
+            AddStep("recalculate then load replay", () =>
+            {
+                Beatmap.Value = CreateWorkingBeatmap(fixture.beatmap);
+                playableBeatmap = Beatmap.Value.GetPlayableBeatmap(new ManiaRuleset().RulesetInfo);
+
+                replayScore = fixture.score.DeepClone();
+                ReplayJudgeTestConfig.ApplyEmbeddedModes(replayScore, parityEnvironment);
+
+                var nowScore = ManiaReplaySession.Run(replayScore.DeepClone(), playableBeatmap, parityEnvironment);
+                ScoreManager.ApplyEzSessionRecalculationToDetachedScoreInfo(
+                    replayScore.ScoreInfo,
+                    nowScore.ScoreInfo,
+                    ReplayRunPurpose.ForLive,
+                    parityEnvironment);
+                recalculatedScoreInfo = replayScore.ScoreInfo.DeepClone();
+
+                LoadScreen(currentPlayer = new ScoreAccessibleReplayPlayer(replayScore));
+            });
+
+            AddUntilStep("wait for completion", () => currentPlayer?.ScoreProcessor?.HasCompleted.Value == true);
+
+            AddAssert("replay result matches recalculated Now", () =>
+            {
+                const double tolerance = 1e-6;
+
+                if (Math.Abs(currentPlayer.ScoreProcessor.Accuracy.Value - recalculatedScoreInfo.Accuracy) >= tolerance)
+                    throw new AssertionException(
+                        $"accuracy mismatch: drawable={currentPlayer.ScoreProcessor.Accuracy.Value}, session={recalculatedScoreInfo.Accuracy}");
+
+                if (currentPlayer.ScoreProcessor.TotalScore.Value != recalculatedScoreInfo.TotalScore)
+                    throw new AssertionException(
+                        $"total score mismatch: drawable={currentPlayer.ScoreProcessor.TotalScore.Value}, session={recalculatedScoreInfo.TotalScore}");
+
+                foreach (var result in Enum.GetValues<HitResult>())
+                {
+                    if (result is HitResult.IgnoreHit or HitResult.IgnoreMiss)
+                        continue;
+
+                    if (currentPlayer.ScoreProcessor.Statistics.GetValueOrDefault(result) != recalculatedScoreInfo.Statistics.GetValueOrDefault(result))
+                    {
+                        throw new AssertionException(
+                            $"{result} mismatch: drawable={currentPlayer.ScoreProcessor.Statistics.GetValueOrDefault(result)}, "
+                            + $"session={recalculatedScoreInfo.Statistics.GetValueOrDefault(result)}");
                     }
                 }
 

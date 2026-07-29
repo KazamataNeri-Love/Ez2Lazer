@@ -153,8 +153,9 @@ namespace osu.Game.Database
 
             lock (detachedBeatmapSets)
             {
-                // If this ever leads to performance issues, we could dequeue a limited number of operations per update frame.
-                while (pendingOperations.TryDequeue(out var op))
+                // BackgroundDataStoreProcessor Ez/SR backfill can enqueue thousands of Replace ops.
+                // Unbounded drain stalls SongSelect Update for frames; cap per frame and catch up over time.
+                DetachedBeatmapStoreFrameBudget.Drain(pendingOperations, DetachedBeatmapStoreFrameBudget.MAX_OPS_PER_FRAME, op =>
                 {
                     switch (op.Type)
                     {
@@ -175,7 +176,7 @@ namespace osu.Game.Database
                             detachedBeatmapSets.RemoveAt(op.Index);
                             break;
                     }
-                }
+                });
             }
         }
 

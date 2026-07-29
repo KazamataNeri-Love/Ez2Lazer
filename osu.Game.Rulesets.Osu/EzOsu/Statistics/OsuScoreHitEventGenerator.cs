@@ -13,7 +13,7 @@ using osu.Game.Scoring;
 namespace osu.Game.Rulesets.Osu.EzOsu.Statistics
 {
     /// <summary>
-    /// Osu 成绩 <see cref="HitEvent"/> 生成器；委托 <see cref="OsuReplaySessionService.RunHitEventsAsync"/> 作为唯一判定源。
+    /// Osu 成绩 <see cref="HitEvent"/> 生成器；委托 <see cref="OsuReplaySessionService"/> 作为唯一判定源。
     /// </summary>
     /// <remarks>
     /// 精度由 Shadow 引擎决定（<c>TODO(EZ-SR-OSL-010)</c>）；见 REPLAY_JUDGE_SHADOW.md。
@@ -40,7 +40,7 @@ namespace osu.Game.Rulesets.Osu.EzOsu.Statistics
         // TODO(EZ-SR-OSL-010): Generate 不独立算判；精度 = OsuReplayShadowEngine（S2 Slider / S3 Spinner 待补齐）。
         public List<HitEvent> Generate(Score score, IBeatmap playableBeatmap, CancellationToken cancellationToken = default)
         {
-            return session_service.RunHitEventsAsync(score, playableBeatmap, cancellationToken).GetAwaiter().GetResult();
+            return session_service.RunHitEventsAsync(score, playableBeatmap, cancellationToken: cancellationToken).GetAwaiter().GetResult();
         }
     }
 }

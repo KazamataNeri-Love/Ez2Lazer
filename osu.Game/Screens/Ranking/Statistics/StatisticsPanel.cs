@@ -133,7 +133,7 @@ namespace osu.Game.Screens.Ranking.Statistics
                     var databasedScore = scoreManager.GetScore(newScore);
 
                     if (databasedScore != null)
-                        generatedHitEvents = await ReplaySession.RunHitEventsAsync(databasedScore, playable, loadCancellation.Token).ConfigureAwait(true);
+                        generatedHitEvents = await ReplaySession.RunHitEventsAsync(databasedScore, playable, ReplayRunPurpose.ForStored, loadCancellation.Token).ConfigureAwait(true);
 
                     if (generatedHitEvents != null)
                         newScore.HitEvents = generatedHitEvents;
@@ -142,6 +142,9 @@ namespace osu.Game.Screens.Ranking.Statistics
                 return playable;
             }, loadCancellation.Token).ContinueWith(task => Schedule(() =>
             {
+                if (task.IsCanceled)
+                    return;
+
                 bool hitEventsAvailable = newScore.HitEvents.Count != 0;
                 Container<Drawable> container;
 

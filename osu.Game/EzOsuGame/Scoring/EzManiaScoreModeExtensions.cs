@@ -45,14 +45,27 @@ namespace osu.Game.EzOsuGame.Scoring
             return false;
         }
 
+        /// <summary>
+        /// Mania 展示层 HitMode：嵌入成绩 &gt; 局内全局（score 为 null）&gt; 旧成绩 Lazer 回退。
+        /// 供 HUD 判定计数器与 Ruleset 展示名共用。
+        /// </summary>
+        public static EzEnumHitMode ResolveDisplayHitMode(ScoreInfo? score)
+        {
+            if (score != null && score.TryGetManiaGameplayModes(out int hitMode, out _))
+                return (EzEnumHitMode)hitMode;
+
+            if (score == null)
+                return GlobalConfigStore.EzConfig.Get<EzEnumHitMode>(Ez2Setting.ManiaHitMode);
+
+            return EzEnumHitMode.Lazer;
+        }
+
         public static void ApplyManiaGameplayModes(this ScoreInfo score, DrawableRuleset? drawableRuleset)
         {
-            if (drawableRuleset?.ReplayScore != null)
-                return;
-
             if (drawableRuleset is not IManiaGameplayModeSnapshot snapshot)
                 return;
 
+            // 游玩与 Replay 结束进结算均写入当场 Drawable 环境，供 ForStored 解析与左栏 Statistics 对齐。
             score.ManiaHitMode = snapshot.HitMode;
             score.ManiaHealthMode = snapshot.HealthMode;
         }

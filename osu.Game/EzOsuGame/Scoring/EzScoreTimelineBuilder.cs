@@ -43,7 +43,7 @@ namespace osu.Game.EzOsuGame.Scoring
                 return null;
 
             var playableBeatmap = resolvePlayableBeatmap(beatmaps, scoreInfo, sharedPlayableBeatmap);
-            var resolvedEnvironment = GlobalConfigStore.EzConfig.ResolveForSession(ReplayRunPurpose.ForLive, scoreInfo);
+            var resolvedEnvironment = GlobalConfigStore.EzConfig.ResolveEnvironment(ReplayRunPurpose.ForLive, scoreInfo, ignoreOffset: true);
 
             string? cacheKey = playableBeatmap != null
                 ? getCacheKey(scoreInfo, timelineMode, resolvedEnvironment, playableBeatmap)
@@ -88,11 +88,13 @@ namespace osu.Game.EzOsuGame.Scoring
                         break;
                     }
 
-                    timeline = session.RunTimelineDirectAsync(
+                    // 本方法已在 Service 的后台 Task.Run 中串行执行；直接同步运行，
+                    // 避免嵌套 Task.Run + GetResult 同步阻塞额外占用线程池线程。
+                    timeline = session.RunTimelineDirect(
                         databasedScore,
                         playableBeatmap,
                         ReplayRunPurpose.ForLive,
-                        cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
+                        cancellationToken);
                     break;
                 }
 
@@ -106,11 +108,11 @@ namespace osu.Game.EzOsuGame.Scoring
                         break;
                     }
 
-                    timeline = session.RunTimelineDirectAsync(
+                    timeline = session.RunTimelineDirect(
                         databasedScore,
                         playableBeatmap,
                         ReplayRunPurpose.ForLive,
-                        cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
+                        cancellationToken);
                     break;
                 }
 

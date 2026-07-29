@@ -9,7 +9,6 @@ using osu.Game.Beatmaps;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Rulesets.Mania.Objects;
-using osu.Game.Rulesets.Mania.Replays;
 using osu.Game.Rulesets.Mania.Scoring;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Replays;
@@ -83,10 +82,11 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
             var ruleset = score.ScoreInfo.Ruleset.CreateInstance();
             var scoreProcessor = ruleset.CreateScoreProcessor();
             scoreProcessor.Mods.Value = score.ScoreInfo.Mods;
-            scoreProcessor.ApplyBeatmap(beatmap);
 
             if (scoreProcessor is ManiaScoreProcessor maniaScoreProcessor)
                 maniaScoreProcessor.TimelineHitModeOverride = environment.ManiaHitMode;
+
+            scoreProcessor.ApplyBeatmap(beatmap);
 
             if (score.ScoreInfo.IsLegacyScore)
                 scoreProcessor.IsLegacyScore = true;
@@ -99,8 +99,11 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
             double gameplayRate = ModUtils.CalculateRateWithMods(score.ScoreInfo.Mods);
             recorder?.RecordInitial(scoreProcessor, gameplayRate);
 
+            var simulationEnvironment = createSimulationEnvironment(environment);
+
+            ManiaWindowBaker.Align(beatmap, simulationEnvironment);
+            ManiaEnvironmentJudgements.ApplyToBeatmap(beatmap, simulationEnvironment.ManiaHitMode);
             var targets = buildTargets(beatmap);
-            alignHitWindows(beatmap, environment);
 
             var holdByHead = new Dictionary<HeadNote, HoldNote>();
             var headByTail = new Dictionary<TailNote, HeadNote>();
@@ -119,23 +122,23 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
                 // Zero frames: still need to generate all-miss HitEvents
                 // so that extended statistics can display.
                 var emptyPressTimes = new Dictionary<int, List<double>>();
-                applyForcedMisses(scoreProcessor, targets, emptyPressTimes, holdByHead, headByTail, environment.ManiaHitMode, gameplayRate, CancellationToken.None, recorder);
+                applyForcedMisses(scoreProcessor, targets, emptyPressTimes, holdByHead, headByTail, simulationEnvironment.ManiaHitMode, gameplayRate, CancellationToken.None, recorder);
                 scoreProcessor.PopulateScore(score.ScoreInfo);
 
                 return (scoreProcessor, recordTimeline ? new EzScoreTimeline(Array.Empty<EzScoreTimelineSnapshot>()) : null);
             }
 
-            var noteStrategy = ManiaJudgementRegistry.GetNoteStrategy(environment);
+            var noteStrategy = ManiaJudgementRegistry.GetNoteStrategy(simulationEnvironment);
 
-            var holdStrategy = ManiaJudgementRegistry.GetHoldStrategy(environment);
+            var holdStrategy = ManiaJudgementRegistry.GetHoldStrategy(simulationEnvironment);
 
             buildColumnMaps(targets, out var pressColumns, out var releaseColumns);
 
-            var inputData = parseReplay(score.Replay);
+            var inputData = parseReplayFrames(score.Replay, environment);
 
             ManiaReplaySessionSimulator.Simulate(
                 beatmap,
-                environment,
+                simulationEnvironment,
                 pressColumns,
                 releaseColumns,
                 holdByHead,
@@ -148,117 +151,33 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
                 recorder,
                 cancellationToken);
 
-            applyForcedMisses(scoreProcessor, targets, inputData.PressTimesByColumn, holdByHead, headByTail, environment.ManiaHitMode, gameplayRate, cancellationToken, recorder);
+            applyForcedMisses(scoreProcessor, targets, inputData.PressTimesByColumn, holdByHead, headByTail, simulationEnvironment.ManiaHitMode, gameplayRate, cancellationToken, recorder);
 
             return (scoreProcessor, recorder?.Build());
         }
 
+        private static IGameplayEnvironment createSimulationEnvironment(IGameplayEnvironment environment)
+        {
+            if (!environment.ApplyInputOffsetViaReplayFrameShift || environment.OffsetPlusMania == 0)
+                return environment;
+
+            return new GameplayEnvironment
+            {
+                ManiaHitMode = environment.ManiaHitMode,
+                ManiaHealthMode = environment.ManiaHealthMode,
+                JudgePrecedence = environment.JudgePrecedence,
+                OffsetPlusMania = 0,
+                BmsPoorHitResultEnable = environment.BmsPoorHitResultEnable,
+            };
+        }
+
         /// <summary>
-        /// 单次解析 replay 帧序列，同时产出有序输入事件流与每列 press 时间索引。
-        /// 替代原来 <c>ManiaReplayInputParser.Parse</c> + <c>BuildPressTimesByColumn</c> 的两次独立解析。
+        /// ReplayFrame → 边沿（BatchAllEvents）。实现见 <see cref="ManiaReplayFrameEdgeParser"/>。
         /// </summary>
-        private static ManiaReplayInputData parseReplay(Replay replay)
+        private static ManiaReplayInputData parseReplayFrames(Replay replay, IGameplayEnvironment environment)
         {
-            var frames = replay.Frames.OfType<ManiaReplayFrame>().OrderBy(f => f.Time).ToList();
-            var inputEvents = new List<ManiaReplayInputEvent>(frames.Count * 2);
-            var pressTimes = new Dictionary<int, List<double>>();
-
-            var lastActions = new List<ManiaAction>();
-
-            foreach (var frame in frames)
-            {
-                var current = frame.Actions.ToList();
-
-                // 检测新按下（current 有但 lastActions 无）
-                foreach (var action in current)
-                {
-                    if (lastActions.Contains(action))
-                        continue;
-
-                    int column = (int)action;
-
-                    if (column >= 0)
-                    {
-                        inputEvents.Add(new ManiaReplayInputEvent(frame.Time, column, true));
-
-                        if (!pressTimes.TryGetValue(column, out var list))
-                        {
-                            list = new List<double>();
-                            pressTimes[column] = list;
-                        }
-
-                        list.Add(frame.Time);
-                    }
-                }
-
-                // 检测释放（lastActions 有但 current 无）
-                foreach (var action in lastActions)
-                {
-                    if (current.Contains(action))
-                        continue;
-
-                    int column = (int)action;
-                    if (column >= 0)
-                        inputEvents.Add(new ManiaReplayInputEvent(frame.Time, column, false));
-                }
-
-                lastActions = current;
-            }
-
-            // 末尾未释放的键补 Release 事件
-            if (lastActions.Count > 0)
-            {
-                double endTime = frames[^1].Time;
-
-                foreach (var action in lastActions)
-                {
-                    int column = (int)action;
-                    if (column >= 0)
-                        inputEvents.Add(new ManiaReplayInputEvent(endTime, column, false));
-                }
-            }
-
-            // 排序：时间升序 → release 优先 → 列索引升序
-            inputEvents.Sort((a, b) =>
-            {
-                int timeComparison = a.Time.CompareTo(b.Time);
-                if (timeComparison != 0)
-                    return timeComparison;
-
-                if (a.IsPress != b.IsPress)
-                    return a.IsPress ? 1 : -1;
-
-                return a.Column.CompareTo(b.Column);
-            });
-
-            foreach (var list in pressTimes.Values)
-                list.Sort();
-
-            return new ManiaReplayInputData(inputEvents, pressTimes);
-        }
-
-        private static void alignHitWindows(IBeatmap beatmap, IGameplayEnvironment environment)
-        {
-            bool isO2Jam = environment.ManiaHitMode == EzEnumHitMode.O2Jam;
-
-            foreach (var hitObject in beatmap.HitObjects)
-                alignHitWindowsRecursive(hitObject, beatmap, environment, isO2Jam);
-        }
-
-        private static void alignHitWindowsRecursive(HitObject hitObject, IBeatmap beatmap, IGameplayEnvironment environment, bool isO2Jam)
-        {
-            if (hitObject.HitWindows is ManiaHitWindows maniaHitWindows)
-            {
-                maniaHitWindows.SetHitMode(environment.ManiaHitMode);
-
-                // O2Jam 判定窗口依赖 BPM 缩放，必须按 hitObject 时间查谱面 BPM 写入。
-                // 不设 BPM 则 ManiaHitWindows 默认 BPM=0 → safeBpm=75 → 窗口加倍，误判严重。
-                if (isO2Jam)
-                    maniaHitWindows.UpdateO2JamBpmFromTime(hitObject.StartTime);
-            }
-
-            foreach (var nested in hitObject.NestedHitObjects)
-                alignHitWindowsRecursive(nested, beatmap, environment, isO2Jam);
+            double frameTimeOffset = environment.ApplyInputOffsetViaReplayFrameShift ? environment.OffsetPlusMania : 0;
+            return ManiaReplayFrameEdgeParser.ParseAll(replay, frameTimeOffset);
         }
 
         private static void applyForcedMisses(
@@ -298,10 +217,12 @@ namespace osu.Game.Rulesets.Mania.EzMania.ReplayJudge
                 if (state.Target is TailNote tailNote && headByTail.TryGetValue(tailNote, out var linkedHead)
                                                       && holdByHead.TryGetValue(linkedHead, out var hold))
                 {
-                    if (hold.Body != null)
-                        ManiaReplaySessionSimulator.ApplyAuxiliaryResult(scoreProcessor, hold.Body, HitResult.ComboBreak, missEventTime, gameplayRate, recorder);
+                    double storedOffset = ManiaReplaySessionSimulator.ResolveMissStoredOffset(state.Target, pressTimesByColumn);
 
-                    ManiaReplaySessionSimulator.ApplyAuxiliaryResult(scoreProcessor, hold, HitResult.IgnoreMiss, missEventTime, gameplayRate, recorder);
+                    if (hold.Body != null)
+                        ManiaReplaySessionSimulator.ApplyAuxiliaryResult(scoreProcessor, hold.Body, HitResult.ComboBreak, storedOffset, missEventTime, gameplayRate, recorder);
+
+                    ManiaReplaySessionSimulator.ApplyAuxiliaryResult(scoreProcessor, hold, HitResult.IgnoreMiss, storedOffset, missEventTime, gameplayRate, recorder);
                 }
             }
         }

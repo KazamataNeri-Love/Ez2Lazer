@@ -24,7 +24,10 @@ namespace osu.Game.EzOsuGame.Scoring
         {
             game.ScreenStack.ScreenPushed += onScreenPushed;
             game.ScreenStack.ScreenExited += onScreenExited;
-            bindModsFromScreen(game.ScreenStack.CurrentScreen as OsuScreen);
+
+            // 服务关闭时不做任何屏幕绑定，保证 0 影响；启用后由 onServiceEnabledChanged 补绑当前屏幕。
+            if (isServiceActive)
+                bindModsFromScreen(game.ScreenStack.CurrentScreen as OsuScreen);
         }
 
         private void unsubscribeScreenHooks()
@@ -36,14 +39,29 @@ namespace osu.Game.EzOsuGame.Scoring
 
         private void onScreenPushed(IScreen lastScreen, IScreen newScreen)
         {
-            bindModsFromScreen(newScreen as OsuScreen);
+            if (!isServiceActive)
+                return;
 
             if (newScreen is PlayerLoader)
-                requestTimelineBuild(priority: true);
+            {
+                bindModsFromScreen(newScreen as OsuScreen);
+                beginLoaderPreparation();
+                return;
+            }
+
+            bindModsFromScreen(newScreen as OsuScreen);
         }
 
         private void onScreenExited(IScreen lastScreen, IScreen newScreen)
-            => bindModsFromScreen(newScreen as OsuScreen);
+        {
+            if (!isServiceActive)
+                return;
+
+            if (lastScreen is PlayerLoader)
+                endLoaderPreparation(advancingToPlayer: newScreen is Player);
+
+            bindModsFromScreen(newScreen as OsuScreen);
+        }
 
         private void bindModsFromScreen(OsuScreen? screen)
         {

@@ -2,7 +2,6 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
-using System.Linq;
 using osu.Game.Beatmaps;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.Rulesets.Mania.EzMania.Helper;
@@ -78,6 +77,11 @@ namespace osu.Game.Rulesets.Mania.Scoring
         }
 
         private double totalMultiplier => speedMultiplier / difficultyMultiplier;
+
+        /// <summary>
+        /// Speed / difficulty 合成乘数（O2 press-time 判定用）。
+        /// </summary>
+        public double TotalMultiplier => totalMultiplier;
 
         private double overallDifficulty;
 
@@ -163,9 +167,12 @@ namespace osu.Game.Rulesets.Mania.Scoring
             updateWindows();
         }
 
+        /// <summary>
+        /// 仅冷路径消费（GetAllAvailableWindows 显示、Stage 判定池、统计图表）。
+        /// 判定热路径不经过这里：非 Lazer 走 helper.ResultFor 直接比区间；Lazer 下六个标准判定恒有效。
+        /// </summary>
         public override bool IsHitResultAllowed(HitResult result)
         {
-            // 先检查基础判定是否允许
             switch (result)
             {
                 case HitResult.Perfect:
@@ -174,7 +181,16 @@ namespace osu.Game.Rulesets.Mania.Scoring
                 case HitResult.Ok:
                 case HitResult.Meh:
                 case HitResult.Miss:
-                    break;
+                    // 直接查静态有效判定表（单一数据源），无需额外的 per-result switch 副本。
+                    var valid = HitModeHelper.GetHitModeValidHitResults(ActiveHitMode);
+
+                    for (int i = 0; i < valid.Count; i++)
+                    {
+                        if (valid[i] == result)
+                            return true;
+                    }
+
+                    return false;
 
                 case HitResult.Poor:
                     return AllowPoorEnabled;
@@ -182,10 +198,6 @@ namespace osu.Game.Rulesets.Mania.Scoring
                 default:
                     return false;
             }
-
-            // 使用当前实例的 HitMode 判定列表，只允许有判定区间的结果。
-            var validResults = HitModeHelper.GetHitModeValidHitResults(ActiveHitMode);
-            return validResults.Contains(result);
         }
 
         public override void SetDifficulty(double difficulty)
@@ -228,6 +240,12 @@ namespace osu.Game.Rulesets.Mania.Scoring
             return true;
         }
 
+        /// <summary>不对称 miss 早窗（ms）；AutoMissGate / ShouldDefer 热路径用，勿每帧调 helper。</summary>
+        public double MissEarlyWindow { get; private set; }
+
+        /// <summary>不对称 miss 晚窗（ms）。</summary>
+        public double MissLateWindow { get; private set; }
+
         private void updateWindows()
         {
             if (setHitMode() && !HasReset)
@@ -238,6 +256,7 @@ namespace osu.Game.Rulesets.Mania.Scoring
                 ok = okRange;
                 meh = mehRange;
                 miss = missRange;
+                refreshMissDirectionWindows();
                 return;
             }
 
@@ -273,6 +292,15 @@ namespace osu.Game.Rulesets.Mania.Scoring
                 meh = Math.Floor(IBeatmapDifficultyInfo.DifficultyRange(overallDifficulty, meh_window_range) * totalMultiplier) + 0.5;
                 miss = Math.Floor(IBeatmapDifficultyInfo.DifficultyRange(overallDifficulty, miss_window_range) * totalMultiplier) + 0.5;
             }
+
+            refreshMissDirectionWindows();
+        }
+
+        private void refreshMissDirectionWindows()
+        {
+            // 与 WindowFor(Miss, isEarly) 语义一致，但在 update 时烘焙，避免每帧进 helper。
+            MissEarlyWindow = helper.WindowFor(HitResult.Miss, true);
+            MissLateWindow = helper.WindowFor(HitResult.Miss, false);
         }
 
         public override double WindowFor(HitResult result)
@@ -325,12 +353,15 @@ namespace osu.Game.Rulesets.Mania.Scoring
         /// </summary>
         public double WindowFor(HitResult result, bool isEarly)
         {
+            if (result == HitResult.Miss)
+                return isEarly ? MissEarlyWindow : MissLateWindow;
+
             return helper.WindowFor(result, isEarly);
         }
 
         public HitResult ResultFor(double timeOffset, bool? useHelper = null)
         {
-            bool shouldUseHelper = useHelper ?? (ActiveHitMode != EzEnumHitMode.Lazer);
+            bool shouldUseHelper = useHelper ?? ActiveHitMode != EzEnumHitMode.Lazer;
             return shouldUseHelper ? helper.ResultFor(timeOffset) : base.ResultFor(timeOffset);
         }
 

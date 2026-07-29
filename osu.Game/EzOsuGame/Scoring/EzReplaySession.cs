@@ -42,6 +42,14 @@ namespace osu.Game.EzOsuGame.Scoring
             return timeline;
         }
 
+        public EzScoreTimeline RunTimelineDirect(Score score, IBeatmap beatmap, ReplayRunPurpose purpose, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var resolvedEnv = ResolveEnvironment(score, purpose);
+            var (_, timeline) = RunWithTimeline(score, beatmap, resolvedEnv, cancellationToken);
+            return timeline;
+        }
+
         public async Task<ReplayRunResult> RunRequestAsync(ReplayRunRequest request, CancellationToken cancellationToken = default)
         {
             try
@@ -60,9 +68,9 @@ namespace osu.Game.EzOsuGame.Scoring
             }
         }
 
-        public async Task<List<HitEvent>> RunHitEventsAsync(Score score, IBeatmap beatmap, CancellationToken cancellationToken = default)
+        public async Task<List<HitEvent>> RunHitEventsAsync(Score score, IBeatmap beatmap, ReplayRunPurpose purpose = ReplayRunPurpose.ForLive, CancellationToken cancellationToken = default)
         {
-            var (resultScore, _, _) = await getOrRunSession(score, beatmap, ReplayRunPurpose.ForStored, cancellationToken).ConfigureAwait(false);
+            var (resultScore, _, _) = await getOrRunSession(score, beatmap, purpose, cancellationToken).ConfigureAwait(false);
             return resultScore.ScoreInfo.HitEvents.ToList();
         }
 
@@ -98,12 +106,28 @@ namespace osu.Game.EzOsuGame.Scoring
 
         protected static GameplayEnvironment ResolveEnvironment(ReplayRunRequest request)
         {
-            var env = GlobalConfigStore.EzConfig.ResolveForSession(request.Purpose, request.Score.ScoreInfo);
-            return request.OffsetPlusMania == 0 ? env : env with { OffsetPlusMania = request.OffsetPlusMania };
+            if (request.Purpose == ReplayRunPurpose.ForLive)
+            {
+                var environment = GlobalConfigStore.EzConfig.ResolveEnvironment(
+                    request.Purpose,
+                    request.Score.ScoreInfo,
+                    ignoreOffset: !request.IncludeGlobalManiaOffset);
+
+                return request.IncludeGlobalManiaOffset
+                    ? environment with { ApplyInputOffsetViaReplayFrameShift = true }
+                    : environment;
+            }
+
+            return GlobalConfigStore.EzConfig.ResolveEnvironment(request.Purpose, request.Score.ScoreInfo);
         }
 
         protected static GameplayEnvironment ResolveEnvironment(Score score, ReplayRunPurpose purpose)
-            => GlobalConfigStore.EzConfig.ResolveForSession(purpose, score.ScoreInfo);
+        {
+            if (purpose == ReplayRunPurpose.ForLive)
+                return GlobalConfigStore.EzConfig.ResolveEnvironment(purpose, score.ScoreInfo, ignoreOffset: true);
+
+            return GlobalConfigStore.EzConfig.ResolveEnvironment(purpose, score.ScoreInfo);
+        }
 
         protected static Task<T> GetOrCreate<T>(ConcurrentDictionary<string, Lazy<Task<T>>> cache, string cacheKey, Func<Task<T>> factory)
         {
@@ -116,7 +140,7 @@ namespace osu.Game.EzOsuGame.Scoring
             string scoreKey = $"hash:{score.ScoreInfo.Hash}|id:{score.ScoreInfo.ID}";
             string beatmapKey = $"hash:{beatmap.BeatmapInfo.Hash}|id:{beatmap.BeatmapInfo.ID}";
             string bmsPoorKey = environment.BmsPoorHitResultEnable.ToString();
-            string envKey = $"hm:{(int)environment.ManiaHitMode}|health:{(int)environment.ManiaHealthMode}|judge:{(int)environment.JudgePrecedence}|offset:{environment.OffsetPlusMania:F3}|bmsPoor:{bmsPoorKey}";
+            string envKey = $"hm:{(int)environment.ManiaHitMode}|health:{(int)environment.ManiaHealthMode}|judge:{(int)environment.JudgePrecedence}|offset:{environment.OffsetPlusMania:F3}|bmsPoor:{bmsPoorKey}|frameShift:{environment.ApplyInputOffsetViaReplayFrameShift}";
 
             string raw = $"{purpose}|{scoreKey}|{beatmapKey}|{envKey}|rule:{score.ScoreInfo.Ruleset.OnlineID}";
             return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(raw)));

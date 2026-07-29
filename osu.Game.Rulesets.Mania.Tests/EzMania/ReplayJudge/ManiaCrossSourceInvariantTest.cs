@@ -20,6 +20,9 @@ namespace osu.Game.Rulesets.Mania.Tests.EzMania.ReplayJudge
         [SetUp]
         public void SetUp() => ReplayJudgeTestConfig.ApplyToGlobalConfig(LazerTapReplayFixtures.CreateTwoNoteColumnTap().environment);
 
+        [TearDown]
+        public void TearDown() => ReplayJudgeTestConfig.ResetGlobalConfig();
+
         [Test]
         public void TestRunHitEventsAggregateMatchesStatistics()
         {
@@ -107,7 +110,7 @@ namespace osu.Game.Rulesets.Mania.Tests.EzMania.ReplayJudge
             ReplayJudgeTestConfig.ApplyToGlobalConfig(environment);
             ReplayJudgeTestConfig.ApplyEmbeddedModes(score, environment);
 
-            var fromScore = snapshotRun(score, beatmap, GlobalConfigStore.EzConfig.ResolveForSession(ReplayRunPurpose.ForStored, score.ScoreInfo));
+            var fromScore = snapshotRun(score, beatmap, GlobalConfigStore.EzConfig.ResolveEnvironment(ReplayRunPurpose.ForStored, score.ScoreInfo));
             var fromLive = snapshotRun(score, beatmap, GlobalConfigStore.EzConfig.GetGameplayEnvironment());
 
             Assert.That(ManiaReplayParityHelper.AreHitEventsEquivalent(fromScore.hitEvents, fromLive.hitEvents), Is.True);
@@ -125,7 +128,7 @@ namespace osu.Game.Rulesets.Mania.Tests.EzMania.ReplayJudge
             var session = snapshotRun(score, beatmap, environment);
             var service = new ManiaReplaySessionService();
             var generatorEvents = await service.RunHitEventsAsync(score, beatmap).ConfigureAwait(true);
-            var generatorRun = await service.RunAsync(score, beatmap, ReplayRunPurpose.ForStored).ConfigureAwait(true);
+            var generatorRun = await service.RunAsync(score, beatmap, ReplayRunPurpose.ForLive).ConfigureAwait(true);
             var generatorStats = generatorRun.ScoreInfo.Statistics.ToDictionary();
 
             Assert.That(ManiaReplayParityHelper.AreHitEventsEquivalent(generatorEvents, session.hitEvents), Is.True);
@@ -157,7 +160,7 @@ namespace osu.Game.Rulesets.Mania.Tests.EzMania.ReplayJudge
             ReplayJudgeTestConfig.ApplyEmbeddedModes(score, iidxEnvironment);
             ReplayJudgeTestConfig.ApplyToGlobalConfig(lazerEnvironment);
 
-            var fromScore = snapshotRun(score, beatmap, GlobalConfigStore.EzConfig.ResolveForSession(ReplayRunPurpose.ForStored, score.ScoreInfo));
+            var fromScore = snapshotRun(score, beatmap, GlobalConfigStore.EzConfig.ResolveEnvironment(ReplayRunPurpose.ForStored, score.ScoreInfo));
             var fromLive = snapshotRun(score, beatmap, GlobalConfigStore.EzConfig.GetGameplayEnvironment());
 
             Assert.That(ManiaReplayParityHelper.AreHitEventsEquivalent(fromScore.hitEvents, fromLive.hitEvents), Is.False);
@@ -173,22 +176,22 @@ namespace osu.Game.Rulesets.Mania.Tests.EzMania.ReplayJudge
             ManiaReplaySessionService service, Score score, IBeatmap beatmap)
         {
             var hitEvents = await service.RunHitEventsAsync(score, beatmap).ConfigureAwait(true);
-            var run = await service.RunAsync(score, beatmap, ReplayRunPurpose.ForStored).ConfigureAwait(true);
+            var run = await service.RunAsync(score, beatmap, ReplayRunPurpose.ForLive).ConfigureAwait(true);
             return (hitEvents, run.ScoreInfo.Statistics.ToDictionary(), run.ScoreInfo.Accuracy, run.ScoreInfo.TotalScore);
         }
 
         private static async Task<(List<HitEvent> hitEvents, Dictionary<HitResult, int> statistics, double accuracy, long totalScore)> snapshotFromRunAsync(
             ManiaReplaySessionService service, Score score, IBeatmap beatmap)
         {
-            var result = await service.RunAsync(score, beatmap, ReplayRunPurpose.ForStored).ConfigureAwait(true);
+            var result = await service.RunAsync(score, beatmap, ReplayRunPurpose.ForLive).ConfigureAwait(true);
             return (result.ScoreInfo.HitEvents.ToList(), result.ScoreInfo.Statistics.ToDictionary(), result.ScoreInfo.Accuracy, result.ScoreInfo.TotalScore);
         }
 
         private static async Task<(List<HitEvent> hitEvents, Dictionary<HitResult, int> statistics, double accuracy, long totalScore)> snapshotFromRunRequestAsync(
             ManiaReplaySessionService service, Score score, IBeatmap beatmap)
         {
-            var combined = await service.RunRequestAsync(new ReplayRunRequest(score, beatmap, ReplayRunPurpose.ForStored)).ConfigureAwait(true);
-            var info = combined.Score!.ScoreInfo;
+            var combined = await service.RunRequestAsync(new ReplayRunRequest(score, beatmap, ReplayRunPurpose.ForLive)).ConfigureAwait(true);
+            var info = combined.Score.ScoreInfo;
             return (info.HitEvents.ToList(), info.Statistics.ToDictionary(), info.Accuracy, info.TotalScore);
         }
     }
