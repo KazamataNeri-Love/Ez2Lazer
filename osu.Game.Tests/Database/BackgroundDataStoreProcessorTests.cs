@@ -220,6 +220,82 @@ INSERT INTO schema_version (number) VALUES (3);";
             AddAssert("Score not marked as failed", () => Realm.Run(r => r.Find<ScoreInfo>(scoreInfo.ID)!.BackgroundReprocessingFailed), () => Is.False);
         }
 
+        /// <summary>
+        /// [Ez] 带 Ez 游玩模式嵌入（ManiaHitMode / ManiaHealthMode）的成绩不得被官方分数升级改写：
+        /// 仅盖 TotalScoreVersion，Rank / TotalScore / Accuracy 保持原值。
+        /// </summary>
+        [TestCase(30000001)]
+        [TestCase(30000016)]
+        public void TestEzGameplayModeScoreExemptFromOfficialUpgrades(int scoreVersion)
+        {
+            ScoreInfo scoreInfo = null!;
+
+            AddStep("Add Ez gameplay-mode score with old version", () =>
+            {
+                Realm.Write(r =>
+                {
+                    r.Add(scoreInfo = new ScoreInfo(ruleset: r.All<RulesetInfo>().First(rs => rs.ShortName == "mania"), beatmap: r.All<BeatmapInfo>().First())
+                    {
+                        TotalScoreVersion = scoreVersion,
+                        LegacyTotalScore = 123456,
+                        IsLegacyScore = true,
+                        ManiaHitMode = 1, // EZ2AC
+                        ManiaHealthMode = 0,
+                        TotalScore = 987654,
+                        TotalScoreWithoutMods = 987654,
+                        Accuracy = 0.97,
+                        Rank = ScoreRank.S,
+                    });
+                });
+            });
+
+            TestBackgroundDataStoreProcessor processor = null!;
+            AddStep("Run background processor", () => Add(processor = new TestBackgroundDataStoreProcessor()));
+            AddUntilStep("Wait for completion", () => processor.Completed);
+
+            AddAssert("Score version stamped", () => Realm.Run(r => r.Find<ScoreInfo>(scoreInfo.ID)!.TotalScoreVersion), () => Is.EqualTo(LegacyScoreEncoder.LATEST_VERSION));
+            AddAssert("Total score untouched", () => Realm.Run(r => r.Find<ScoreInfo>(scoreInfo.ID)!.TotalScore), () => Is.EqualTo(987654));
+            AddAssert("Accuracy untouched", () => Realm.Run(r => r.Find<ScoreInfo>(scoreInfo.ID)!.Accuracy), () => Is.EqualTo(0.97));
+            AddAssert("Rank untouched", () => Realm.Run(r => r.Find<ScoreInfo>(scoreInfo.ID)!.Rank), () => Is.EqualTo(ScoreRank.S));
+            AddAssert("Score not marked as failed", () => Realm.Run(r => r.Find<ScoreInfo>(scoreInfo.ID)!.BackgroundReprocessingFailed), () => Is.False);
+        }
+
+        /// <summary>
+        /// [Ez] 局内双 Lazer 成绩落库为 ManiaHitMode=0/HealthMode=0（官方语义，未归一为 -1），
+        /// 必须跟随 ppy 上游正常升级，不得被 Ez 豁免批次跳过。
+        /// </summary>
+        [Test]
+        public void TestDoubleLazerModeScoreStillSubjectToOfficialUpgrades()
+        {
+            ScoreInfo scoreInfo = null!;
+
+            AddStep("Add double-lazer legacy score with old version", () =>
+            {
+                Realm.Write(r =>
+                {
+                    r.Add(scoreInfo = new ScoreInfo(ruleset: r.All<RulesetInfo>().First(rs => rs.ShortName == "mania"), beatmap: r.All<BeatmapInfo>().First())
+                    {
+                        // ≥30000017：跳过 mod 倍率升级批次，确保由 legacy 转换批次处理（可观察 TotalScore 变化）。
+                        TotalScoreVersion = 30000018,
+                        LegacyTotalScore = 123456,
+                        IsLegacyScore = true,
+                        ManiaHitMode = 0, // Lazer
+                        ManiaHealthMode = 0,
+                        TotalScore = 987654,
+                        TotalScoreWithoutMods = 987654,
+                    });
+                });
+            });
+
+            TestBackgroundDataStoreProcessor processor = null!;
+            AddStep("Run background processor", () => Add(processor = new TestBackgroundDataStoreProcessor()));
+            AddUntilStep("Wait for completion", () => processor.Completed);
+
+            AddAssert("Score version upgraded", () => Realm.Run(r => r.Find<ScoreInfo>(scoreInfo.ID)!.TotalScoreVersion), () => Is.EqualTo(LegacyScoreEncoder.LATEST_VERSION));
+            AddAssert("Score not marked as failed", () => Realm.Run(r => r.Find<ScoreInfo>(scoreInfo.ID)!.BackgroundReprocessingFailed), () => Is.False);
+            AddAssert("Score was officially converted (not exempted)", () => Realm.Run(r => r.Find<ScoreInfo>(scoreInfo.ID)!.TotalScore), () => Is.Not.EqualTo(987654));
+        }
+
         [TestCase(30000002)]
         [TestCase(30000013)]
         public void TestScoreUpgradeFailed(int scoreVersion)

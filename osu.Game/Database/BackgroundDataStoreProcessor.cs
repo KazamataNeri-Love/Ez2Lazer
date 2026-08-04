@@ -20,7 +20,9 @@ using osu.Framework.Platform;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.EzOsuGame.Analysis;
+using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Database;
+using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Extensions;
 using osu.Game.Online.API;
 using osu.Game.Overlays;
@@ -67,6 +69,12 @@ namespace osu.Game.Database
 
         [Resolved]
         private INotificationOverlay? notificationOverlay { get; set; }
+
+        /// <summary>
+        /// [Ez] 全量成绩重算的 Session 入口（选歌右键同款）。
+        /// </summary>
+        [Resolved]
+        private IEzReplaySession? ezReplaySession { get; set; }
 
         [Resolved]
         private IAPIProvider api { get; set; } = null!;
@@ -150,6 +158,156 @@ namespace osu.Game.Database
                 ezRealmMetadataBackfillQueued = false;
         }
 
+        private readonly object ezScoreRecalculationLock = new object();
+        private bool ezScoreRecalculationQueued;
+
+        /// <summary>
+        /// [Ez] Realm 维护：全量成绩重算（修复被错误后台转换破坏的本地成绩）。
+        /// <list type="bullet">
+        /// <item>mania 且有 replay：Session ForStored 重算（与选歌右键「原始环境重算」同款路径）。</item>
+        /// <item>stable legacy 且无 replay：重走干净的官方 <see cref="StandardisedScoreMigrationTools.UpdateFromLegacy(ScoreInfo, WorkingBeatmap)"/>（从 LegacyTotalScore 重转，修复被写坏的 Total/Acc/Rank）。</item>
+        /// <item>嵌入 Ez 模式但无 replay：跳过（官方算法不理解 Ez 判定语义，重算只会二次破坏）。</item>
+        /// <item>其余：官方 <see cref="ScoreManager.Recalculate"/>。</item>
+        /// </list>
+        /// </summary>
+        /// <param name="includeAllRulesets">false 仅处理 mania 成绩（对应设置「尝试补算」）；true 处理全部游戏模式（「完全重算」）。</param>
+        public EzDataRebuildDispatchResult QueueEzScoreFullRecalculation(bool includeAllRulesets)
+        {
+            lock (ezScoreRecalculationLock)
+            {
+                if (ezScoreRecalculationQueued)
+                {
+                    Logger.Log("Ez full score recalculation is already running; ignoring duplicate request.");
+                    return EzDataRebuildDispatchResult.AlreadyRunning;
+                }
+
+                ezScoreRecalculationQueued = true;
+            }
+
+            Task.Factory.StartNew(() =>
+            {
+                try
+                {
+                    runEzScoreFullRecalculation(includeAllRulesets);
+                }
+                catch (Exception e)
+                {
+                    Logger.Log($"Ez full score recalculation failed: {e}");
+                }
+                finally
+                {
+                    lock (ezScoreRecalculationLock)
+                        ezScoreRecalculationQueued = false;
+                }
+            }, TaskCreationOptions.LongRunning);
+
+            return EzDataRebuildDispatchResult.Queued;
+        }
+
+        private void runEzScoreFullRecalculation(bool includeAllRulesets)
+        {
+            Logger.Log($"Querying local scores for full recalculation (all rulesets: {includeAllRulesets})...");
+
+            List<Guid> scoreIds = realmAccess.Run(r => r.All<ScoreInfo>()
+                                                        .Where(s => !s.DeletePending)
+                                                        .AsEnumerable()
+                                                        .Where(s => includeAllRulesets || s.Ruleset.OnlineID == 3)
+                                                        .Select(s => s.ID)
+                                                        .ToList());
+
+            Logger.Log($"Found {scoreIds.Count} local scores for full recalculation.");
+
+            if (scoreIds.Count == 0)
+                return;
+
+            var notification = showProgressNotification(scoreIds.Count, "Recalculating local scores", "local scores have been recalculated");
+
+            int processedCount = 0;
+            int failedCount = 0;
+
+            foreach (var id in scoreIds)
+            {
+                if (notification?.State == ProgressNotificationState.Cancelled)
+                    break;
+
+                updateNotificationProgress(notification, processedCount, scoreIds.Count);
+
+                sleepIfRequired();
+
+                try
+                {
+                    if (recalculateSingleScore(id))
+                        ++processedCount;
+                    else
+                        ++failedCount;
+                }
+                catch (ObjectDisposedException)
+                {
+                    throw;
+                }
+                catch (Exception e)
+                {
+                    Logger.Log($"Failed to recalculate score {id}: {e}");
+                    ++failedCount;
+                }
+            }
+
+            completeNotification(notification, processedCount, scoreIds.Count, failedCount);
+        }
+
+        private bool recalculateSingleScore(Guid id)
+        {
+            (ScoreInfo? score, bool hasReplay) = realmAccess.Run(r =>
+            {
+                var s = r.Find<ScoreInfo>(id);
+                return s == null ? (null, false) : (s.Detach(), s.Files.Count > 0);
+            });
+
+            if (score == null)
+            {
+                Logger.Log($"Score {id} no longer exists, skipping.");
+                return false;
+            }
+
+            if (score.Ruleset.OnlineID == 3 && hasReplay && ezReplaySession != null)
+            {
+                // 与选歌右键「原始环境重算」一致：Session ForStored（嵌入 HM/HM；无嵌入按双 Lazer）。
+                // 后台线程串行执行，同步阻塞等待即可。
+                EzScoreRecalculationService.RecalculateAsync(scoreManager, beatmapManager, ezReplaySession, score, ReplayRunPurpose.ForStored)
+                                           .GetAwaiter().GetResult();
+                return true;
+            }
+
+            if (score.ManiaHitMode > (int)EzEnumHitMode.Lazer)
+            {
+                // 非官方判定语义成绩且无 replay：官方算法不理解 Ez 判定权重，重算只会破坏，保持原值。
+                // 双 Lazer（HitMode=0）是官方语义，继续走下方官方路径。
+                Logger.Log($"Skipping Ez gameplay-mode score {id} without replay (official recalculation not applicable).");
+                return true;
+            }
+
+            if (score.IsLegacyScore && score.Ruleset.IsLegacyRuleset())
+            {
+                // stable 成绩无 replay：重新走干净的官方 legacy 转换（从 LegacyTotalScore），
+                // 普通 Recalculate 修不了被污染转换写坏的 TotalScoreWithoutMods。
+                return realmAccess.Write(r =>
+                {
+                    var s = r.Find<ScoreInfo>(id);
+
+                    if (s == null)
+                        return false;
+
+                    StandardisedScoreMigrationTools.UpdateFromLegacy(s, beatmapManager.GetWorkingBeatmap(s.BeatmapInfo));
+                    s.TotalScoreVersion = LegacyScoreEncoder.LATEST_VERSION;
+                    s.BackgroundReprocessingFailed = false;
+                    return true;
+                });
+            }
+
+            scoreManager.Recalculate(score);
+            return true;
+        }
+
         protected override void LoadComplete()
         {
             base.LoadComplete();
@@ -195,6 +353,9 @@ namespace osu.Game.Database
                     // Note that the previous method will also update these on a fresh run.
                     processBeatmapsWithMissingObjectCounts();
                     processScoresWithMissingStatistics();
+                    // [Ez] Must run before all official score upgrade passes: scores judged under an Ez
+                    // gameplay mode must never be rewritten by official conversion algorithms.
+                    stampEzGameplayModeScores();
                     // ordering significant, `upgradeModMultipliers()` should run first as it will handle all scores
                     // (rather than only lazer scores, if it was called after `convertLegacyTotalScoreToStandardised()`)
                     upgradeModMultipliers();
@@ -957,6 +1118,53 @@ namespace osu.Game.Database
             completeNotification(notification, processedCount, scoreIds.Count, failedCount);
         }
 
+        /// <summary>
+        /// [Ez] 带非官方判定语义（ManiaHitMode &gt; Lazer，即 EZ2AC / O2Jam / IIDX / … / Classic）的成绩
+        /// 不参与官方分数升级：官方 legacy 转换 / rank 重算 / mod 倍率升级都不理解 Ez 判定与计分语义
+        /// （曾把成绩错转为 D + 超低分）。这里直接把 TotalScoreVersion 盖到最新，避免每次启动重查；
+        /// 此类成绩仅能通过 Ez Session 重算刷新。
+        /// 注意：局内双 Lazer 成绩落库为 ManiaHitMode=0（未归一），它们是官方语义，必须跟随 ppy 上游升级，
+        /// 因此判据只看 HitMode &gt; 0；HealthMode 只影响血量、与计分无关，不参与判断。
+        /// </summary>
+        private void stampEzGameplayModeScores()
+        {
+            Logger.Log("Querying for Ez gameplay-mode scores to exempt from official score upgrades...");
+
+            HashSet<Guid> scoreIds = realmAccess.Run(r => new HashSet<Guid>(
+                r.All<ScoreInfo>()
+                 .Where(s => s.TotalScoreVersion < LegacyScoreEncoder.LATEST_VERSION
+                             && s.ManiaHitMode > (int)EzEnumHitMode.Lazer)
+                 .AsEnumerable()
+                 .Select(s => s.ID)));
+
+            if (scoreIds.Count == 0)
+                return;
+
+            Logger.Log($"Found {scoreIds.Count} Ez gameplay-mode scores; stamping TotalScoreVersion without official conversion.");
+
+            const int batch_size = 500;
+            var idList = scoreIds.ToList();
+
+            for (int i = 0; i < idList.Count; i += batch_size)
+            {
+                var batch = idList.Skip(i).Take(batch_size).ToList();
+
+                sleepIfRequired();
+
+                realmAccess.Write(r =>
+                {
+                    foreach (var id in batch)
+                    {
+                        var s = r.Find<ScoreInfo>(id);
+                        if (s != null)
+                            s.TotalScoreVersion = LegacyScoreEncoder.LATEST_VERSION;
+                    }
+                });
+            }
+
+            Logger.Log($"Finished stamping {scoreIds.Count} Ez gameplay-mode scores.");
+        }
+
         private void upgradeModMultipliers()
         {
             Logger.Log("Querying for scores that need mod multiplier upgrade...");
@@ -966,7 +1174,10 @@ namespace osu.Game.Database
                  .Where(s => !s.BackgroundReprocessingFailed
                              && s.BeatmapInfo != null
                              && s.TotalScoreVersion < 30000017 // version number represents version with latest mod multiplier change
-                             && s.TotalScoreWithoutMods > 0)
+                             && s.TotalScoreWithoutMods > 0
+                             // [Ez] non-official judge semantics are exempt from official upgrades (see stampEzGameplayModeScores).
+                             // Lazer (0) and unset (-1) both follow ppy upstream behaviour.
+                             && s.ManiaHitMode <= (int)EzEnumHitMode.Lazer)
                  .AsEnumerable()
                  // must be done after materialisation, as realm doesn't want to support
                  // nested property predicates
@@ -1032,7 +1243,10 @@ namespace osu.Game.Database
                  .Where(s => !s.BackgroundReprocessingFailed
                              && s.BeatmapInfo != null
                              && s.IsLegacyScore
-                             && s.TotalScoreVersion < LegacyScoreEncoder.LATEST_VERSION)
+                             && s.TotalScoreVersion < LegacyScoreEncoder.LATEST_VERSION
+                             // [Ez] non-official judge semantics are exempt from official upgrades (see stampEzGameplayModeScores).
+                             // Lazer (0) and unset (-1) both follow ppy upstream behaviour.
+                             && s.ManiaHitMode <= (int)EzEnumHitMode.Lazer)
                  .AsEnumerable()
                  // must be done after materialisation, as realm doesn't want to support
                  // nested property predicates
@@ -1117,7 +1331,11 @@ namespace osu.Game.Database
 
             HashSet<Guid> scoreIds = realmAccess.Run(r => new HashSet<Guid>(
                 r.All<ScoreInfo>()
-                 .Where(s => s.TotalScoreVersion < 30000013 && !s.BackgroundReprocessingFailed) // last total score version with a significant change to ranks
+                 .Where(s => s.TotalScoreVersion < 30000013 // last total score version with a significant change to ranks
+                             && !s.BackgroundReprocessingFailed
+                             // [Ez] non-official judge semantics are exempt from official upgrades (see stampEzGameplayModeScores).
+                             // Lazer (0) and unset (-1) both follow ppy upstream behaviour.
+                             && s.ManiaHitMode <= (int)EzEnumHitMode.Lazer)
                  .AsEnumerable()
                  // must be done after materialisation, as realm doesn't support
                  // filtering on nested property predicates or projection via `.Select()`
