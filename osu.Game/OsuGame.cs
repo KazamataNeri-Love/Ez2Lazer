@@ -45,6 +45,7 @@ using osu.Game.EzOsuGame.Edit;
 using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Background.Pixiv;
 using osu.Game.EzOsuGame.Overlays;
+using osu.Game.EzOsuGame.Performance;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
@@ -186,6 +187,8 @@ namespace osu.Game
         private readonly ScreenshotManager screenshotManager = new ScreenshotManager();
 
         private SentryLogger sentryLogger;
+
+        private EzTurboMode turboMode;
 
         public virtual StableStorage GetStorageForStableInstall() => null;
 
@@ -463,6 +466,8 @@ namespace osu.Game
                 SkinManager.PauseImports = p.NewValue != LocalUserPlayingState.NotPlaying;
                 ScoreManager.PauseImports = p.NewValue != LocalUserPlayingState.NotPlaying;
             }, true);
+
+            turboMode = new EzTurboMode(LocalConfig, Ez2ConfigManager);
 
             IsActive.BindValueChanged(active => updateActiveState(active.NewValue), true);
 
@@ -1042,6 +1047,9 @@ namespace osu.Game
             // To reproduce, run `TestSceneButtonSystemNavigation` ensuring `TestConstructor` runs before `TestFastShortcutKeys`.
             detachedBeatmapStore?.Dispose();
 
+            // 必须在配置管理器落盘前还原，否则压制值会被当成用户设置持久化。
+            turboMode?.Dispose();
+
             base.Dispose(isDisposing);
 
             sentryLogger.Dispose();
@@ -1063,7 +1071,8 @@ namespace osu.Game
                 { FrameworkSetting.VolumeUniversal, 0.6 },
                 { FrameworkSetting.VolumeMusic, 0.6 },
                 { FrameworkSetting.VolumeEffect, 0.6 },
-                { FrameworkSetting.AudioUseExperimentalWasapi, true },
+                // Ez2Lazer defaults to the legacy audio engine (ASIO / BASS device handling is tuned against it).
+                { FrameworkSetting.AudioUseExperimentalWasapi, false },
             };
         }
 
@@ -1408,9 +1417,17 @@ namespace osu.Game
                 if (wasAlreadyUsing)
                     LocalConfig.SetValue(OsuSetting.AudioOffset, LocalConfig.Get<double>(OsuSetting.AudioOffset) - FramedBeatmapClock.WINDOWS_EXPERIMENTAL_AUDIO_OFFSET);
 
-                Audio.UseExperimentalWasapi.Value = true;
+                // 屏蔽这些，不需要删除
+                // Audio.UseExperimentalWasapi.Value = true;
+                //
+                // dialogOverlay.Push(new MigrateNewAudioDialog(wasAlreadyUsing));
+            }
 
-                dialogOverlay.Push(new MigrateNewAudioDialog(wasAlreadyUsing));
+            if (combined < 20260728)
+            {
+#pragma warning disable CS0612 // Type or member is obsolete (MenuParallax exists solely to make this migration work, it should not be used anywhere else)
+                LocalConfig.SetValue<float>(OsuSetting.MenuParallaxScale, LocalConfig.Get<bool>(OsuSetting.MenuParallax) ? 1 : 0);
+#pragma warning restore CS0612 // Type or member is obsolete
             }
         }
 

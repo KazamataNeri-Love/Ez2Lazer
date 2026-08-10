@@ -18,6 +18,7 @@ using osu.Game.EzOsuGame.Extensions;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Rulesets.Mania.EzMania.Editor;
 using osu.Game.Localisation;
+using osu.Game.Localisation.Mania;
 using osu.Game.Overlays.Settings;
 using osu.Game.Rulesets.Configuration;
 using osu.Game.Rulesets.Difficulty;
@@ -425,7 +426,7 @@ namespace osu.Game.Rulesets.Mania
 
         public override RulesetSettingsSubsection CreateSettings() => new ManiaSettingsSubsection(this);
 
-        public override LocalisableString VariantDescription => "Keys";
+        public override LocalisableString VariantDescription => ManiaRulesetStrings.VariantDescription;
 
         public override IEnumerable<int> AvailableVariants
         {
@@ -563,7 +564,7 @@ namespace osu.Game.Rulesets.Mania
 
             yield return new RulesetBeatmapAttribute(SongSelectStrings.KeyCount, @"KC", originalDifficulty.CircleSize, adjustedDifficulty.CircleSize, 18)
             {
-                Description = "Affects the number of key columns on the playfield."
+                Description = ManiaRulesetStrings.KeyCountDescription
             };
 
             var hitWindows = new ManiaHitWindows();
@@ -578,7 +579,7 @@ namespace osu.Game.Rulesets.Mania
 
             yield return new RulesetBeatmapAttribute(SongSelectStrings.Accuracy, @"OD", originalDifficulty.OverallDifficulty, adjustedDifficulty.OverallDifficulty, 10)
             {
-                Description = "Affects timing requirements for notes.",
+                Description = ManiaRulesetStrings.AccuracyDescription,
                 AdditionalMetrics = hitWindows.GetAllAvailableWindows()
                                               .Reverse()
                                               .Select(window =>
@@ -604,7 +605,7 @@ namespace osu.Game.Rulesets.Mania
                                                   }
 
                                                   return new RulesetBeatmapAttribute.AdditionalMetric(
-                                                      $"{window.result.GetHitModeDisplayName().ToString().ToUpperInvariant()} hit window",
+                                                      SongSelectStrings.HitResultWindow(window.result.GetHitModeDisplayName().ToString().ToUpperInvariant()),
                                                       windowText,
                                                       colours.ForHitResult(window.result)
                                                   );
@@ -613,7 +614,7 @@ namespace osu.Game.Rulesets.Mania
 
             yield return new RulesetBeatmapAttribute(SongSelectStrings.HPDrain, @"HP", originalDifficulty.DrainRate, adjustedDifficulty.DrainRate, 10)
             {
-                Description = "Affects the harshness of health drain and the health penalties for missing."
+                Description = SongSelectStrings.HPDrainDescription
             };
         }
 
@@ -625,7 +626,7 @@ namespace osu.Game.Rulesets.Mania
             attributes.RemoveAll(a => a.Acronym == "KC");
 
             float holdNoteRatio = beatmapInfo.TotalObjectCount == 0 ? 0 : (float)beatmapInfo.EndTimeObjectCount / beatmapInfo.TotalObjectCount;
-            attributes.Insert(0, new RulesetBeatmapAttribute("Hold notes", @"HN", holdNoteRatio, holdNoteRatio, 1)
+            attributes.Insert(0, new RulesetBeatmapAttribute(BeatmapStatisticStrings.HoldNotes, @"HN", holdNoteRatio, holdNoteRatio, 1)
             {
                 ValueFormat = "P0"
             });

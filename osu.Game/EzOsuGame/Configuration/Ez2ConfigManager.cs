@@ -107,6 +107,9 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.ScratchAxisStopThreshold, 30, 10, 150);
             SetDefault(Ez2Setting.SkipWithGameplayKeys, true);
 
+            SetDefault(Ez2Setting.TurboMode, false);
+            SetDefault(Ez2Setting.TurboModeSnapshot, string.Empty);
+
             SetDefault(Ez2Setting.StoryboardAutoVideoSize, false);
             SetDefault(Ez2Setting.BackgroundScale, 1.0f, 0.5f, 1.0f, 0.01f);
             SetDefault(Ez2Setting.BackgroundPosX, 0.5f, 0f, 1f, 0.01f);
@@ -893,6 +896,19 @@ namespace osu.Game.EzOsuGame.Configuration
         ScratchAxisStopThreshold,
 
         SkipWithGameplayKeys,
+
+        /// <summary>
+        /// 极速模式总开关：压制非皮肤相关的每帧开销（背景、故事板、模糊、HUD 特效等）以提高帧数。
+        /// 开启时把一组官方与 Ez 设置改写为低开销值，关闭时按 <see cref="TurboModeSnapshot"/> 还原。
+        /// </summary>
+        TurboMode,
+
+        /// <summary>
+        /// 极速模式生效前的原始设置快照（JSON）。非空表示压制正在生效，
+        /// 启动时若发现它非空即为上次异常退出，需立即还原。不面向用户。
+        /// </summary>
+        TurboModeSnapshot,
+
         StoryboardAutoVideoSize,
         BackgroundScale,
         BackgroundPosX,
