@@ -25,6 +25,7 @@ using osu.Game.Rulesets.BMS.Scoring.Lamp.Persistence;
 using osu.Game.Rulesets.BMS.UI.BmsSongSelect.Analytics;
 using osu.Game.Rulesets.BMS.UI.BmsSongSelect.Bars;
 using osu.Game.Rulesets.BMS.UI.BmsSongSelect.Filtering;
+using osu.Game.Rulesets.BMS.UI.BmsSongSelect.Tables;
 using osu.Game.Rulesets.BMS.UI.SongSelect;
 using osu.Game.Screens;
 using osu.Game.Screens.Footer;
@@ -34,20 +35,22 @@ using osuTK.Input;
 namespace osu.Game.Rulesets.BMS.UI.BmsSongSelect
 {
     /// <summary>
-    /// beatoraja-style BMS song select (Bar navigation). Standard carousel remains <see cref="BmsSoloSongSelect"/>.
+    /// Qwilight-inspired BMS song select with independent difficulty tables.
+    /// Standard carousel remains <see cref="BmsSoloSongSelect"/>.
     /// </summary>
     public partial class BmsBmsSongSelect : OsuScreen
     {
         private BMSBeatmapManager beatmapManager = null!;
-        private BmsBarManager barManager = null!;
+        private BmsSongSelectNavigator navigator = null!;
         private BmsBarContext barContext = null!;
-        private BmsBarRenderer barRenderer = null!;
+        private BmsSongSelectShell shell = null!;
+        private BmsSongSelectBackgroundLayer chartBackground = null!;
         private BmsChartPreviewPlayer previewPlayer = null!;
         private TextBox searchTextBox = null!;
         private RulesetInfo bmsRulesetInfo = null!;
+        private BmsDifficultyTableStore tableStore = null!;
 
-        private Bindable<string> libraryPathsBindable = null!;
-        private Bindable<string> legacyRootPathBindable = null!;
+        private BMSRulesetConfigManager? bmsConfig;
 
         private BmsLampSqliteRepository? lampRepository;
         private BmsAnalyticsSqliteRepository? analyticsRepository;
@@ -84,10 +87,18 @@ namespace osu.Game.Rulesets.BMS.UI.BmsSongSelect
         [Resolved]
         private IRulesetConfigCache rulesetConfigCache { get; set; } = null!;
 
+        [Resolved]
+        private GameHost host { get; set; } = null!;
+
+        [Cached]
+        private readonly OverlayColourProvider colourProvider = new OverlayColourProvider(OverlayColourScheme.Blue);
+
         public BmsBmsSongSelect()
         {
             lampStore = new BmsLampStore(lampScheme);
         }
+
+        public override bool ShowFooter => true;
 
         [BackgroundDependencyLoader]
         private void load()
@@ -95,21 +106,18 @@ namespace osu.Game.Rulesets.BMS.UI.BmsSongSelect
             var bmsRuleset = new BMSRuleset();
             bmsRulesetInfo = bmsRuleset.RulesetInfo;
 
-            if (rulesetConfigCache.GetConfigFor(bmsRuleset) is BMSRulesetConfigManager bmsConfig)
+            if (rulesetConfigCache.GetConfigFor(bmsRuleset) is BMSRulesetConfigManager config)
             {
-                libraryPathsBindable = bmsConfig.GetBindable<string>(BMSRulesetSetting.BmsLibraryPaths);
-                legacyRootPathBindable = bmsConfig.GetBindable<string>(BMSRulesetSetting.BmsRootPath);
+                bmsConfig = config;
+                bmsConfig.ApplyResolvedLibraryPaths(beatmapManager = BMSBeatmapManager.GetShared(storage));
             }
             else
             {
-                libraryPathsBindable = new Bindable<string>(string.Empty);
-                legacyRootPathBindable = new Bindable<string>(string.Empty);
+                beatmapManager = BMSBeatmapManager.GetShared(storage);
             }
 
-            beatmapManager = BMSBeatmapManager.GetShared(storage);
-            syncConfiguredPaths();
-
             BmsStoragePaths.EnsureInitialized(storage);
+            tableStore = new BmsDifficultyTableStore(storage);
             lampRepository = new BmsLampSqliteRepository(BmsStoragePaths.GetLampDatabasePath(storage));
             lampStore.AttachRepository(lampRepository);
 
@@ -117,15 +125,17 @@ namespace osu.Game.Rulesets.BMS.UI.BmsSongSelect
             filterSync = new BmsFilterDatabaseSync(BmsStoragePaths.GetFilterDatabasePath(storage));
 
             rebuildBarContext();
-            barManager = new BmsBarManager(barContext);
-            barManager.ResetToRoot();
+            navigator = new BmsSongSelectNavigator(barContext, new BmsDifficultyTableRegistry(tableStore));
+            navigator.Reset();
 
             InternalChild = new Container
             {
                 RelativeSizeAxes = Axes.Both,
+                Padding = new MarginPadding { Bottom = ScreenFooter.HEIGHT },
                 Children = new Drawable[]
                 {
-                    barRenderer = new BmsBarRenderer(barManager, barContext)
+                    chartBackground = new BmsSongSelectBackgroundLayer(),
+                    shell = new BmsSongSelectShell(navigator, barContext)
                     {
                         RelativeSizeAxes = Axes.Both,
                     },
@@ -133,12 +143,14 @@ namespace osu.Game.Rulesets.BMS.UI.BmsSongSelect
                     {
                         Anchor = Anchor.TopRight,
                         Origin = Anchor.TopRight,
-                        Size = new Vector2(380, 32),
-                        Margin = new MarginPadding { Top = 78, Right = 20 },
+                        Size = new Vector2(380, 40),
+                        Margin = new MarginPadding { Top = 12, Right = 20 },
+                        Masking = true,
                         Child = searchTextBox = new OsuTextBox
                         {
                             PlaceholderText = BmsStrings.RAJA_SEARCH_PLACEHOLDER,
-                            RelativeSizeAxes = Axes.Both,
+                            RelativeSizeAxes = Axes.X,
+                            Width = 1,
                         },
                     },
                     previewPlayer = new BmsChartPreviewPlayer
@@ -148,7 +160,10 @@ namespace osu.Game.Rulesets.BMS.UI.BmsSongSelect
                 },
             };
 
-            barManager.Changed += onBarSelectionChanged;
+            shell.RequestPlay += tryStartSelectedChart;
+            shell.RequestOpenDownload += openSelectedChartDownload;
+            navigator.Changed += onSelectionChanged;
+            searchTextBox.Current.ValueChanged += e => navigator.SetListFilter(e.NewValue);
         }
 
         protected override void LoadComplete()
@@ -168,14 +183,24 @@ namespace osu.Game.Rulesets.BMS.UI.BmsSongSelect
             }
 
             refreshFilterDatabase();
-            barManager.ResetToRoot();
+            tableStore.Invalidate();
+            navigator.Reset();
         }
 
         public override void OnEntering(ScreenTransitionEvent e)
         {
             base.OnEntering(e);
-            musicController?.Stop();
+            stopGlobalMusic();
         }
+
+        public override void OnResuming(ScreenTransitionEvent e)
+        {
+            base.OnResuming(e);
+            stopGlobalMusic();
+            onSelectionChanged();
+        }
+
+        public override bool OnBackButton() => navigator.TryGoBack();
 
         public override void OnSuspending(ScreenTransitionEvent e)
         {
@@ -202,34 +227,29 @@ namespace osu.Game.Rulesets.BMS.UI.BmsSongSelect
             if (e.Key == Key.Number1)
             {
                 barContext.KeyModeFilter.CycleNext();
-                barManager.ResetToRoot();
+                navigator.Reset();
                 return true;
             }
 
             if (e.Key == Key.Number2)
             {
                 barContext.SortPolicy.CycleNext();
-                barManager.ResetToRoot();
-                return true;
-            }
-
-            if (e.Key == Key.Number8)
-            {
-                barManager.ShowSameFolder();
+                navigator.Reset();
                 return true;
             }
 
             if (e.Key == Key.Enter && searchTextBox.HasFocus)
             {
-                barManager.AddSearch(searchTextBox.Text);
+                // Global search when not inside a table level; otherwise list filter already applied.
+                if (navigator.ActiveLevel == null)
+                    navigator.AddSearch(searchTextBox.Text);
                 searchTextBox.Text = string.Empty;
                 return true;
             }
 
-            if (e.Key == Key.Enter)
+            if (e.Key == Key.Enter && !searchTextBox.HasFocus)
             {
-                tryStartSelectedChart();
-                return true;
+                // Shell handles Enter for navigation/play when focused.
             }
 
             return base.OnKeyDown(e);
@@ -239,38 +259,58 @@ namespace osu.Game.Rulesets.BMS.UI.BmsSongSelect
         {
             return new[]
             {
-                new ScreenFooterButton { Text = BmsStrings.SONG_SELECT_BACK, Action = this.Exit },
+                new ScreenFooterButton
+                {
+                    Text = BmsStrings.SONG_SELECT_BACK,
+                    Action = () =>
+                    {
+                        if (!navigator.TryGoBack())
+                            this.Exit();
+                    },
+                },
                 new ScreenFooterButton { Text = BmsStrings.SONG_SELECT_REFRESH_LIBRARY, Action = refreshLibrary },
                 new ScreenFooterButton { Text = BmsStrings.SONG_SELECT_BUILD_ANALYTICS_SHORT, Action = buildAnalytics },
+                new ScreenFooterButton { Text = BmsStrings.SONG_SELECT_SYNC_BUILTIN_TABLES, Action = syncBuiltinTables },
+                new ScreenFooterButton { Text = BmsStrings.SONG_SELECT_ADD_TABLE_URL, Action = promptAddTableUrl },
+                new ScreenFooterButton { Text = BmsStrings.SONG_SELECT_OPEN_CHART_DOWNLOAD, Action = openSelectedChartDownload },
+                new ScreenFooterButton { Text = BmsStrings.SONG_SELECT_OPEN_TABLES_FOLDER, Action = openTablesFolder },
             };
         }
 
-        private void onBarSelectionChanged()
+        private void onSelectionChanged()
         {
             previewPlayer.StopPreview();
 
-            if (barManager.GetSelectedBar() is not BmsSongBar song)
+            if (navigator.GetSelectedSong() is not BmsSongBar song)
+            {
+                chartBackground.ClearChart();
                 return;
+            }
 
             try
             {
                 if (!beatmapManager.TryGetChart(song.BeatmapId, out BMSChartCache chart))
+                {
+                    chartBackground.ClearChart();
                     return;
+                }
 
                 var working = new BMSWorkingBeatmap(chart.FullPath, audioManager, renderer, chart);
+                chartBackground.SetFromWorking(working);
                 int previewTime = chart.PreviewTime;
                 previewPlayer.OverridePreviewStartTime = previewTime >= 0 ? previewTime : 0;
                 previewPlayer.StartPreview(working);
             }
             catch (Exception ex)
             {
+                chartBackground.ClearChart();
                 Logger.Error(ex, "[BMS] Raja preview failed");
             }
         }
 
         private void tryStartSelectedChart()
         {
-            var song = barManager.GetSelectedSong();
+            var song = navigator.GetSelectedSong();
 
             if (song == null)
             {
@@ -304,13 +344,14 @@ namespace osu.Game.Rulesets.BMS.UI.BmsSongSelect
                     if (!this.IsCurrentScreen())
                         return;
 
-                    barManager.Changed -= onBarSelectionChanged;
+                    navigator.Changed -= onSelectionChanged;
                     rebuildBarContext();
-                    barManager = new BmsBarManager(barContext);
-                    barManager.Changed += onBarSelectionChanged;
-                    barRenderer.Rebind(barManager, barContext);
+                    tableStore.Invalidate();
+                    navigator = new BmsSongSelectNavigator(barContext, new BmsDifficultyTableRegistry(tableStore));
+                    navigator.Changed += onSelectionChanged;
+                    shell.Rebind(navigator, barContext);
                     refreshFilterDatabase();
-                    barManager.ResetToRoot();
+                    navigator.Reset();
                 },
                 screenWorkCts.Token);
         }
@@ -335,9 +376,120 @@ namespace osu.Game.Rulesets.BMS.UI.BmsSongSelect
                 onComplete: () => Schedule(() =>
                 {
                     if (this.IsCurrentScreen())
-                        barManager.ResetToRoot();
+                        navigator.Reset();
                 }),
                 cancellationToken: screenWorkCts.Token);
+        }
+
+        private void promptAddTableUrl()
+        {
+            // Lightweight prompt via notification + clipboard-less popup text box is heavy;
+            // use a dedicated overlay popup dialog with text input when available.
+            // Fallback: read from search box if it looks like a URL.
+            string candidate = searchTextBox.Text.Trim();
+
+            if (!candidate.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                notifications?.Post(new SimpleNotification
+                {
+                    Text = BmsStrings.SONG_SELECT_TABLE_URL_HINT,
+                });
+                return;
+            }
+
+            importTableUrl(candidate);
+            searchTextBox.Text = string.Empty;
+        }
+
+        private void syncBuiltinTables()
+        {
+            screenWorkCts ??= new CancellationTokenSource();
+            CancellationToken token = screenWorkCts.Token;
+            notifications?.Post(new SimpleNotification { Text = BmsStrings.SONG_SELECT_TABLE_SYNCING });
+
+            Task.Run(async () =>
+            {
+                BmsBuiltinTableSyncResult result = await tableStore.SyncBuiltinCatalogAsync(force: false, token).ConfigureAwait(false);
+
+                Schedule(() =>
+                {
+                    if (token.IsCancellationRequested || !this.IsCurrentScreen())
+                        return;
+
+                    notifications?.Post(new SimpleNotification
+                    {
+                        Text = BmsStrings.SongSelect_TableSyncComplete(result.Succeeded, result.Failed, result.Skipped),
+                    });
+                    tableStore.Invalidate();
+                    navigator.Reset();
+                });
+            }, token);
+        }
+
+        private void openSelectedChartDownload()
+        {
+            var missing = navigator.GetSelectedMissingChart();
+
+            if (missing == null || !missing.Entry.HasDownloadUrl)
+            {
+                notifications?.Post(new SimpleNotification { Text = BmsStrings.SONG_SELECT_NO_DOWNLOAD_URL });
+                return;
+            }
+
+            try
+            {
+                host.OpenUrlExternally(missing.Entry.PreferredDownloadUrl);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "[BMS] Open chart download URL failed");
+            }
+        }
+
+        private void importTableUrl(string url)
+        {
+            screenWorkCts ??= new CancellationTokenSource();
+            CancellationToken token = screenWorkCts.Token;
+            notifications?.Post(new SimpleNotification { Text = BmsStrings.SONG_SELECT_TABLE_IMPORTING });
+
+            Task.Run(async () =>
+            {
+                BmsDifficultyTable? table = await tableStore.ImportFromUrlAsync(url, token).ConfigureAwait(false);
+
+                Schedule(() =>
+                {
+                    if (token.IsCancellationRequested || !this.IsCurrentScreen())
+                        return;
+
+                    if (table == null)
+                    {
+                        notifications?.Post(new SimpleNotification { Text = BmsStrings.SONG_SELECT_TABLE_IMPORT_FAILED });
+                        return;
+                    }
+
+                    notifications?.Post(new SimpleNotification { Text = BmsStrings.SongSelect_TableImported(table.Name) });
+                    tableStore.Invalidate();
+                    navigator.Reset();
+                });
+            }, token);
+        }
+
+        private void openTablesFolder()
+        {
+            try
+            {
+                string path = tableStore.TablesDirectory;
+                Directory.CreateDirectory(path);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = path,
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "[BMS] Open tables folder failed");
+            }
         }
 
         private void refreshFilterDatabase()
@@ -358,7 +510,7 @@ namespace osu.Game.Rulesets.BMS.UI.BmsSongSelect
                         if (token.IsCancellationRequested || !this.IsCurrentScreen())
                             return;
 
-                        barManager.ResetToRoot();
+                        navigator.Reset();
                     });
                 }
                 catch (OperationCanceledException)
@@ -385,7 +537,15 @@ namespace osu.Game.Rulesets.BMS.UI.BmsSongSelect
                 cancelBackgroundWork();
                 screenWorkCts?.Dispose();
                 screenWorkCts = null;
-                barManager.Changed -= onBarSelectionChanged;
+
+                if (navigator != null)
+                    navigator.Changed -= onSelectionChanged;
+
+                if (shell != null)
+                {
+                    shell.RequestPlay -= tryStartSelectedChart;
+                    shell.RequestOpenDownload -= openSelectedChartDownload;
+                }
             }
 
             base.Dispose(isDisposing);
@@ -393,10 +553,9 @@ namespace osu.Game.Rulesets.BMS.UI.BmsSongSelect
 
         private void rebuildBarContext()
         {
-            var roots = BMSRulesetConfigManager.ParseLibraryPaths(libraryPathsBindable.Value, legacyRootPathBindable.Value);
-            beatmapManager.SetRootPaths(roots);
+            syncConfiguredPaths();
 
-            var folderTree = BmsFolderTree.Build(roots);
+            var folderTree = BmsFolderTree.Build(beatmapManager.RootPaths);
             string filterPath = BmsStoragePaths.GetFilterDatabasePath(storage);
 
             barContext = new BmsBarContext
@@ -411,6 +570,14 @@ namespace osu.Game.Rulesets.BMS.UI.BmsSongSelect
             };
         }
 
-        private void syncConfiguredPaths() => beatmapManager.SetRootPaths(BMSRulesetConfigManager.ParseLibraryPaths(libraryPathsBindable.Value, legacyRootPathBindable.Value));
+        private void syncConfiguredPaths() => bmsConfig?.ApplyResolvedLibraryPaths(beatmapManager);
+
+        private void stopGlobalMusic()
+        {
+            musicController?.ResetTrackAdjustments();
+            musicController?.Stop();
+            if (musicController != null)
+                musicController.AllowTrackControl.Value = false;
+        }
     }
 }

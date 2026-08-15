@@ -95,6 +95,9 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.EzAnalysisRecEnabled, true);
             SetDefault(Ez2Setting.EzAnalysisSqliteEnabled, true);
             SetDefault(Ez2Setting.HideMainMenuOnlineBanner, false);
+            SetDefault(Ez2Setting.MenuLogoPath, @"Menu/logo");
+            SetDefault(Ez2Setting.MenuLogoText, "(´・ω・｀),120");
+            SetDefault(Ez2Setting.MenuLogoVisualisationStyle, EzLogoVisualisationStyle.RadialBars);
             SetDefault(Ez2Setting.NotificationBehaviour, EzNotificationBehaviour.Normal);
             SetDefault(Ez2Setting.ScreenshotAction, EzScreenshotAction.SaveAndCopy);
             SetDefault(Ez2Setting.HitObjectLifetimeUsesOwnTime, !DebugUtils.IsNUnitRunning);
@@ -116,6 +119,12 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.BackgroundPosY, 0.5f, 0f, 1f, 0.01f);
             SetDefault(Ez2Setting.AcrylicUiEnabled, false);
             SetDefault(Ez2Setting.AcrylicUiBlurStrength, 16.0, 0.0, 40.0, 1.0);
+            SetDefault(Ez2Setting.UiFontDefault, string.Empty);
+            SetDefault(Ez2Setting.UiFontDefaultLocalized, string.Empty);
+            SetDefault(Ez2Setting.UiFontTitleAlternate, string.Empty);
+            SetDefault(Ez2Setting.UiFontTitleAlternateLocalized, string.Empty);
+            SetDefault(Ez2Setting.UiFontNumeric, string.Empty);
+            SetDefault(Ez2Setting.UiFontEmoji, string.Empty);
             SetDefault(Ez2Setting.KeySoundPreviewMode, KeySoundPreviewMode.Off);
             SetDefault(Ez2Setting.BeatmapPreviewMode, EzBeatmapPreviewMode.Static);
             SetDefault(Ez2Setting.BeatmapPreviewModeMania, EzBeatmapPreviewMode.StaticFullMap);
@@ -866,6 +875,21 @@ namespace osu.Game.EzOsuGame.Configuration
         EzAnalysisSqliteEnabled,
 
         HideMainMenuOnlineBanner,
+
+        /// <summary>
+        /// 主菜单 logo 贴图路径，默认 Menu/logo，可切换到 Menu/logo2 等同级资源。
+        /// </summary>
+        MenuLogoPath,
+
+        /// <summary>
+        /// 主菜单 logo 中心文字。格式：文本,字号（如 123,12）；支持颜文字；留空则不显示。
+        /// </summary>
+        MenuLogoText,
+
+        /// <summary>
+        /// 主菜单/选歌 logo 外圈音频可视化样式。
+        /// </summary>
+        MenuLogoVisualisationStyle,
         NotificationBehaviour,
         ScreenshotAction,
         ManiaSkipEmptyEdgeColumns,
@@ -915,6 +939,24 @@ namespace osu.Game.EzOsuGame.Configuration
         BackgroundPosY,
         AcrylicUiEnabled,
         AcrylicUiBlurStrength,
+
+        /// <summary>English / Latin system font for default UI (empty = built-in Torus BMFont).</summary>
+        UiFontDefault,
+
+        /// <summary>Localized (CJK etc.) system font for default UI empty-name fallback (empty = Noto BMFont).</summary>
+        UiFontDefaultLocalized,
+
+        /// <summary>English system font for title/alternate (empty = built-in TorusAlternate).</summary>
+        UiFontTitleAlternate,
+
+        /// <summary>Localized system font for title/alternate empty-name fallback.</summary>
+        UiFontTitleAlternateLocalized,
+
+        /// <summary>System font family for numeric display (empty = built-in Venera).</summary>
+        UiFontNumeric,
+
+        /// <summary>System colour emoji font (empty = auto-detect platform emoji face).</summary>
+        UiFontEmoji,
 
         // 界面功能
         KeySoundPreviewMode,

@@ -22,6 +22,7 @@ using osu.Game.Rulesets.BMS.Configuration;
 using osu.Game.Rulesets.BMS.Localization;
 using osu.Game.Rulesets.BMS.UI.BmsSongSelect;
 using osu.Game.Rulesets.BMS.UI.BmsSongSelect.Analytics;
+using osu.Game.Rulesets.BMS.UI.BmsSongSelect.Tables;
 using osu.Game.Rulesets.Mania;
 using osu.Game.Rulesets.Mania.Configuration;
 using osu.Game.Rulesets.Mania.UI;
@@ -42,6 +43,7 @@ namespace osu.Game.Rulesets.BMS.UI
 
         // private OsuTextFlowContainer pathDisplay = null!;
         private SettingsNote cacheStatusNote = null!;
+        private SettingsNote tablesHintNote = null!;
         private SettingsNote speedNote = null!;
         private Bindable<double>? maniaScrollSpeed;
         private Bindable<double>? maniaBaseSpeed;
@@ -86,7 +88,7 @@ namespace osu.Game.Rulesets.BMS.UI
             legacyRootPathBindable = bmsConfig.GetBindable<string>(BMSRulesetSetting.BmsRootPath);
 
             beatmapManager = BMSBeatmapManager.GetShared(storage);
-            beatmapManager.SetRootPaths(getConfiguredPaths());
+            bmsConfig.ApplyResolvedLibraryPaths(beatmapManager);
             bindManiaScrollSettings();
 
             Children = new Drawable[]
@@ -100,6 +102,26 @@ namespace osu.Game.Rulesets.BMS.UI
                 {
                     Text = BmsStrings.SETTINGS_OPEN_RAJA_SONG_SELECT,
                     Action = openRajaBmsSongSelect,
+                },
+                new SettingsButtonV2
+                {
+                    Text = BmsStrings.SETTINGS_OPEN_TABLES_FOLDER,
+                    Action = openTablesFolder,
+                },
+                new SettingsButtonV2
+                {
+                    Text = BmsStrings.SETTINGS_SYNC_BUILTIN_TABLES,
+                    Action = syncBuiltinTables,
+                },
+                new Container
+                {
+                    RelativeSizeAxes = Axes.X,
+                    AutoSizeAxes = Axes.Y,
+                    Padding = SettingsPanel.CONTENT_PADDING,
+                    Child = tablesHintNote = new SettingsNote
+                    {
+                        RelativeSizeAxes = Axes.X,
+                    },
                 },
                 new SettingsButtonV2
                 {
@@ -208,6 +230,7 @@ namespace osu.Game.Rulesets.BMS.UI
             legacyRootPathBindable.BindValueChanged(_ => updatePathDisplay());
 
             speedNote.Current.Value = new SettingsNote.Data(BmsStrings.SETTINGS_MANIA_SCROLL_NOTE, SettingsNote.Type.Informational);
+            tablesHintNote.Current.Value = new SettingsNote.Data(BmsStrings.SETTINGS_TABLES_HINT, SettingsNote.Type.Informational);
 
             // Show initial cache status
             if (beatmapManager != null)
@@ -218,7 +241,7 @@ namespace osu.Game.Rulesets.BMS.UI
             }
         }
 
-        private IReadOnlyList<string> getConfiguredPaths() => BMSRulesetConfigManager.ParseLibraryPaths(libraryPathsBindable.Value, legacyRootPathBindable.Value);
+        private IReadOnlyList<string> getConfiguredPaths() => bmsConfig.GetLibraryPaths();
 
         private void updatePathDisplay()
         {
@@ -233,6 +256,47 @@ namespace osu.Game.Rulesets.BMS.UI
         private void openStandardBmsSongSelect() => openSongSelectScreen(new BmsUiSongSelect.BmsSoloSongSelect());
 
         private void openRajaBmsSongSelect() => openSongSelectScreen(new BmsBmsSongSelect());
+
+        private void openTablesFolder()
+        {
+            try
+            {
+                BmsStoragePaths.EnsureInitialized(storage);
+                string path = BmsStoragePaths.GetTablesDirectoryPath(storage);
+                Directory.CreateDirectory(path);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = path,
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                notificationOverlay?.Post(new SimpleErrorNotification { Text = ex.Message });
+            }
+        }
+
+        private void syncBuiltinTables()
+        {
+            notificationOverlay?.Post(new SimpleNotification { Text = BmsStrings.SONG_SELECT_TABLE_SYNCING });
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    var store = new BmsDifficultyTableStore(storage);
+                    var result = await store.SyncBuiltinCatalogAsync().ConfigureAwait(false);
+                    Schedule(() => notificationOverlay?.Post(new SimpleNotification
+                    {
+                        Text = BmsStrings.SongSelect_TableSyncComplete(result.Succeeded, result.Failed, result.Skipped),
+                    }));
+                }
+                catch (Exception ex)
+                {
+                    Schedule(() => notificationOverlay?.Post(new SimpleErrorNotification { Text = ex.Message }));
+                }
+            });
+        }
 
         private void openSongSelectScreen(IScreen screen)
         {
@@ -276,14 +340,13 @@ namespace osu.Game.Rulesets.BMS.UI
 
             runner.PerformFromScreen(screen =>
             {
-                screen.Push(new BMSDirectorySelectScreen(libraryPathsBindable, legacyRootPathBindable, applyPathsAndScan));
+                screen.Push(new BMSDirectorySelectScreen(bmsConfig, applyPathsAndScan));
             }, new[] { typeof(MainMenu), typeof(OsuSongSelect) });
         }
 
         private void applyPathsAndScan(IReadOnlyList<string> paths)
         {
-            libraryPathsBindable.Value = BMSRulesetConfigManager.SerialiseLibraryPaths(paths);
-            legacyRootPathBindable.Value = paths.FirstOrDefault() ?? string.Empty;
+            bmsConfig.PersistLibraryPaths(paths);
             startScan(paths);
         }
 

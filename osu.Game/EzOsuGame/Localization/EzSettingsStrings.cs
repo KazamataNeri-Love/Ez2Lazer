@@ -50,6 +50,23 @@ namespace osu.Game.EzOsuGame.Localization
             "限制游戏逻辑更新（Update）线程的最高帧率。Draw 帧率仍由图形设置中的「帧率限制」控制。",
             "Limits the maximum update rate of the game logic thread. Draw frame rate is still controlled by the \"Frame limiter\" setting in Graphics.");
 
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_CENTRE_TEXT =
+            new EzLocalizationManager.EzLocalisableString("Logo 中心文字", "Logo centre text");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_CENTRE_TEXT_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "叠在 logo 正中。格式：文本,字号，例如 123,12 显示「123」、字号 12。支持颜文字；可用中文逗号。省略字号时默认 80。留空则不显示。字号是 logo 贴图坐标系下的像素（中间约 80–160 较合适）。",
+            "Drawn in the centre of the logo. Format: text,size — e.g. 123,12 shows \"123\" at size 12. Kaomoji are supported; a Chinese comma also works. Size defaults to 80 if omitted. Leave empty to hide. Size is in logo-texture pixels (about 80–160 looks right in the hole).");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_CENTRE_TEXT_PLACEHOLDER =
+            new EzLocalizationManager.EzLocalisableString("123,12 或 (´・ω・｀),80", "123,12 or (´・ω・｀),80");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_VISUALISATION =
+            new EzLocalizationManager.EzLocalisableString("Logo 可视化", "Logo Visualiser");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_VISUALISATION_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "主菜单与选歌界面 logo 外圈的音频抖动样式。",
+            "Audio visualiser style around the logo on the main menu and song select.");
+
         public static readonly EzLocalizationManager.EzLocalisableString HIDE_MAIN_MENU_ONLINE_BANNER =
             new EzLocalizationManager.EzLocalisableString("屏蔽主界面底部新闻广告", "Hide main menu bottom news banner");
 
@@ -93,6 +110,67 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly EzLocalizationManager.EzLocalisableString ACRYLIC_UI_BLUR_STRENGTH_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
             "选歌界面毛玻璃面板的模糊强度。总开关关闭时不生效。",
             "Blur strength for song select acrylic panels. Has no effect when acrylic UI is disabled.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_MODIFY =
+            new EzLocalizationManager.EzLocalisableString("修改字体", "Modify fonts");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_MODIFY_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "选择系统字体：英文主字体 + 本地化缺字回退 + 系统 emoji（空=平台自动）。英语界面时英/本地化合一。更改下次启动生效。",
+            "Pick system fonts: English primary + localized fallback + system emoji (empty = platform auto). English UI merges EN/localized. Applies on next launch.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_DIALOG_HEADER =
+            new EzLocalizationManager.EzLocalisableString("字体设置", "Font settings");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_NEXT_LAUNCH =
+            new EzLocalizationManager.EzLocalisableString("下次启动时生效", "Takes effect on next launch");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_SLOT_DEFAULT =
+            new EzLocalizationManager.EzLocalisableString("UI 默认", "UI default");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_SLOT_DEFAULT_EN =
+            new EzLocalizationManager.EzLocalisableString("UI 英文", "UI English");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_SLOT_DEFAULT_LOC =
+            new EzLocalizationManager.EzLocalisableString("UI 本地化", "UI localized");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_SLOT_TITLE =
+            new EzLocalizationManager.EzLocalisableString("标题花体", "Title / alternate");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_SLOT_TITLE_EN =
+            new EzLocalizationManager.EzLocalisableString("标题英文", "Title English");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_SLOT_TITLE_LOC =
+            new EzLocalizationManager.EzLocalisableString("标题本地化", "Title localized");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_SLOT_NUMERIC =
+            new EzLocalizationManager.EzLocalisableString("数字", "Numeric");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_SLOT_EMOJI =
+            new EzLocalizationManager.EzLocalisableString("系统 Emoji", "System emoji");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_NONE =
+            new EzLocalizationManager.EzLocalisableString("（未覆盖，使用内置）", "(No override — use built-in)");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_EMOJI_AUTO =
+            new EzLocalizationManager.EzLocalisableString("（自动：平台默认彩色 emoji）", "(Auto — platform colour emoji)");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_SEARCH =
+            new EzLocalizationManager.EzLocalisableString("搜索字体…", "Search fonts…");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_PREVIEW_DEFAULT =
+            new EzLocalizationManager.EzLocalisableString("选歌与设置 Aa 测试", "Song select & settings Aa");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_PREVIEW_TITLE =
+            new EzLocalizationManager.EzLocalisableString("Heading 标题", "Heading Title");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_PREVIEW_NUMERIC =
+            new EzLocalizationManager.EzLocalisableString("0123456789", "0123456789");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_PREVIEW_EMOJI =
+            new EzLocalizationManager.EzLocalisableString("😀🎉✨👍🔥", "😀🎉✨👍🔥");
+
+        public static readonly EzLocalizationManager.EzLocalisableString UI_FONT_CLOSE =
+            new EzLocalizationManager.EzLocalisableString("关闭", "Close");
 
         public static readonly EzLocalizationManager.EzLocalisableString NOTIFICATION_BEHAVIOUR =
             new EzLocalizationManager.EzLocalisableString("通知行为", "Notification behaviour");
