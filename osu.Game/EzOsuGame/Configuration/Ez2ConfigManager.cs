@@ -125,6 +125,15 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.UiFontTitleAlternateLocalized, string.Empty);
             SetDefault(Ez2Setting.UiFontNumeric, string.Empty);
             SetDefault(Ez2Setting.UiFontEmoji, string.Empty);
+            SetDefault(Ez2Setting.DesktopPetEnabled, false);
+            SetDefault(Ez2Setting.DesktopPetPack, "Default");
+            SetDefault(Ez2Setting.DesktopPetScale, 0.4, 0.25, 3.0, 0.05);
+            SetDefault(Ez2Setting.DesktopPetPositionX, 0.90f);
+            SetDefault(Ez2Setting.DesktopPetPositionY, 0.82f);
+            SetDefault(Ez2Setting.DesktopPetShowOnMenu, true);
+            SetDefault(Ez2Setting.DesktopPetShowOnSongSelect, true);
+            SetDefault(Ez2Setting.DesktopPetShowOnGameplay, true);
+            SetDefault(Ez2Setting.DesktopPetShowOnResults, true);
             SetDefault(Ez2Setting.KeySoundPreviewMode, KeySoundPreviewMode.Off);
             SetDefault(Ez2Setting.BeatmapPreviewMode, EzBeatmapPreviewMode.Static);
             SetDefault(Ez2Setting.BeatmapPreviewModeMania, EzBeatmapPreviewMode.StaticFullMap);
@@ -957,6 +966,28 @@ namespace osu.Game.EzOsuGame.Configuration
 
         /// <summary>System colour emoji font (empty = auto-detect platform emoji face).</summary>
         UiFontEmoji,
+
+        /// <summary>Independent desktop pet overlay (not a skin component).</summary>
+        DesktopPetEnabled,
+
+        /// <summary>Folder name under EzResources/Pets.</summary>
+        DesktopPetPack,
+
+        DesktopPetScale,
+
+        /// <summary>Normalised pet centre X in [0, 1].</summary>
+        DesktopPetPositionX,
+
+        /// <summary>Normalised pet centre Y in [0, 1].</summary>
+        DesktopPetPositionY,
+
+        DesktopPetShowOnMenu,
+
+        DesktopPetShowOnSongSelect,
+
+        DesktopPetShowOnGameplay,
+
+        DesktopPetShowOnResults,
 
         // 界面功能
         KeySoundPreviewMode,

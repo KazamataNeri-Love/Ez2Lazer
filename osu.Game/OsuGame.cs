@@ -44,8 +44,11 @@ using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Edit;
 using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Background.Pixiv;
+using osu.Game.EzOsuGame.Layout;
+using osu.Game.EzOsuGame.LocalProfile;
 using osu.Game.EzOsuGame.Overlays;
 using osu.Game.EzOsuGame.Performance;
+using osu.Game.EzOsuGame.Pets;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
@@ -145,7 +148,11 @@ namespace osu.Game
 
         private UserProfileOverlay userProfile;
 
+        private EzLocalProfileOverlay ezLocalProfile;
+
         private LoginOverlay loginOverlay;
+
+        private NowPlayingOverlay nowPlayingOverlay;
 
         private BeatmapSetOverlay beatmapSetOverlay;
 
@@ -154,6 +161,10 @@ namespace osu.Game
         private ChangelogOverlay changelogOverlay;
 
         private SkinEditorOverlay skinEditor;
+
+        private EzLayoutLayer ezLayoutLayer;
+
+        private EzLayoutEditorOverlay ezLayoutEditor;
 
         private Container overlayContent;
 
@@ -248,6 +259,7 @@ namespace osu.Game
         private ScreenStackFooter screenStackFooter;
 
         private AcrylicCaptureScope acrylicCaptureScope;
+        private Container screenCaptureContent;
 
         private readonly string[] args;
 
@@ -611,7 +623,16 @@ namespace osu.Game
         /// Show a user's profile as an overlay.
         /// </summary>
         /// <param name="user">The user to display.</param>
-        public void ShowUser(IUser user) => waitForReady(() => userProfile, _ => userProfile.ShowUser(user));
+        public void ShowUser(IUser user) => waitForReady(() => userProfile, _ =>
+        {
+            if (API.IsLocalOnly && ReferenceEquals(user, API.LocalUser.Value))
+            {
+                ezLocalProfile.Show();
+                return;
+            }
+
+            userProfile.ShowUser(user);
+        });
 
         /// <summary>
         /// Show a beatmap's set as an overlay, displaying the given beatmap.
@@ -1145,7 +1166,11 @@ namespace osu.Game
                             Children = new Drawable[]
                             {
                                 backReceptor = new ScreenFooter.BackReceptor(),
-                                acrylicCaptureScope = new AcrylicCaptureScope(ScreenStack = new OsuScreenStack { RelativeSizeAxes = Axes.Both }),
+                                acrylicCaptureScope = new AcrylicCaptureScope(screenCaptureContent = new Container
+                                {
+                                    RelativeSizeAxes = Axes.Both,
+                                    Child = ScreenStack = new OsuScreenStack { RelativeSizeAxes = Axes.Both },
+                                }),
                                 logoContainer = new Container { RelativeSizeAxes = Axes.Both },
                                 // TODO: what is this? why is this?
                                 // TODO: this is being screen scaled even though it's probably AN OVERLAY.
@@ -1197,6 +1222,8 @@ namespace osu.Game
                 Origin = Anchor.BottomRight,
                 Margin = new MarginPadding(5),
             }, topMostOverlayContent.Add);
+
+            loadComponentSingleFile(new EzDesktopPetLayer(), topMostOverlayContent.Add);
 
             if (!IsDeployedBuild)
                 loadComponentSingleFile(devBuildBanner = new DevBuildBanner(), ScreenContainer.Add);
@@ -1262,9 +1289,24 @@ namespace osu.Game
             loadComponentSingleFile(Settings = new SettingsOverlay(), leftFloatingOverlayContent.Add, true);
             loadComponentSingleFile(changelogOverlay = new ChangelogOverlay(), overlayContent.Add, true);
             loadComponentSingleFile(userProfile = new UserProfileOverlay(), overlayContent.Add, true);
+            loadComponentSingleFile(ezLocalProfile = new EzLocalProfileOverlay(), overlayContent.Add, true);
             loadComponentSingleFile(beatmapSetOverlay = new BeatmapSetOverlay(), overlayContent.Add, true);
             loadComponentSingleFile(wikiOverlay = new WikiOverlay(), overlayContent.Add, true);
+            loadComponentSingleFile(ezLayoutLayer = new EzLayoutLayer(), screenCaptureContent.Add, true);
             loadComponentSingleFile(skinEditor = new SkinEditorOverlay(ScreenContainer), overlayContent.Add, true);
+            loadComponentSingleFile(ezLayoutEditor = new EzLayoutEditorOverlay(ScreenContainer, ezLayoutLayer), topMostOverlayContent.Add, true);
+
+            skinEditor.State.ValueChanged += state =>
+            {
+                if (state.NewValue == Visibility.Visible)
+                    ezLayoutEditor.Hide();
+            };
+
+            ezLayoutEditor.State.ValueChanged += state =>
+            {
+                if (state.NewValue == Visibility.Visible)
+                    skinEditor.Hide();
+            };
 
             loadComponentSingleFile(loginOverlay = new LoginOverlay
             {
@@ -1272,7 +1314,7 @@ namespace osu.Game
                 Origin = Anchor.TopRight,
             }, rightFloatingOverlayContent.Add, true);
 
-            loadComponentSingleFile(new NowPlayingOverlay
+            loadComponentSingleFile(nowPlayingOverlay = new NowPlayingOverlay
             {
                 Anchor = Anchor.TopRight,
                 Origin = Anchor.TopRight,
@@ -1305,7 +1347,7 @@ namespace osu.Game
             Add(new FriendPresenceNotifier());
 
             // side overlays which cancel each other.
-            var singleDisplaySideOverlays = new OverlayContainer[] { Settings, Notifications, FirstRunOverlay, loginOverlay };
+            var singleDisplaySideOverlays = new OverlayContainer[] { Settings, Notifications, FirstRunOverlay, loginOverlay, nowPlayingOverlay };
 
             foreach (var overlay in singleDisplaySideOverlays)
             {
@@ -1318,7 +1360,7 @@ namespace osu.Game
             }
 
             // eventually informational overlays should be displayed in a stack, but for now let's only allow one to stay open at a time.
-            var informationalOverlays = new OverlayContainer[] { beatmapSetOverlay, userProfile };
+            var informationalOverlays = new OverlayContainer[] { beatmapSetOverlay, userProfile, ezLocalProfile };
 
             foreach (var overlay in informationalOverlays)
             {
@@ -1701,10 +1743,18 @@ namespace osu.Game
                     return true;
 
                 case GlobalAction.ToggleProfile:
-                    if (userProfile.State.Value == Visibility.Visible)
+                    if (API.IsLocalOnly)
+                    {
+                        if (ezLocalProfile.State.Value == Visibility.Visible)
+                            ezLocalProfile.Hide();
+                        else
+                            ezLocalProfile.Show();
+                    }
+                    else if (userProfile.State.Value == Visibility.Visible)
                         userProfile.Hide();
                     else
                         ShowUser(API.LocalUser.Value);
+
                     return true;
 
                 case GlobalAction.RandomSkin:
@@ -1889,6 +1939,7 @@ namespace osu.Game
                     Toolbar.Show();
 
                 skinEditor.SetTarget(newOsuScreen);
+                ezLayoutEditor.SetTarget(newOsuScreen);
             }
         }
 

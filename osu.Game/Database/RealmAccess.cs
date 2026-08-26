@@ -102,9 +102,18 @@ namespace osu.Game.Database
         /// 49   2025-06-10    Reset the LegacyOnlineID to -1 for all scores that have it set to 0 (which is semantically the same) for consistency of handling with OnlineID.
         /// 50   2025-07-11    Add UserTags to BeatmapMetadata.
         /// 51   2025-07-22    Add ScoreInfo.Pauses.
+        /// 52   2026-07-28    Add RealmOnlineAsset.
+        /// </summary>
+        private const int schema_version = 52;
+
+        /// <summary>Alias for tools (EzRealmSync) that reference upstream as a static property.</summary>
+        public static int UpstreamSchemaVersion => schema_version;
+
+        /// <summary>
+        /// Ez2Lazer schema revision. Bump when adding Ez-persisted fields; do not change <see cref="schema_version"/> for Ez-only work.
         ///
         /// Ez2Lazer-only revisions are tracked separately via <see cref="EZ_REALM_SCHEMA_VERSION"/>.
-        /// The on-disk Realm schema version is <see cref="EzFileSchemaVersion"/> (schema_version * 1000 + EZ_REALM_SCHEMA_VERSION, currently 51007).
+        /// The on-disk Realm schema version is <see cref="EzFileSchemaVersion"/> (schema_version * 1000 + EZ_REALM_SCHEMA_VERSION, currently 52007).
         /// Ez v1: Add ScoreInfo.ManiaHitMode and ManiaHealthMode.
         /// Ez v2: Add BeatmapInfo.HasVideo and HasStoryboard.
         /// Ez v3: Add BeatmapInfo.XxyStarRating.
@@ -112,19 +121,11 @@ namespace osu.Game.Database
         /// Ez v5: Change BeatmapInfo.HasVideo/HasStoryboard to nullable (null = unknown).
         /// Ez v6: Add RulesetInfo.LastAppliedXxySrVersion.
         /// </summary>
-        private const int schema_version = 51;
-        public const int UpstreamSchemaVersion = schema_version;
-
-        /// <summary>
-        /// Ez2Lazer schema revision. Bump when adding Ez-persisted fields; do not change <see cref="schema_version"/> for Ez-only work.
-        /// </summary>
         public const int EZ_REALM_SCHEMA_VERSION = 7;
 
-        public static int EzFileSchemaVersion => UpstreamSchemaVersion * 1000 + EZ_REALM_SCHEMA_VERSION;
+        public static int EzFileSchemaVersion => schema_version * 1000 + EZ_REALM_SCHEMA_VERSION;
 
         private readonly RealmSchemaMode schemaMode;
-
-        private readonly bool useDevelopmentVersionedFilenames;
 
         private readonly bool allowDestructiveRecoveryOnSchemaMismatch;
 
@@ -137,6 +138,13 @@ namespace osu.Game.Database
         /// Lock object which is held during <see cref="BlockAllOperations"/> sections, blocking realm retrieval during blocking periods.
         /// </summary>
         private readonly SemaphoreSlim realmRetrievalLock = new SemaphoreSlim(1);
+
+        /// <summary>
+        /// This <see cref="CancellationTokenSource"/> is cancelled on disposal
+        /// so that all callers of <see cref="getRealmInstance"/> who are blocked on <see cref="realmRetrievalLock"/>
+        /// can hard-fail the retrieval rather than spin on the semaphore forever.
+        /// </summary>
+        private readonly CancellationTokenSource realmRetrievalCancellation = new CancellationTokenSource();
 
         private readonly CountdownEvent pendingAsyncOperations = new CountdownEvent(0);
 
@@ -242,6 +250,15 @@ namespace osu.Game.Database
         }
 
         /// <summary>
+        /// 供 EzRealmSync 修复页显式升级：执行 schema migration，但禁止降级时删库重建。
+        /// 仅应在已备份的工作副本上调用。
+        /// </summary>
+        public static RealmAccess OpenWithMigrationForTool(Storage storage, string filename, GameThread? updateThread = null)
+        {
+            return new RealmAccess(storage, filename, updateThread, useDevelopmentVersionedFilenames: false, allowDestructiveRecoveryOnSchemaMismatch: false, performSchemaMigration: true, pinnedDiskSchemaVersion: null);
+        }
+
+        /// <summary>
         /// Construct a new instance with an explicit schema mode (Ez or official).
         /// </summary>
         /// <param name="storage">The game storage which will be used to create the realm backing file.</param>
@@ -264,7 +281,7 @@ namespace osu.Game.Database
         {
             this.storage = storage;
             this.schemaMode = schemaMode;
-            this.useDevelopmentVersionedFilenames = useDevelopmentVersionedFilenames ?? schemaMode == RealmSchemaMode.Ez;
+            bool useDevelopmentVersionedFilenames1 = useDevelopmentVersionedFilenames ?? schemaMode == RealmSchemaMode.Ez;
             this.allowDestructiveRecoveryOnSchemaMismatch = allowDestructiveRecoveryOnSchemaMismatch;
             this.performSchemaMigration = performSchemaMigration;
             this.pinnedDiskSchemaVersion = pinnedDiskSchemaVersion;
@@ -280,7 +297,7 @@ namespace osu.Game.Database
                 Filename += realm_extension;
 
 // #if DEBUG
-            if (this.useDevelopmentVersionedFilenames && !DebugUtils.IsNUnitRunning)
+            if (useDevelopmentVersionedFilenames1 && !DebugUtils.IsNUnitRunning)
                 applyFilenameSchemaSuffix(ref Filename);
 // #endif
 
@@ -289,6 +306,21 @@ namespace osu.Game.Database
             {
                 if (performSchemaMigration)
                     cleanupPendingDeletions(realm);
+            }
+
+            // 文件存储清理会在同一路径上再打开一个写事务。
+            // 如果第一个实例仍然存活（或短生命周期工具打开时与终结器竞争），就可能触发 realm-core 的断言 `!realm.is_in_transaction()`。
+            // 工具在打开时不需要做未使用文件的垃圾回收。主要避免EzRealmSync工具在升级时的误报、误清理。
+            if (performSchemaMigration && allowDestructiveRecoveryOnSchemaMismatch)
+            {
+                try
+                {
+                    new RealmFileStore(this, storage).Cleanup();
+                }
+                catch (Exception e)
+                {
+                    Logger.Error(e, "Failed to clean up unused files. This is not critical but please report if it happens regularly.");
+                }
             }
         }
 
@@ -341,12 +373,25 @@ namespace osu.Game.Database
         {
             if (schemaMode == RealmSchemaMode.Ez)
             {
-                int baseVersion = UpstreamSchemaVersion * 1000;
+                // Current upstream: older Ez revisions only (target file itself is already checked by caller).
+                int currentBase = UpstreamSchemaVersion * 1000;
 
                 for (int ez = EZ_REALM_SCHEMA_VERSION - 1; ez >= 1; ez--)
-                    yield return GetVersionedRealmFilename(originalFilename, baseVersion + ez);
+                    yield return GetVersionedRealmFilename(originalFilename, currentBase + ez);
 
                 yield return GetVersionedRealmFilename(originalFilename, UpstreamSchemaVersion);
+
+                // Previous upstream tags (e.g. 51007 when bumping to 52007). Include full EZ revision —
+                // that is the usual DEBUG sidecar left behind after an upstream schema bump.
+                for (int upstream = UpstreamSchemaVersion - 1; upstream >= 0; upstream--)
+                {
+                    int baseVersion = upstream * 1000;
+
+                    for (int ez = EZ_REALM_SCHEMA_VERSION; ez >= 1; ez--)
+                        yield return GetVersionedRealmFilename(originalFilename, baseVersion + ez);
+
+                    yield return GetVersionedRealmFilename(originalFilename, upstream);
+                }
             }
             else
             {
@@ -521,16 +566,18 @@ namespace osu.Game.Database
                     foreach (var s in pendingDeletePresets)
                         realm.Remove(s);
 
+                    var onlineAssetAccessCutoff = DateTimeOffset.Now.AddMonths(-1);
+                    var pendingDeleteOnlineAssets = realm.All<RealmOnlineAsset>().Where(a => a.LastAccessed < onlineAssetAccessCutoff);
+
+                    foreach (var a in pendingDeleteOnlineAssets)
+                        realm.Remove(a);
+
                     transaction.Commit();
                 }
-
-                // clean up files after dropping any pending deletions.
-                // in the future we may want to only do this when the game is idle, rather than on every startup.
-                new RealmFileStore(this, storage).Cleanup();
             }
             catch (Exception e)
             {
-                Logger.Error(e, "Failed to clean up unused files. This is not critical but please report if it happens regularly.");
+                Logger.Error(e, "Failed to clean up pending deletions. This is not critical but please report if it happens regularly.");
             }
         }
 
@@ -882,7 +929,7 @@ namespace osu.Game.Database
                 // Ensure that the thread that currently has the `realmRetrievalLock` can retrieve nested contexts and not deadlock on itself.
                 if (!currentThreadHasRealmRetrievalLock.Value)
                 {
-                    realmRetrievalLock.Wait();
+                    realmRetrievalLock.Wait(realmRetrievalCancellation.Token);
                     currentThreadHasRealmRetrievalLock.Value = true;
                     tookSemaphoreLock = true;
                 }
@@ -925,23 +972,39 @@ namespace osu.Game.Database
 
         private void onMigration(Migration migration, ulong lastSchemaVersion)
         {
-            int upstreamVersion = UpstreamSchemaVersion;
+            decodeDiskSchemaVersion(lastSchemaVersion, out int lastUpstream, out int lastEz);
 
-            if (lastSchemaVersion < (ulong)upstreamVersion)
-            {
-                for (ulong i = lastSchemaVersion + 1; i <= (ulong)upstreamVersion; i++)
-                    applyMigrationsForVersion(migration, i);
-            }
+            for (ulong i = (ulong)lastUpstream + 1; i <= (ulong)UpstreamSchemaVersion; i++)
+                applyMigrationsForVersion(migration, i);
 
             if (ezRealmSchemaVersionForMode <= 0)
                 return;
 
-            int startingEzVersion = lastSchemaVersion >= (ulong)fileSchemaVersionForMode - (ulong)ezRealmSchemaVersionForMode
-                ? (int)(lastSchemaVersion - (ulong)upstreamVersion * 1000)
-                : 0;
-
-            for (int ez = startingEzVersion + 1; ez <= ezRealmSchemaVersionForMode; ez++)
+            // Ez fields persist across upstream bumps; only run migrations after the last applied Ez revision.
+            for (int ez = lastEz + 1; ez <= ezRealmSchemaVersionForMode; ez++)
                 applyEzMigrationsForVersion(migration, ez);
+        }
+
+        /// <summary>
+        /// Decodes an on-disk Realm schema version into upstream + Ez components.
+        /// Ez file versions are <c>upstream * 1000 + ez</c> (e.g. 51007 → upstream 51, ez 7).
+        /// Plain upstream versions (&lt; 1000) decode as ez 0.
+        /// </summary>
+        internal static void DecodeDiskSchemaVersion(ulong diskSchemaVersion, out int upstreamVersion, out int ezVersion)
+            => decodeDiskSchemaVersion(diskSchemaVersion, out upstreamVersion, out ezVersion);
+
+        private static void decodeDiskSchemaVersion(ulong diskSchemaVersion, out int upstreamVersion, out int ezVersion)
+        {
+            if (diskSchemaVersion >= 1000)
+            {
+                upstreamVersion = (int)(diskSchemaVersion / 1000);
+                ezVersion = (int)(diskSchemaVersion % 1000);
+            }
+            else
+            {
+                upstreamVersion = (int)diskSchemaVersion;
+                ezVersion = 0;
+            }
         }
 
         private int ezRealmSchemaVersionForMode => schemaMode == RealmSchemaMode.Ez ? EZ_REALM_SCHEMA_VERSION : 0;
@@ -1741,9 +1804,14 @@ namespace osu.Game.Database
 
             updateRealm?.Dispose();
 
-            // Intentionally block realm retrieval indefinitely. This ensures that nothing can start consuming a new instance after disposal.
-            realmRetrievalLock.Wait();
-            realmRetrievalLock.Dispose();
+            if (!isDisposed)
+            {
+                // intentionally block realm retrieval indefinitely. this ensures that nothing can start consuming a new instance after disposal.
+                realmRetrievalLock.Wait();
+                realmRetrievalLock.Dispose();
+                // also unblock all readers who may be spinning on realm retrieval.
+                realmRetrievalCancellation.Cancel();
+            }
 
             isDisposed = true;
         }

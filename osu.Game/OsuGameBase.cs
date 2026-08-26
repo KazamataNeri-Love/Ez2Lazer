@@ -51,6 +51,7 @@ using osu.Game.EzOsuGame;
 using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Input;
+using osu.Game.EzOsuGame.LocalProfile;
 using osu.Game.EzOsuGame.Online;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Localisation;
@@ -258,6 +259,7 @@ namespace osu.Game
         private EzAnalysisPersistentStore ezAnalysisPersistentStore;
         private EzAnalysisCache ezAnalysisCache;
         private IBeatmapUpdater beatmapUpdater;
+        private OnlineAssetCachingStore onlineAssetStore;
 
         private UserLookupCache userCache;
         private BeatmapLookupCache beatmapCache;
@@ -356,6 +358,8 @@ namespace osu.Game
             largeStore.AddTextureSource(Host.CreateTextureLoaderStore(CreateOnlineStore()));
             dependencies.Cache(largeStore);
 
+            dependencies.Cache(onlineAssetStore = new OnlineAssetCachingStore(Host, realm));
+
             dependencies.CacheAs(LocalConfig);
             dependencies.CacheAs<IGameplaySettings>(LocalConfig);
 
@@ -403,6 +407,8 @@ namespace osu.Game
             dependencies.Cache(ezAnalysisPersistentStore);
             dependencies.Cache(ezAnalysisDatabase);
             dependencies.Cache(ezAnalysisCache = new EzAnalysisCache());
+            dependencies.Cache(new EzLocalProfileService(Storage, realm, ezAnalysisPersistentStore, BeatmapManager));
+            dependencies.Cache(new EzLocalProfileOnlinePullService(API, ScoreManager, BeatmapManager, realm, Storage));
 
             ReplaySession = new EzReplaySessionRouter(RulesetStore.AvailableRulesets);
             dependencies.CacheAs<IEzReplaySession>(ReplaySession);
@@ -995,6 +1001,8 @@ namespace osu.Game
             LocalConfig?.Dispose();
 
             beatmapUpdater?.Dispose();
+
+            onlineAssetStore?.Dispose();
 
             realm?.Dispose();
 

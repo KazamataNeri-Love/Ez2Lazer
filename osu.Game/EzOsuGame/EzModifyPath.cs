@@ -17,6 +17,8 @@ namespace osu.Game.EzOsuGame
         public const string VIDEO_PATH = @"EzResources/Video";
         public const string BG_PATH = @"EzResources/BG";
         public const string BG_PIXIV_PATH = @"EzResources/BG_PIXIV";
+        public const string CONFIG_LAYOUT_PATH = @"EzResources/Config/layout";
+        public const string PETS_PATH = @"EzResources/Pets";
 
         /// <summary>
         /// Pixiv OAuth refresh token (same directory as client.realm / framework.ini).

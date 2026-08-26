@@ -6,7 +6,6 @@ using osu.Framework.Audio;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
-using osu.Framework.Localisation;
 using osu.Framework.Platform;
 using osu.Framework.Screens;
 using osu.Game.Collections;
@@ -35,8 +34,6 @@ namespace osu.Game.Rulesets.BMS.UI
 {
     public partial class BMSSettingsSubsection : RulesetSettingsSubsection
     {
-        protected override LocalisableString Header => "BMS";
-
         private BMSRulesetConfigManager bmsConfig = null!;
         private Bindable<string> libraryPathsBindable = null!;
         private Bindable<string> legacyRootPathBindable = null!;

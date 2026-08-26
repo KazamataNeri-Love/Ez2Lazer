@@ -52,7 +52,26 @@ namespace osu.Game.Online.Spectator
         /// <summary>
         /// Whether the local user is playing.
         /// </summary>
-        private bool isPlaying { get; set; }
+        private bool isPlaying
+        {
+            get => isStreaming.Value;
+            set => isStreaming.Value = value;
+        }
+
+        /// <summary>
+        /// [Ez] Whether the local session is accepting spectator frames (same as internal play state).
+        /// Synced by <see cref="setStateForScore"/> / <see cref="clearScoreState"/>.
+        /// <see cref="osu.Game.Rulesets.UI.ReplayRecorder"/> should only call <see cref="HandleFrame"/> when this is true.
+        /// </summary>
+        public IBindable<bool> IsStreaming => isStreaming;
+
+        private readonly BindableBool isStreaming = new BindableBool();
+
+        /// <summary>
+        /// [Ez] Whether we already logged an out-of-scope frame for the current non-playing stretch.
+        /// Reset when <see cref="setStateForScore"/> starts a new play session.
+        /// </summary>
+        private bool loggedOutOfScopeFrame;
 
         /// <summary>
         /// Called whenever new frames arrive from the server.
@@ -243,8 +262,13 @@ namespace osu.Game.Online.Spectator
         {
             if (!isPlaying)
             {
-                if (IsConnected.Value)
+                // [Ez] Throttle: one log per non-playing stretch (was one line per frame).
+                if (IsConnected.Value && !loggedOutOfScopeFrame)
+                {
+                    loggedOutOfScopeFrame = true;
                     Logger.Log($"Frames arrived at {nameof(SpectatorClient)} outside of gameplay scope and will be ignored.");
+                }
+
                 return;
             }
 
@@ -297,6 +321,7 @@ namespace osu.Game.Online.Spectator
         private void setStateForScore(long? scoreToken, GameplayState state, Score score)
         {
             isPlaying = true;
+            loggedOutOfScopeFrame = false;
 
             currentBeatmap = state.Beatmap;
             currentScore = score;
