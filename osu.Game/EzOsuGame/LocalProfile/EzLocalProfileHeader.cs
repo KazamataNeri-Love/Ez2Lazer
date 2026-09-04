@@ -159,7 +159,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
         public void UpdateUsername(string username)
         {
             usernameText.Text = string.IsNullOrEmpty(username)
-                ? EzSettingsStrings.LOCAL_PROFILE_TITLE
+                ? EzSettingsProfile.LOCAL_PROFILE_TITLE
                 : username;
         }
 
@@ -167,22 +167,28 @@ namespace osu.Game.EzOsuGame.LocalProfile
         {
             if (!snapshot.HasData || snapshot.LastComputedAt == null)
             {
-                metaText.Text = EzSettingsStrings.LOCAL_PROFILE_SHARED_HINT.ToString();
+                metaText.Text = EzSettingsProfile.LOCAL_PROFILE_SHARED_HINT.ToString();
                 return;
             }
 
             string names = snapshot.IncludedUsernames.Count == 0
                 ? "-"
                 : string.Join(", ", snapshot.IncludedUsernames);
-            metaText.Text = $"{EzSettingsStrings.LOCAL_PROFILE_SHARED_HINT} · {snapshot.LastComputedAt.Value.LocalDateTime:g} · {names}";
+
+            string baseText = $"{EzSettingsProfile.LOCAL_PROFILE_SHARED_HINT} · {snapshot.LastComputedAt.Value.LocalDateTime:g} · {names}";
+
+            if (snapshot.NeedsRecompute)
+                metaText.Text = $"{baseText} · {EzSettingsProfile.LOCAL_PROFILE_NEEDS_RECOMPUTE}";
+            else
+                metaText.Text = baseText;
         }
 
         private partial class HeaderTitle : OverlayTitle
         {
             public HeaderTitle()
             {
-                Title = EzSettingsStrings.LOCAL_PROFILE_TITLE;
-                Description = EzSettingsStrings.LOCAL_PROFILE_DESCRIPTION;
+                Title = EzSettingsProfile.LOCAL_PROFILE_TITLE;
+                Description = EzSettingsProfile.LOCAL_PROFILE_DESCRIPTION;
                 Icon = FontAwesome.Solid.User;
             }
         }
@@ -203,7 +209,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                     },
                     new OsuSpriteText
                     {
-                        Text = EzSettingsStrings.LOCAL_PROFILE_BADGE,
+                        Text = EzSettingsProfile.LOCAL_PROFILE_BADGE,
                         Font = OsuFont.GetFont(size: 11, weight: FontWeight.Bold),
                         Colour = colours.Foreground1,
                         Margin = new MarginPadding { Horizontal = 8, Vertical = 3 },
@@ -220,7 +226,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 {
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
-                    Text = EzSettingsStrings.LOCAL_PROFILE_ACCOUNT_BUTTON,
+                    Text = EzSettingsProfile.LOCAL_PROFILE_ACCOUNT_BUTTON,
                     Font = OsuFont.GetFont(size: 12, weight: FontWeight.Bold),
                 };
             }

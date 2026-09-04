@@ -10,7 +10,8 @@ using osu.Game.Beatmaps;
 using osu.Game.Database;
 using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Configuration;
-using osu.Game.Rulesets.Difficulty;
+using osu.Game.EzOsuGame.Scoring;
+using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Scoring;
 using osu.Game.Scoring;
 using Realms;
@@ -22,12 +23,23 @@ namespace osu.Game.EzOsuGame.LocalProfile
         private readonly RealmAccess realm;
         private readonly EzAnalysisPersistentStore analysisStore;
         private readonly BeatmapManager beatmapManager;
+        private readonly ScoreManager scoreManager;
+        private readonly IEzReplaySession replaySession;
+        private readonly EzLocalProfilePpResolver ppResolver;
 
-        public EzLocalProfileAggregator(RealmAccess realm, EzAnalysisPersistentStore analysisStore, BeatmapManager beatmapManager)
+        public EzLocalProfileAggregator(
+            RealmAccess realm,
+            EzAnalysisPersistentStore analysisStore,
+            BeatmapManager beatmapManager,
+            ScoreManager scoreManager,
+            IEzReplaySession replaySession)
         {
             this.realm = realm;
             this.analysisStore = analysisStore;
             this.beatmapManager = beatmapManager;
+            this.scoreManager = scoreManager;
+            this.replaySession = replaySession;
+            ppResolver = new EzLocalProfilePpResolver(beatmapManager);
         }
 
         public IReadOnlyList<EzLocalProfileUsernameCount> ScanUsernameCounts()
@@ -96,15 +108,16 @@ namespace osu.Game.EzOsuGame.LocalProfile
             int total = Math.Max(1, detachedScores.Count);
             int processed = 0;
 
-            void report() =>
-                progress?.Report(new EzLocalProfileComputeProgress(processed, total, Saving: false));
+            void report() => progress?.Report(new EzLocalProfileComputeProgress(processed, total, Saving: false));
 
             report();
 
             var scoreList = detachedScores.Select(s => s.Score).ToList();
-            double[] resolvedPp = resolveAllPp(scoreList, progress, total, cancellationToken);
+            var resolved = ppResolver.ResolveAll(scoreList, progress, total, cancellationToken);
             processed = scoreList.Count;
             report();
+
+            var analysisCache = new Dictionary<string, CachedAnalysis>(StringComparer.Ordinal);
 
             for (int i = 0; i < detachedScores.Count; i++)
             {
@@ -114,13 +127,36 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 var result = byUser[username];
                 int rulesetId = score.Ruleset.OnlineID;
                 var beatmap = score.BeatmapInfo!;
+                bool modsAffect = EzLocalProfileModAffects.AffectsPlayableAnalysis(score.Mods);
 
                 long keys = countKeys(score);
-                bool hasKps = analysisStore.TryGet(beatmap, out var analysis);
+                var cached = resolveAnalysis(score, modsAffect, analysisCache, cancellationToken);
+                bool hasKps = cached.HasKps;
+                var analysis = cached.Result;
                 double avgKps = hasKps ? analysis.AverageKps : 0;
                 double maxKps = hasKps ? analysis.MaxKps : 0;
-                double pp = resolvedPp[i];
-                long durationMs = beatmap.Length > 0 ? (long)beatmap.Length : 0;
+                double pp = resolved.Pp[i];
+                double starRating = resolved.StarRatings[i] >= 0 ? resolved.StarRatings[i] : beatmap.StarRating;
+                double xxyStarRating = resolveXxyStarRating(beatmap, analysis, hasKps, modsAffect, starRating);
+                long durationMs = resolveDurationMs(score, beatmap);
+
+                double? avgAbsOffsetMs = EzLocalProfileHitEventResolver.ResolveAvgAbsOffsetMs(
+                    score,
+                    realm,
+                    scoreManager,
+                    beatmapManager,
+                    replaySession,
+                    cancellationToken);
+
+                result.DrillScores.Add(EzLocalProfileDrillScoreRow.FromScore(
+                    score,
+                    username,
+                    pp,
+                    hasKps ? analysis : default,
+                    hasKps,
+                    avgAbsOffsetMs,
+                    starRating,
+                    xxyStarRating));
 
                 var rulesetStats = getOrCreate(result.RulesetStats, rulesetId, () => new EzLocalProfileAggregationResult.MutableRulesetStats());
                 rulesetStats.TotalKeys += keys;
@@ -137,13 +173,17 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 }
 
                 incrementGrade(result, rulesetId, score.Rank);
-                incrementStar(result, rulesetId, beatmap.StarRating);
+                incrementStar(result, rulesetId, starRating);
+                incrementXxy(result, rulesetId, xxyStarRating);
 
                 if (rulesetId == EzLocalProfileConstants.MANIA_RULESET_ID)
-                    accumulateMania(result, beatmap, analysis, hasKps, keys, avgKps, maxKps, pp, durationMs);
+                {
+                    int keyCount = resolveManiaKeyCount(score, analysis, hasKps);
+                    accumulateMania(result, keyCount, analysis, hasKps, keys, avgKps, maxKps, pp, durationMs);
+                }
 
                 if (rulesetId == EzLocalProfileConstants.OSU_RULESET_ID)
-                    accumulateStdAttr(result, beatmap, score.Rank);
+                    accumulateStdAttr(result, beatmap, score);
             }
 
             return byUser;
@@ -170,121 +210,86 @@ namespace osu.Game.EzOsuGame.LocalProfile
             mergeOnlineContributions(result, contributions, localOnlineIds);
         }
 
-        private double[] resolveAllPp(
-            IReadOnlyList<ScoreInfo> scores,
-            IProgress<EzLocalProfileComputeProgress>? progress,
-            int progressTotal,
+        private CachedAnalysis resolveAnalysis(
+            ScoreInfo score,
+            bool modsAffect,
+            Dictionary<string, CachedAnalysis> cache,
             CancellationToken cancellationToken)
         {
-            double[] values = new double[scores.Count];
-            if (scores.Count == 0)
-                return values;
+            var beatmap = score.BeatmapInfo!;
 
-            var attributeCache = new Dictionary<string, DifficultyAttributes?>(StringComparer.Ordinal);
-            int failures = 0;
-            int loggedFailures = 0;
-            const int max_logged_failures = 8;
-
-            // Sequential on purpose: WorkingBeatmapCache locks around Realm reads; Parallel.For
-            // deadlocks easily once scores without stored PP start loading beatmaps.
-            int reportEvery = Math.Max(10, progressTotal / 100);
-
-            for (int i = 0; i < scores.Count; i++)
+            if (!modsAffect)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                values[i] = resolvePp(scores[i], attributeCache, ref failures, ref loggedFailures, max_logged_failures);
-
-                int current = i + 1;
-                if (current == scores.Count || current % reportEvery == 0)
-                    progress?.Report(new EzLocalProfileComputeProgress(current, progressTotal, Saving: false));
+                bool hasKps = analysisStore.TryGet(beatmap, out var stored);
+                return new CachedAnalysis(hasKps ? stored : default, hasKps);
             }
 
-            if (failures > 0)
-            {
-                Logger.Log(
-                    $"[EzLocalProfile] PP calc finished with {failures} failure(s) out of {scores.Count} score(s).",
-                    Ez2ConfigManager.LOGGER_NAME);
-            }
+            string cacheKey = $"{beatmap.ID:N}|{score.Ruleset.ShortName}|{score.ModsJson}";
 
-            return values;
-        }
-
-        /// <summary>
-        /// Prefer a positive stored PP; otherwise calculate from detached score + cached difficulty attributes.
-        /// </summary>
-        private double resolvePp(
-            ScoreInfo score,
-            Dictionary<string, DifficultyAttributes?> attributeCache,
-            ref int failures,
-            ref int loggedFailures,
-            int maxLoggedFailures)
-        {
-            if (score.PP is > 0)
-                return score.PP.Value;
-
-            // Failed plays contribute no PP for profile totals.
-            if (score.Rank == ScoreRank.F)
-                return 0;
-
-            if (score.BeatmapInfo == null)
-                return 0;
+            if (cache.TryGetValue(cacheKey, out var cached))
+                return cached;
 
             try
             {
-                var ruleset = score.Ruleset.CreateInstance();
-                var calculator = ruleset.CreatePerformanceCalculator();
-                if (calculator == null)
-                    return 0;
-
-                string cacheKey = buildAttributeCacheKey(score);
-                if (!attributeCache.TryGetValue(cacheKey, out var attributes))
-                {
-                    attributes = tryCalculateAttributes(score, ruleset);
-                    attributeCache[cacheKey] = attributes;
-                }
-
-                if (attributes == null)
-                    return 0;
-
-                return Math.Max(0, calculator.Calculate(score, attributes).Total);
+                var lookup = new EzAnalysisLookupCache(beatmap, score.Ruleset, score.Mods);
+                var computed = EzAnalysisComputation.Compute(beatmapManager, lookup, cancellationToken);
+                cached = new CachedAnalysis(computed, true);
             }
-            catch (Exception ex)
+            catch (OperationCanceledException)
             {
-                failures++;
-
-                if (++loggedFailures <= maxLoggedFailures)
-                {
-                    Logger.Log(
-                        $"[EzLocalProfile] PP calc failed for score {score.ID}: {ex.Message}",
-                        Ez2ConfigManager.LOGGER_NAME);
-                }
-
-                return 0;
-            }
-        }
-
-        private DifficultyAttributes? tryCalculateAttributes(ScoreInfo score, Rulesets.Ruleset ruleset)
-        {
-            try
-            {
-                var working = beatmapManager.GetWorkingBeatmap(score.BeatmapInfo);
-                return ruleset.CreateDifficultyCalculator(working).Calculate(score.Mods);
+                throw;
             }
             catch (Exception ex)
             {
                 Logger.Log(
-                    $"[EzLocalProfile] Difficulty attrs failed ({score.BeatmapInfo?.ID}): {ex.Message}",
+                    $"[EzLocalProfile] Playable analysis failed for score {score.ID}: {ex.Message}",
                     Ez2ConfigManager.LOGGER_NAME,
                     LogLevel.Verbose);
-                return null;
+                cached = new CachedAnalysis(default, false);
             }
+
+            cache[cacheKey] = cached;
+            return cached;
         }
 
-        private static string buildAttributeCacheKey(ScoreInfo score)
+        private static int resolveManiaKeyCount(ScoreInfo score, EzAnalysisResult analysis, bool hasKps)
         {
-            // ModsJson is stable and cheaper than formatting Mod[].
-            return $"{score.BeatmapInfo?.ID:N}|{score.Ruleset.ShortName}|{score.ModsJson}";
+            try
+            {
+                // ManiaRuleset.GetVariantForBeatmap == GetKeyCount (post converter-mod columns).
+                int fromMods = score.Ruleset.CreateInstance().GetVariantForBeatmap(score.BeatmapInfo!, score.Mods);
+                if (fromMods > 0)
+                    return fromMods;
+            }
+            catch
+            {
+                // fall through
+            }
+
+            if (hasKps && analysis.ManiaSummary is { } summary && summary.ColumnCounts.Count > 0)
+                return summary.ColumnCounts.Keys.Max() + 1;
+
+            return (int)Math.Round(score.BeatmapInfo!.Difficulty.CircleSize);
+        }
+
+        private static long resolveDurationMs(ScoreInfo score, BeatmapInfo beatmap)
+        {
+            long durationMs = beatmap.Length > 0 ? (long)beatmap.Length : 0;
+            if (durationMs <= 0)
+                return 0;
+
+            double rate = 1.0;
+
+            foreach (var mod in score.Mods)
+            {
+                if (mod is IApplicableToRate applicableToRate)
+                    rate = applicableToRate.ApplyToRate(0, rate);
+            }
+
+            if (double.IsNaN(rate) || double.IsInfinity(rate) || rate <= 0)
+                return durationMs;
+
+            return (long)Math.Round(durationMs / rate);
         }
 
         private static void mergeOnlineContributions(
@@ -332,7 +337,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
         private static void accumulateMania(
             EzLocalProfileAggregationResult result,
-            BeatmapInfo beatmap,
+            int keyCount,
             EzAnalysisResult analysis,
             bool hasKps,
             long keys,
@@ -341,7 +346,6 @@ namespace osu.Game.EzOsuGame.LocalProfile
             double pp,
             long durationMs)
         {
-            int keyCount = (int)Math.Round(beatmap.Difficulty.CircleSize);
             if (keyCount <= 0)
                 return;
 
@@ -387,11 +391,16 @@ namespace osu.Game.EzOsuGame.LocalProfile
             }
         }
 
-        private static void accumulateStdAttr(EzLocalProfileAggregationResult result, BeatmapInfo beatmap, ScoreRank rank)
+        private static void accumulateStdAttr(EzLocalProfileAggregationResult result, BeatmapInfo beatmap, ScoreInfo score)
         {
-            bool highGrade = isHighGrade(rank);
-            addStd(result, EzLocalProfileStdAttr.ApproachRate, roundAttr(beatmap.Difficulty.ApproachRate), highGrade);
-            addStd(result, EzLocalProfileStdAttr.CircleSize, roundAttr(beatmap.Difficulty.CircleSize), highGrade);
+            var difficulty = new BeatmapDifficulty(beatmap.Difficulty);
+
+            foreach (var mod in score.Mods.OfType<IApplicableToDifficulty>())
+                mod.ApplyToDifficulty(difficulty);
+
+            bool highGrade = isHighGrade(score.Rank);
+            addStd(result, EzLocalProfileStdAttr.ApproachRate, roundAttr(difficulty.ApproachRate), highGrade);
+            addStd(result, EzLocalProfileStdAttr.CircleSize, roundAttr(difficulty.CircleSize), highGrade);
         }
 
         private static void addStd(EzLocalProfileAggregationResult result, EzLocalProfileStdAttr attr, double value, bool highGrade)
@@ -418,6 +427,49 @@ namespace osu.Game.EzOsuGame.LocalProfile
             var key = (rulesetId, bucket);
             result.StarPlayCounts.TryGetValue(key, out int existing);
             result.StarPlayCounts[key] = existing + 1;
+        }
+
+        private static void incrementXxy(EzLocalProfileAggregationResult result, int rulesetId, double xxyStarRating)
+        {
+            if (xxyStarRating < 0)
+                return;
+
+            int bucket = (int)Math.Floor(xxyStarRating);
+            var key = (rulesetId, bucket);
+            result.XxyPlayCounts.TryGetValue(key, out int existing);
+            result.XxyPlayCounts[key] = existing + 1;
+        }
+
+        /// <summary>
+        /// Resolve xxy SR for bucket counting. With beatmap-affecting mods, prefer playable analysis
+        /// (not Realm NoMod <see cref="BeatmapInfo.XxyStarRating"/>).
+        /// </summary>
+        private static double resolveXxyStarRating(
+            BeatmapInfo beatmap,
+            EzAnalysisResult analysis,
+            bool hasKps,
+            bool modsAffectAnalysis,
+            double resolvedStarRating)
+        {
+            if (modsAffectAnalysis)
+            {
+                if (hasKps && analysis.ManiaSummary?.XxySr is double analysisXxy && analysisXxy >= 0)
+                    return analysisXxy;
+
+                return resolvedStarRating >= 0 ? resolvedStarRating : -1;
+            }
+
+            if (beatmap.XxyStarRating >= 0)
+                return beatmap.XxyStarRating;
+
+            if (hasKps && analysis.ManiaSummary?.XxySr is double storedXxy && storedXxy >= 0)
+                return storedXxy;
+
+            // Align play counts with official star buckets when dedicated xxy is unavailable.
+            if (beatmap.StarRating >= 0)
+                return beatmap.StarRating;
+
+            return -1;
         }
 
         private static IQueryable<ScoreInfo> queryValidScores(Realm realm)
@@ -459,8 +511,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
         private static double roundAttr(float value) => Math.Round(value, 1, MidpointRounding.AwayFromZero);
 
-        private static bool isHighGrade(ScoreRank rank) =>
-            rank is ScoreRank.S or ScoreRank.SH or ScoreRank.X or ScoreRank.XH;
+        private static bool isHighGrade(ScoreRank rank) => rank is ScoreRank.S or ScoreRank.SH or ScoreRank.X or ScoreRank.XH;
 
         private static TValue getOrCreate<TKey, TValue>(Dictionary<TKey, TValue> dict, TKey key, Func<TValue> factory)
             where TKey : notnull
@@ -473,5 +524,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
             dict[key] = created;
             return created;
         }
+
+        private readonly record struct CachedAnalysis(EzAnalysisResult Result, bool HasKps);
     }
 }

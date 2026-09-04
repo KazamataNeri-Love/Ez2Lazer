@@ -40,16 +40,17 @@ using osu.Game.Collections;
 using osu.Game.Configuration;
 using osu.Game.Database;
 using osu.Game.EzOsuGame.Acrylic;
-using osu.Game.EzOsuGame.Configuration;
-using osu.Game.EzOsuGame.Edit;
 using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Background.Pixiv;
+using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Edit;
 using osu.Game.EzOsuGame.Layout;
 using osu.Game.EzOsuGame.LocalProfile;
 using osu.Game.EzOsuGame.Overlays;
 using osu.Game.EzOsuGame.Performance;
 using osu.Game.EzOsuGame.Pets;
 using osu.Game.EzOsuGame.Scoring;
+using osu.Game.EzOsuGame.Screens.Play;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.UserInterface;
@@ -1166,31 +1167,41 @@ namespace osu.Game
                             Children = new Drawable[]
                             {
                                 backReceptor = new ScreenFooter.BackReceptor(),
+                                // Footer / Mod overlays sit outside ScreenStack but must share the same
+                                // offscreen buffer so AcrylicBackdropDrawable can sample song-select chrome.
                                 acrylicCaptureScope = new AcrylicCaptureScope(screenCaptureContent = new Container
                                 {
                                     RelativeSizeAxes = Axes.Both,
-                                    Child = ScreenStack = new OsuScreenStack { RelativeSizeAxes = Axes.Both },
-                                }),
-                                logoContainer = new Container { RelativeSizeAxes = Axes.Both },
-                                // TODO: what is this? why is this?
-                                // TODO: this is being screen scaled even though it's probably AN OVERLAY.
-                                footerBasedOverlayContent = new Container
-                                {
-                                    Depth = -1,
-                                    RelativeSizeAxes = Axes.Both,
-                                },
-                                new PopoverContainer
-                                {
-                                    // Ensure the footer is displayed above any content and/or overlays.
-                                    Depth = -1,
-                                    RelativeSizeAxes = Axes.Both,
-                                    Child = screenStackFooter = new ScreenStackFooter(ScreenStack, backReceptor)
+                                    Children = new Drawable[]
                                     {
-                                        // TODO: this is really really weird and should not exist.
-                                        RequestLogoInFront = inFront => ScreenContainer.ChangeChildDepth(logoContainer, inFront ? float.MinValue : 0),
-                                        BackButtonPressed = handleBackButton
-                                    },
-                                },
+                                        ScreenStack = new OsuScreenStack
+                                        {
+                                            RelativeSizeAxes = Axes.Both,
+                                            // Behind logo / footer overlays inside the capture buffer.
+                                            Depth = 1,
+                                        },
+                                        logoContainer = new Container { RelativeSizeAxes = Axes.Both },
+                                        // TODO: what is this? why is this?
+                                        // TODO: this is being screen scaled even though it's probably AN OVERLAY.
+                                        footerBasedOverlayContent = new Container
+                                        {
+                                            Depth = -1,
+                                            RelativeSizeAxes = Axes.Both,
+                                        },
+                                        new PopoverContainer
+                                        {
+                                            // Ensure the footer is displayed above any content and/or overlays.
+                                            Depth = -1,
+                                            RelativeSizeAxes = Axes.Both,
+                                            Child = screenStackFooter = new ScreenStackFooter(ScreenStack, backReceptor)
+                                            {
+                                                // TODO: this is really really weird and should not exist.
+                                                RequestLogoInFront = inFront => screenCaptureContent.ChangeChildDepth(logoContainer, inFront ? float.MinValue : 0),
+                                                BackButtonPressed = handleBackButton
+                                            },
+                                        },
+                                    }
+                                }),
                             }
                         },
                     }
@@ -1278,6 +1289,7 @@ namespace osu.Game
             loadComponentSingleFile(FirstRunOverlay = new FirstRunSetupOverlay(), footerBasedOverlayContent.Add, true);
             loadComponentSingleFile(new ManageCollectionsDialog(), overlayContent.Add, true);
             loadComponentSingleFile(new EzManageSongsBranchesDialog(), overlayContent.Add, true);
+            loadComponentSingleFile(new EzExternalRulesetManagerDialog(), overlayContent.Add, true);
             loadComponentSingleFile(new EzFontSettingsOverlay(), topMostOverlayContent.Add, true);
             loadComponentSingleFile(beatmapListing = new BeatmapListingOverlay(), overlayContent.Add, true);
             loadComponentSingleFile(dashboard = new DashboardOverlay(), overlayContent.Add, true);
@@ -1292,7 +1304,8 @@ namespace osu.Game
             loadComponentSingleFile(ezLocalProfile = new EzLocalProfileOverlay(), overlayContent.Add, true);
             loadComponentSingleFile(beatmapSetOverlay = new BeatmapSetOverlay(), overlayContent.Add, true);
             loadComponentSingleFile(wikiOverlay = new WikiOverlay(), overlayContent.Add, true);
-            loadComponentSingleFile(ezLayoutLayer = new EzLayoutLayer(), screenCaptureContent.Add, true);
+            // Above screens, below logo / footer / sheared overlays (higher Depth = further back).
+            loadComponentSingleFile(ezLayoutLayer = new EzLayoutLayer { Depth = 0.5f }, screenCaptureContent.Add, true);
             loadComponentSingleFile(skinEditor = new SkinEditorOverlay(ScreenContainer), overlayContent.Add, true);
             loadComponentSingleFile(ezLayoutEditor = new EzLayoutEditorOverlay(ScreenContainer, ezLayoutLayer), topMostOverlayContent.Add, true);
 
@@ -1332,14 +1345,21 @@ namespace osu.Game
                 loadComponentSingleFile(new EzAnalysisWarmupProcessor(), Add, true);
 
             // 角逐服务：仅实验开关开启时注册 DI 并挂载；关闭时 DI 解析为 null，进程内零实例零开销。
+            EzScoreRaceService scoreRaceService = null;
+
             if (Ez2ConfigManager.Get<bool>(Ez2Setting.EzScoreRaceServiceEnabled))
             {
-                var scoreRaceService = new EzScoreRaceService();
+                scoreRaceService = new EzScoreRaceService();
                 loadComponentSingleFile(scoreRaceService, Add, true);
-                dependencies.CacheAs<IEzScoreRacePlayerStartGate>(scoreRaceService);
             }
 
+            var loaderStartGate = new EzPlayerLoaderStartGate(scoreRaceService);
+            loadComponentSingleFile(loaderStartGate, Add, true);
+            dependencies.CacheAs<IEzScoreRacePlayerStartGate>(loaderStartGate);
+
             loadComponentSingleFile(new PixivAutoDownloadProcessor(), Add, true);
+
+            loadStartupContentPreloader();
 
             Add(externalLinkOpener = new ExternalLinkOpener());
             Add(new MusicKeyBindingHandler());
@@ -1948,6 +1968,7 @@ namespace osu.Game
         private void screenExited(IScreen lastScreen, IScreen newScreen)
         {
             ScreenChanged((OsuScreen)lastScreen, (OsuScreen)newScreen);
+            onScreenExitedForStartupPreload((OsuScreen)lastScreen, (OsuScreen)newScreen);
 
             if (newScreen == null)
                 Exit();
