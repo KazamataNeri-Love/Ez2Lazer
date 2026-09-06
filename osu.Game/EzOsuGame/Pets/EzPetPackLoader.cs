@@ -23,6 +23,21 @@ namespace osu.Game.EzOsuGame.Pets
         public required IReadOnlySet<string> AvailableClips { get; init; }
 
         public bool IsDefault => string.Equals(Name, EzDefaultPetPack.NAME, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// True when <c>renderer: live2d</c> and the pack passed <see cref="EzPetLive2DAccess"/>.
+        /// </summary>
+        public bool Live2DAuthorized { get; init; }
+
+        /// <summary>
+        /// Relative path under pets storage to the authorised model entry, when <see cref="Live2DAuthorized"/>.
+        /// </summary>
+        public string? Live2DModelEntryPath { get; init; }
+
+        /// <summary>
+        /// True when at least one PNG/JPG clip folder has indexed frames on disk.
+        /// </summary>
+        public bool HasRasterFrames { get; init; }
     }
 
     /// <summary>
@@ -32,11 +47,14 @@ namespace osu.Game.EzOsuGame.Pets
     {
         public const string MANIFEST_FILE = "pet.json";
 
-        private readonly Storage petsStorage;
+        /// <summary>
+        /// Storage root for <see cref="EzModifyPath.PETS_PATH"/> (pack folders + Cubism Core).
+        /// </summary>
+        public Storage PetsStorage { get; }
 
         public EzPetPackLoader(Storage gameStorage)
         {
-            petsStorage = gameStorage.GetStorageForDirectory(EzModifyPath.PETS_PATH);
+            PetsStorage = gameStorage.GetStorageForDirectory(EzModifyPath.PETS_PATH);
         }
 
         public IReadOnlyList<string> ListPackNames()
@@ -45,7 +63,7 @@ namespace osu.Game.EzOsuGame.Pets
 
             var names = new List<string>();
 
-            foreach (string dir in petsStorage.GetDirectories(string.Empty))
+            foreach (string dir in PetsStorage.GetDirectories(string.Empty))
             {
                 string name = dir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 name = Path.GetFileName(name);
@@ -53,7 +71,7 @@ namespace osu.Game.EzOsuGame.Pets
                 if (string.IsNullOrEmpty(name))
                     continue;
 
-                if (petsStorage.Exists(Path.Combine(name, MANIFEST_FILE)))
+                if (PetsStorage.Exists(Path.Combine(name, MANIFEST_FILE)))
                     names.Add(name);
             }
 
@@ -72,7 +90,7 @@ namespace osu.Game.EzOsuGame.Pets
 
             string manifestPath = Path.Combine(packName, MANIFEST_FILE);
 
-            if (!petsStorage.Exists(manifestPath))
+            if (!PetsStorage.Exists(manifestPath))
             {
                 if (string.Equals(packName, EzDefaultPetPack.NAME, StringComparison.OrdinalIgnoreCase))
                     return createDefaultPackInMemory();
@@ -83,18 +101,37 @@ namespace osu.Game.EzOsuGame.Pets
 
             try
             {
-                using var stream = petsStorage.GetStream(manifestPath);
+                using var stream = PetsStorage.GetStream(manifestPath);
                 if (stream == null)
                     return null;
 
                 using var reader = new StreamReader(stream, Encoding.UTF8);
                 var definition = EzPetPackDefinition.Parse(reader.ReadToEnd());
-                var available = resolveAvailableClips(packName, definition);
+                var rasterClips = resolveAvailableClips(packName, definition);
+                bool live2DOk = EzPetLive2DAccess.TryAuthorize(packName, definition, PetsStorage, out _);
+                string? live2DEntry = live2DOk
+                    ? EzPetLive2DAccess.FindCanonicalEntryRelativePath(PetsStorage, packName, definition)
+                    : null;
+
+                IReadOnlySet<string> available = rasterClips;
+
+                // Authorised Live2D packs may ship without PNG clips; expose clip ids for the state machine.
+                if (live2DOk && rasterClips.Count == 0)
+                {
+                    var synthetic = new HashSet<string>(definition.Clips.Keys, StringComparer.Ordinal);
+                    if (synthetic.Count == 0 && !string.IsNullOrEmpty(definition.DefaultState))
+                        synthetic.Add(definition.DefaultState);
+                    available = synthetic;
+                }
+
                 return new EzPetPack
                 {
                     Name = packName,
                     Definition = definition,
                     AvailableClips = available,
+                    Live2DAuthorized = live2DOk,
+                    Live2DModelEntryPath = live2DEntry,
+                    HasRasterFrames = rasterClips.Count > 0,
                 };
             }
             catch (Exception ex)
@@ -108,14 +145,14 @@ namespace osu.Game.EzOsuGame.Pets
         {
             string manifestPath = Path.Combine(EzDefaultPetPack.NAME, MANIFEST_FILE);
 
-            if (petsStorage.Exists(manifestPath))
+            if (PetsStorage.Exists(manifestPath))
                 return;
 
             try
             {
-                petsStorage.GetStorageForDirectory(EzDefaultPetPack.NAME);
+                PetsStorage.GetStorageForDirectory(EzDefaultPetPack.NAME);
 
-                using var stream = petsStorage.CreateFileSafely(manifestPath);
+                using var stream = PetsStorage.CreateFileSafely(manifestPath);
                 using var writer = new StreamWriter(stream, Encoding.UTF8);
                 writer.Write(EzDefaultPetPack.PET_JSON);
             }
@@ -137,7 +174,7 @@ namespace osu.Game.EzOsuGame.Pets
 
             try
             {
-                files = petsStorage.GetFiles(directory);
+                files = PetsStorage.GetFiles(directory);
             }
             catch (Exception)
             {
@@ -199,15 +236,15 @@ namespace osu.Game.EzOsuGame.Pets
         private string? findExistingDirectory(string packName, string folderName)
         {
             string direct = Path.Combine(packName, folderName);
-            if (petsStorage.ExistsDirectory(direct))
+            if (PetsStorage.ExistsDirectory(direct))
                 return folderName;
 
-            if (!petsStorage.ExistsDirectory(packName))
+            if (!PetsStorage.ExistsDirectory(packName))
                 return null;
 
             try
             {
-                foreach (string dir in petsStorage.GetDirectories(packName))
+                foreach (string dir in PetsStorage.GetDirectories(packName))
                 {
                     string name = Path.GetFileName(dir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
                     if (string.Equals(name, folderName, StringComparison.OrdinalIgnoreCase))
