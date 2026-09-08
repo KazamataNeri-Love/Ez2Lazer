@@ -41,20 +41,23 @@ using osu.Game.Beatmaps.Formats;
 using osu.Game.Configuration;
 using osu.Game.Database;
 using osu.Game.Extensions;
+using osu.Game.EzOsuGame;
+using osu.Game.EzOsuGame.Analysis;
+using osu.Game.EzOsuGame.Background.Pixiv;
+using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.ExternalRulesets;
+using osu.Game.EzOsuGame.Fonts;
+using osu.Game.EzOsuGame.Input;
+using osu.Game.EzOsuGame.LocalProfile;
+using osu.Game.EzOsuGame.Online;
+using osu.Game.EzOsuGame.Scoring;
+using osu.Game.EzOsuGame.Skills;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Cursor;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Input;
 using osu.Game.Input.Bindings;
 using osu.Game.IO;
-using osu.Game.EzOsuGame;
-using osu.Game.EzOsuGame.Analysis;
-using osu.Game.EzOsuGame.Configuration;
-using osu.Game.EzOsuGame.Input;
-using osu.Game.EzOsuGame.LocalProfile;
-using osu.Game.EzOsuGame.Online;
-using osu.Game.EzOsuGame.Scoring;
-using osu.Game.EzOsuGame.ExternalRulesets;
 using osu.Game.Localisation;
 using osu.Game.Online;
 using osu.Game.Online.API;
@@ -338,7 +341,7 @@ namespace osu.Game
             GlobalConfigStore.Config = LocalConfig;
             GlobalConfigStore.EzConfig = Ez2ConfigManager;
             dependencies.Cache(Ez2ConfigManager);
-            dependencies.Cache(new EzOsuGame.Background.Pixiv.PixivBackgroundCoordinator(Storage, Ez2ConfigManager));
+            dependencies.Cache(new PixivBackgroundCoordinator(Storage, Ez2ConfigManager));
 
             bindFrameLimiter(Ez2ConfigManager, frameworkConfig);
             EzSkinInfo = new EzSkinInfo(Ez2ConfigManager);
@@ -366,7 +369,7 @@ namespace osu.Game
             dependencies.CacheAs<IGameplaySettings>(LocalConfig);
 
             InitialiseFonts();
-            EzOsuGame.Fonts.EzUiFontBootstrap.Apply(this, Ez2ConfigManager);
+            EzUiFontBootstrap.Apply(this, Ez2ConfigManager);
 
             addFilesWarning();
 
@@ -411,7 +414,25 @@ namespace osu.Game
             dependencies.Cache(ezAnalysisCache = new EzAnalysisCache());
             ReplaySession = new EzReplaySessionRouter(RulesetStore.AvailableRulesets);
             dependencies.CacheAs<IEzReplaySession>(ReplaySession);
-            dependencies.Cache(new EzLocalProfileService(Storage, realm, ezAnalysisPersistentStore, BeatmapManager, ScoreManager, ReplaySession));
+
+            // TODO: 需要审查是否过重，合并为统一的Skill管理器？ Dan也是玩家技能之一。技能指标是可以用在谱面、成绩、玩家水平之间的。
+            var skillRegistry = new EzSkillRegistry();
+            var skillStore = new EzSkillStore(realm);
+            var beatmapMsdComputer = new EzBeatmapMsdComputer(BeatmapManager, skillStore);
+            var chartDanEstimator = new EzChartDanEstimator(BeatmapManager, beatmapMsdComputer);
+            var playerSsrAggregator = new EzPlayerSsrAggregator(BeatmapManager, skillStore);
+            var playerDanAggregator = new EzPlayerDanAggregator(BeatmapManager, skillStore, chartDanEstimator);
+            var localProfileStore = new EzLocalProfileStore(Storage);
+            dependencies.Cache(skillRegistry);
+            dependencies.Cache(skillStore);
+            dependencies.Cache(localProfileStore);
+            dependencies.Cache(new EzSkillProvider(skillStore, skillRegistry, chartDanEstimator, localProfileStore));
+            dependencies.Cache(beatmapMsdComputer);
+            dependencies.Cache(chartDanEstimator);
+            dependencies.Cache(playerSsrAggregator);
+            dependencies.Cache(playerDanAggregator);
+
+            dependencies.Cache(new EzLocalProfileService(Storage, realm, ezAnalysisPersistentStore, BeatmapManager, ScoreManager, ReplaySession, playerSsrAggregator, playerDanAggregator, localProfileStore));
             dependencies.Cache(new EzLocalProfileOnlinePullService(API, ScoreManager, BeatmapManager, realm, Storage));
 
             if (Ez2ConfigManager.Get<bool>(Ez2Setting.EzScoreRaceServiceEnabled))
@@ -586,7 +607,7 @@ namespace osu.Game
             AddFont(Resources, @"Fonts/Inter/Inter-BoldItalic");
 
             // Localized system outline faces must precede Noto CJK so empty-name scans prefer them.
-            EzOsuGame.Fonts.EzUiFontBootstrap.RegisterLocalizedFallbacks(this, Ez2ConfigManager);
+            EzUiFontBootstrap.RegisterLocalizedFallbacks(this, Ez2ConfigManager);
 
             AddFont(Resources, @"Fonts/Noto/Noto-Basic");
             AddFont(Resources, @"Fonts/Noto/Noto-Bopomofo");
@@ -597,7 +618,7 @@ namespace osu.Game
 
             // Emoji glyph fallback order (empty FontName scan): system colour emoji → packaged
             // Twemoji / NotoColorEmoji → BMFont Noto-Emoji → mono outline.
-            EzOsuGame.Fonts.EzUiFontBootstrap.RegisterSystemEmojiFallback(this, Ez2ConfigManager);
+            EzUiFontBootstrap.RegisterSystemEmojiFallback(this, Ez2ConfigManager);
 
             const string twemoji = @"Fonts/Twemoji/Twemoji.Mozilla";
 

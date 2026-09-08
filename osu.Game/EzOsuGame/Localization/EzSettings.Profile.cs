@@ -107,6 +107,111 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_SECTION_MODE_DATA =
             new EzLocalizationManager.EzLocalisableString("各模式统计", "Stats by mode");
 
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_ANALYSIS_SYSTEM =
+            new EzLocalizationManager.EzLocalisableString("分析系统", "Analysis");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_SECTION_TRACK_SKILLS =
+            new EzLocalizationManager.EzLocalisableString("Track 技能", "Track Skills");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_TRACK_EMPTY =
+            new EzLocalizationManager.EzLocalisableString(
+                "暂无 Track 技能。请到设置重新计算本地个人成绩（需该玩家名下的 Mania 成绩）。",
+                "No Track skills yet. Recompute Local Profile Stats in Settings (requires mania scores for this player).");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_TRACK_NEEDS_PLAYER =
+            new EzLocalizationManager.EzLocalisableString(
+                "Track 技能按玩家名计算。请在上方选择具体玩家（不要选 All）。",
+                "Track skills are per player. Select a specific player above (not All).");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_SKILL_RATING =
+            new EzLocalizationManager.EzLocalisableString("{0}K 技能评分", "{0}K skill rating");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_SKILL_PLAYS =
+            new EzLocalizationManager.EzLocalisableString("{0} 局分析", "{0} analyzed plays");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_SKILL_PROVISIONAL =
+            new EzLocalizationManager.EzLocalisableString("临时评分", "Provisional");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_SKILL_STALE =
+            new EzLocalizationManager.EzLocalisableString("待更新", "Updating");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_SKILL_HISTORY =
+            new EzLocalizationManager.EzLocalisableString("技能历史", "Skill History");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_SKILL_HISTORY_FOR =
+            new EzLocalizationManager.EzLocalisableString("技能历史 · {0}", "Skill History · {0}");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_SKILL_HISTORY_EMPTY =
+            new EzLocalizationManager.EzLocalisableString(
+                "暂无历史点。重新计算本地个人成绩后会写入。",
+                "No history points yet. Recompute Local Profile Stats to record them.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DAN_CHIP_TITLE =
+            new EzLocalizationManager.EzLocalisableString("段位（启发式）", "Dan (heuristic)");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DAN_SIDE_RC =
+            new EzLocalizationManager.EzLocalisableString("RC", "RC");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DAN_SIDE_LN =
+            new EzLocalizationManager.EzLocalisableString("LN", "LN");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DAN_HEURISTIC_HINT =
+            new EzLocalizationManager.EzLocalisableString(
+                "MSD→Dan 近似，非 LeoBlack",
+                "MSD→Dan approx, not LeoBlack");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_SECTION_TRACK_INSIGHTS =
+            new EzLocalizationManager.EzLocalisableString("成绩洞察", "Profile Insights");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_INSIGHTS_EMPTY =
+            new EzLocalizationManager.EzLocalisableString(
+                "暂无可用的 Mania 成绩洞察（需要已计算的 PP）。",
+                "No mania profile insights yet (computed PP scores required).");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_INSIGHTS_KEY_SPLIT =
+            new EzLocalizationManager.EzLocalisableString("键数分布", "Key Split");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_INSIGHTS_MOST_USED_MOD =
+            new EzLocalizationManager.EzLocalisableString("最常用 Mod", "Most Used Mod");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_INSIGHTS_MEDIAN_BPM =
+            new EzLocalizationManager.EzLocalisableString("中位 BPM", "Median BPM");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_INSIGHTS_PP_RANGE =
+            new EzLocalizationManager.EzLocalisableString("PP 范围", "PP Range");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_INSIGHTS_KEY_PP =
+            new EzLocalizationManager.EzLocalisableString("各键数加权 PP", "PP by Keymode");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_INSIGHTS_MOD_USAGE =
+            new EzLocalizationManager.EzLocalisableString("Mod 使用", "Mod Usage");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_INSIGHTS_BPM_BREAKDOWN =
+            new EzLocalizationManager.EzLocalisableString("BPM 明细", "BPM Breakdown");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_INSIGHTS_PP_DISTRIBUTION =
+            new EzLocalizationManager.EzLocalisableString("PP 分布", "PP Distribution");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_INSIGHTS_PP_CUMULATIVE =
+            new EzLocalizationManager.EzLocalisableString("累计（≥ 阈值）", "Cumulative (≥ threshold)");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_INSIGHTS_BPM_RANGE =
+            new EzLocalizationManager.EzLocalisableString("范围 {0}–{1} BPM", "Range {0}–{1} BPM");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_INSIGHTS_CONVERTS_EXCLUDED =
+            new EzLocalizationManager.EzLocalisableString(
+                "已排除 {0} 条 convert（不计入键数 PP）",
+                "{0} convert plays excluded from keymode PP");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_INSIGHTS_NO_MODS =
+            new EzLocalizationManager.EzLocalisableString("窗口内成绩均为无 Mod。", "All window plays are nomod.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_INSIGHTS_NEWEST_TOP =
+            new EzLocalizationManager.EzLocalisableString("最新 Top Play", "Newest Top Play");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_INSIGHTS_OLDEST_TOP =
+            new EzLocalizationManager.EzLocalisableString("最早 Top Play", "Oldest Top Play");
+
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_XXY_PLAY_DISTRIBUTION =
             new EzLocalizationManager.EzLocalisableString("xxy 星级分布", "Plays by xxy SR");
 

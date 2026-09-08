@@ -64,13 +64,50 @@ namespace osu.Game.EzOsuGame.LocalProfile
         }
 
         /// <summary>
+        /// Detached mania scores for SSR skill aggregation, keyed by normalised username.
+        /// </summary>
+        public Dictionary<string, List<ScoreInfo>> CollectDetachedManiaScores(IReadOnlyCollection<string> usernames)
+        {
+            var includeSet = new HashSet<string>(usernames.Select(normaliseUsername), StringComparer.Ordinal);
+            var byUser = new Dictionary<string, List<ScoreInfo>>(StringComparer.Ordinal);
+
+            realm.Run(r =>
+            {
+                if (includeSet.Count == 0)
+                    return;
+
+                foreach (var score in queryValidScores(r))
+                {
+                    if (score.Ruleset.OnlineID != EzLocalProfileConstants.MANIA_RULESET_ID)
+                        continue;
+
+                    string username = normaliseUsername(score.RealmUser.Username);
+                    if (!includeSet.Contains(username))
+                        continue;
+
+                    if (score.BeatmapInfo == null)
+                        continue;
+
+                    if (!byUser.TryGetValue(username, out var list))
+                        byUser[username] = list = new List<ScoreInfo>();
+
+                    list.Add(score.DeepClone());
+                }
+            });
+
+            return byUser;
+        }
+
+        /// <summary>
         /// Aggregate only the given usernames, returning one result slice per username (all scores counted).
+        /// Also returns detached mania scores from the same Realm pass (for skill/dan compute).
         /// Does not merge online contributions — that happens when rebuilding display totals.
         /// </summary>
-        public Dictionary<string, EzLocalProfileAggregationResult> AggregateByUsername(
-            IReadOnlyCollection<string> usernames,
-            IProgress<EzLocalProfileComputeProgress>? progress = null,
-            CancellationToken cancellationToken = default)
+        public (Dictionary<string, EzLocalProfileAggregationResult> Results, Dictionary<string, List<ScoreInfo>> ManiaScoresByUser)
+            AggregateByUsername(
+                IReadOnlyCollection<string> usernames,
+                IProgress<EzLocalProfileComputeProgress>? progress = null,
+                CancellationToken cancellationToken = default)
         {
             var includeSet = new HashSet<string>(usernames.Select(normaliseUsername), StringComparer.Ordinal);
             var byUser = new Dictionary<string, EzLocalProfileAggregationResult>(StringComparer.Ordinal);
@@ -118,6 +155,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
             report();
 
             var analysisCache = new Dictionary<string, CachedAnalysis>(StringComparer.Ordinal);
+            var maniaScoresByUser = new Dictionary<string, List<ScoreInfo>>(StringComparer.Ordinal);
 
             for (int i = 0; i < detachedScores.Count; i++)
             {
@@ -180,6 +218,11 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 {
                     int keyCount = resolveManiaKeyCount(score, analysis, hasKps);
                     accumulateMania(result, keyCount, analysis, hasKps, keys, avgKps, maxKps, pp, durationMs);
+
+                    if (!maniaScoresByUser.TryGetValue(username, out var maniaList))
+                        maniaScoresByUser[username] = maniaList = new List<ScoreInfo>();
+
+                    maniaList.Add(score);
                 }
 
                 if (rulesetId == EzLocalProfileConstants.OSU_RULESET_ID)
@@ -188,7 +231,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 accumulateBeatmap(result, rulesetId, beatmap, pp, score.Rank);
             }
 
-            return byUser;
+            return (byUser, maniaScoresByUser);
         }
 
         public HashSet<long> CollectLocalOnlineScoreIds()

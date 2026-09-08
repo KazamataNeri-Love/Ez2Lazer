@@ -12,6 +12,7 @@ using osu.Framework.Logging;
 using osu.Framework.Platform;
 using osu.Game.Beatmaps;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Skills;
 using osu.Game.Scoring;
 
 namespace osu.Game.EzOsuGame.LocalProfile
@@ -197,6 +198,200 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 using var connection = openConnection();
                 setMeta(connection, pullOffsetKey(kind, rulesetId), Math.Max(0, offset).ToString(CultureInfo.InvariantCulture));
             }
+        }
+
+        /// <summary>
+        /// Replace all dan clear evidence rows for <paramref name="username"/> (DATA-3 / DATA-H).
+        /// </summary>
+        public void ReplaceDanClears(string username, IReadOnlyList<EzDanClearEvidenceRow> rows)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(username);
+            ArgumentNullException.ThrowIfNull(rows);
+
+            lock (sync)
+            {
+                ensureInitialised();
+                using var connection = openConnection();
+                replaceEvidenceRows(connection, "dan_clear_evidence", username, rows, (ins, row) =>
+                {
+                    ins.CommandText = """
+                                      INSERT INTO dan_clear_evidence
+                                          (username, key_count, side, beatmap_hash, rate, credited_dan, accuracy, scored_at_ms, algorithm_version)
+                                      VALUES
+                                          ($username, $key_count, $side, $beatmap_hash, $rate, $credited_dan, $accuracy, $scored_at_ms, $algorithm_version);
+                                      """;
+                    ins.Parameters.AddWithValue("$username", username);
+                    ins.Parameters.AddWithValue("$key_count", row.KeyCount);
+                    ins.Parameters.AddWithValue("$side", row.Side);
+                    ins.Parameters.AddWithValue("$beatmap_hash", row.BeatmapHash);
+                    ins.Parameters.AddWithValue("$rate", row.Rate);
+                    ins.Parameters.AddWithValue("$credited_dan", row.CreditedDan);
+                    ins.Parameters.AddWithValue("$accuracy", row.Accuracy);
+                    ins.Parameters.AddWithValue("$scored_at_ms", row.ScoredAt.ToUnixTimeMilliseconds());
+                    ins.Parameters.AddWithValue("$algorithm_version", row.AlgorithmVersion);
+                });
+            }
+        }
+
+        /// <summary>
+        /// Replace all SSR axis play evidence rows for <paramref name="username"/> (DATA-3 / DATA-H).
+        /// </summary>
+        public void ReplaceAxisPlays(string username, IReadOnlyList<EzAxisPlayEvidenceRow> rows)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(username);
+            ArgumentNullException.ThrowIfNull(rows);
+
+            lock (sync)
+            {
+                ensureInitialised();
+                using var connection = openConnection();
+                replaceEvidenceRows(connection, "axis_play_evidence", username, rows, (ins, row) =>
+                {
+                    ins.CommandText = """
+                                      INSERT INTO axis_play_evidence
+                                          (username, key_count, skill_id, beatmap_hash, axis_value, accuracy, rate, scored_at_ms, algorithm_version)
+                                      VALUES
+                                          ($username, $key_count, $skill_id, $beatmap_hash, $axis_value, $accuracy, $rate, $scored_at_ms, $algorithm_version);
+                                      """;
+                    ins.Parameters.AddWithValue("$username", username);
+                    ins.Parameters.AddWithValue("$key_count", row.KeyCount);
+                    ins.Parameters.AddWithValue("$skill_id", row.SkillId);
+                    ins.Parameters.AddWithValue("$beatmap_hash", row.BeatmapHash);
+                    ins.Parameters.AddWithValue("$axis_value", row.AxisValue);
+                    ins.Parameters.AddWithValue("$accuracy", row.Accuracy);
+                    ins.Parameters.AddWithValue("$rate", row.Rate);
+                    ins.Parameters.AddWithValue("$scored_at_ms", row.ScoredAt.ToUnixTimeMilliseconds());
+                    ins.Parameters.AddWithValue("$algorithm_version", row.AlgorithmVersion);
+                });
+            }
+        }
+
+        /// <summary>
+        /// Dan clear evidence for <paramref name="username"/>. Defaults to current <see cref="EzDanAlgorithm.VERSION"/>.
+        /// </summary>
+        public IReadOnlyList<EzDanClearEvidenceRow> GetDanClears(string username, int? keyCount = null, string? side = null, int? algorithmVersion = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(username);
+            int version = algorithmVersion ?? EzDanAlgorithm.VERSION;
+
+            lock (sync)
+            {
+                ensureInitialised();
+                using var connection = openConnection();
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = """
+                                  SELECT username, key_count, side, beatmap_hash, rate, credited_dan, accuracy, scored_at_ms, algorithm_version
+                                  FROM dan_clear_evidence
+                                  WHERE username = $username
+                                    AND algorithm_version = $algorithm_version
+                                    AND ($key_count IS NULL OR key_count = $key_count)
+                                    AND ($side IS NULL OR side = $side)
+                                  ORDER BY credited_dan DESC, scored_at_ms DESC;
+                                  """;
+                cmd.Parameters.AddWithValue("$username", username);
+                cmd.Parameters.AddWithValue("$algorithm_version", version);
+                cmd.Parameters.AddWithValue("$key_count", (object?)keyCount ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$side", (object?)side ?? DBNull.Value);
+
+                var list = new List<EzDanClearEvidenceRow>();
+                using var reader = cmd.ExecuteReader();
+
+                while (reader.Read())
+                {
+                    list.Add(new EzDanClearEvidenceRow
+                    {
+                        Username = reader.GetString(0),
+                        KeyCount = reader.GetInt32(1),
+                        Side = reader.GetString(2),
+                        BeatmapHash = reader.GetString(3),
+                        Rate = reader.GetDouble(4),
+                        CreditedDan = reader.GetDouble(5),
+                        Accuracy = reader.GetDouble(6),
+                        ScoredAt = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(7)),
+                        AlgorithmVersion = reader.GetInt32(8),
+                    });
+                }
+
+                return list;
+            }
+        }
+
+        /// <summary>
+        /// Axis play evidence for <paramref name="username"/>. Defaults to current <see cref="EzManiaSkillAlgorithm.VERSION"/>.
+        /// </summary>
+        public IReadOnlyList<EzAxisPlayEvidenceRow> GetAxisPlays(string username, int? keyCount = null, string? skillId = null, int? algorithmVersion = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(username);
+            int version = algorithmVersion ?? EzManiaSkillAlgorithm.VERSION;
+
+            lock (sync)
+            {
+                ensureInitialised();
+                using var connection = openConnection();
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = """
+                                  SELECT username, key_count, skill_id, beatmap_hash, axis_value, accuracy, rate, scored_at_ms, algorithm_version
+                                  FROM axis_play_evidence
+                                  WHERE username = $username
+                                    AND algorithm_version = $algorithm_version
+                                    AND ($key_count IS NULL OR key_count = $key_count)
+                                    AND ($skill_id IS NULL OR skill_id = $skill_id)
+                                  ORDER BY axis_value DESC, scored_at_ms DESC;
+                                  """;
+                cmd.Parameters.AddWithValue("$username", username);
+                cmd.Parameters.AddWithValue("$algorithm_version", version);
+                cmd.Parameters.AddWithValue("$key_count", (object?)keyCount ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$skill_id", (object?)skillId ?? DBNull.Value);
+
+                var list = new List<EzAxisPlayEvidenceRow>();
+                using var reader = cmd.ExecuteReader();
+
+                while (reader.Read())
+                {
+                    list.Add(new EzAxisPlayEvidenceRow
+                    {
+                        Username = reader.GetString(0),
+                        KeyCount = reader.GetInt32(1),
+                        SkillId = reader.GetString(2),
+                        BeatmapHash = reader.GetString(3),
+                        AxisValue = reader.GetDouble(4),
+                        Accuracy = reader.GetDouble(5),
+                        Rate = reader.GetDouble(6),
+                        ScoredAt = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(7)),
+                        AlgorithmVersion = reader.GetInt32(8),
+                    });
+                }
+
+                return list;
+            }
+        }
+
+        private static void replaceEvidenceRows<T>(
+            SqliteConnection connection,
+            string table,
+            string username,
+            IReadOnlyList<T> rows,
+            Action<SqliteCommand, T> bindInsert)
+        {
+            using var tx = connection.BeginTransaction();
+
+            using (var del = connection.CreateCommand())
+            {
+                del.Transaction = tx;
+                del.CommandText = $"DELETE FROM {table} WHERE username = $username;";
+                del.Parameters.AddWithValue("$username", username);
+                del.ExecuteNonQuery();
+            }
+
+            foreach (var row in rows)
+            {
+                using var ins = connection.CreateCommand();
+                ins.Transaction = tx;
+                bindInsert(ins, row);
+                ins.ExecuteNonQuery();
+            }
+
+            tx.Commit();
         }
 
         public void UpsertOnlineScoreContribution(EzLocalProfileOnlineScoreContribution contribution)
@@ -984,6 +1179,34 @@ namespace osu.Game.EzOsuGame.LocalProfile
                                   );
                                   CREATE INDEX IF NOT EXISTS idx_drill_scores_ruleset_pp
                                       ON drill_scores(ruleset_id, pp_resolved DESC, date_ms DESC);
+                                  CREATE TABLE IF NOT EXISTS dan_clear_evidence (
+                                      id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                      username TEXT NOT NULL,
+                                      key_count INTEGER NOT NULL,
+                                      side TEXT NOT NULL,
+                                      beatmap_hash TEXT NOT NULL,
+                                      rate REAL NOT NULL,
+                                      credited_dan REAL NOT NULL,
+                                      accuracy REAL NOT NULL,
+                                      scored_at_ms INTEGER NOT NULL,
+                                      algorithm_version INTEGER NOT NULL DEFAULT 1
+                                  );
+                                  CREATE TABLE IF NOT EXISTS axis_play_evidence (
+                                      id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                      username TEXT NOT NULL,
+                                      key_count INTEGER NOT NULL,
+                                      skill_id TEXT NOT NULL,
+                                      beatmap_hash TEXT NOT NULL,
+                                      axis_value REAL NOT NULL,
+                                      accuracy REAL NOT NULL,
+                                      rate REAL NOT NULL,
+                                      scored_at_ms INTEGER NOT NULL,
+                                      algorithm_version INTEGER NOT NULL DEFAULT 1
+                                  );
+                                  CREATE INDEX IF NOT EXISTS idx_dan_clear_evidence_user
+                                      ON dan_clear_evidence(username, key_count, side, credited_dan DESC);
+                                  CREATE INDEX IF NOT EXISTS idx_axis_play_evidence_user
+                                      ON axis_play_evidence(username, key_count, skill_id, axis_value DESC);
                                   """;
                 cmd.ExecuteNonQuery();
             }
@@ -994,6 +1217,8 @@ namespace osu.Game.EzOsuGame.LocalProfile
             ensureColumn(connection, "mania_key_stats", "total_duration_ms", "INTEGER NOT NULL DEFAULT 0");
             ensureColumn(connection, "online_score_contributions", "pp", "REAL NOT NULL DEFAULT 0");
             ensureColumn(connection, "online_score_contributions", "duration_ms", "INTEGER NOT NULL DEFAULT 0");
+            ensureColumn(connection, "dan_clear_evidence", "algorithm_version", "INTEGER NOT NULL DEFAULT 1");
+            ensureColumn(connection, "axis_play_evidence", "algorithm_version", "INTEGER NOT NULL DEFAULT 1");
 
             setMeta(connection, "schema_version", SCHEMA_VERSION.ToString(CultureInfo.InvariantCulture));
         }
@@ -1051,6 +1276,8 @@ namespace osu.Game.EzOsuGame.LocalProfile
                               DELETE FROM xxy_play_counts WHERE TRUE;
                               DELETE FROM std_attr_affinity WHERE TRUE;
                               DELETE FROM drill_scores WHERE TRUE;
+                              DELETE FROM dan_clear_evidence WHERE TRUE;
+                              DELETE FROM axis_play_evidence WHERE TRUE;
                               """;
             cmd.ExecuteNonQuery();
         }
