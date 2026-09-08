@@ -18,6 +18,9 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
         public const int OSU_RULESET_ID = 0;
         public const int MANIA_RULESET_ID = 3;
+
+        /// <summary>Key 成绩展示白名单：仅列出这些键数档。</summary>
+        public static readonly int[] MANIA_DISPLAYED_KEY_COUNTS = { 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18 };
     }
 
     public readonly record struct EzLocalProfileUsernameCount(string Username, int ScoreCount);
@@ -46,6 +49,8 @@ namespace osu.Game.EzOsuGame.LocalProfile
         public IReadOnlyList<EzLocalProfileXxyPlayCount> XxyPlayCounts { get; init; } = Array.Empty<EzLocalProfileXxyPlayCount>();
         public IReadOnlyList<EzLocalProfileStdAttrAffinity> StdAttrAffinities { get; init; } = Array.Empty<EzLocalProfileStdAttrAffinity>();
         public IReadOnlyList<EzLocalProfileDrillScoreRow> DrillScores { get; init; } = Array.Empty<EzLocalProfileDrillScoreRow>();
+        public IReadOnlyList<EzLocalProfileTopPpScore> TopPpScores { get; init; } = Array.Empty<EzLocalProfileTopPpScore>();
+        public IReadOnlyList<EzLocalProfileTopPlayedBeatmap> TopPlayedBeatmaps { get; init; } = Array.Empty<EzLocalProfileTopPlayedBeatmap>();
     }
 
     public readonly record struct EzLocalProfileRulesetStats(
@@ -99,6 +104,16 @@ namespace osu.Game.EzOsuGame.LocalProfile
         int HighGradeCount);
 
     /// <summary>
+    /// 最优 PP 榜单条目（按规则集）。
+    /// </summary>
+    public readonly record struct EzLocalProfileTopPpScore(int RulesetId, Guid BeatmapId, string BeatmapName, double Pp, ScoreRank Rank);
+
+    /// <summary>
+    /// 最多游玩榜单条目（按规则集）。
+    /// </summary>
+    public readonly record struct EzLocalProfileTopPlayedBeatmap(int RulesetId, Guid BeatmapId, string BeatmapName, int PlayCount);
+
+    /// <summary>
     /// Online API score metadata persisted for profile stats when local .osr import is unavailable.
     /// </summary>
     public readonly record struct EzLocalProfileOnlineScoreContribution(
@@ -127,6 +142,20 @@ namespace osu.Game.EzOsuGame.LocalProfile
         public Dictionary<(int RulesetId, int StarBucket), int> XxyPlayCounts { get; } = new Dictionary<(int RulesetId, int StarBucket), int>();
         public Dictionary<(EzLocalProfileStdAttr Attr, double Value), MutableStdAttr> StdAttrAffinities { get; } = new Dictionary<(EzLocalProfileStdAttr Attr, double Value), MutableStdAttr>();
         public List<EzLocalProfileDrillScoreRow> DrillScores { get; } = new List<EzLocalProfileDrillScoreRow>();
+
+        /// <summary>
+        /// 每规则集的每谱面聚合（谱面Key → 最佳PP/游玩次数），供最优PP与最多游玩榜单使用。
+        /// </summary>
+        public Dictionary<int, Dictionary<string, MutableBeatmapAggregate>> BeatmapAggregates { get; } = new Dictionary<int, Dictionary<string, MutableBeatmapAggregate>>();
+
+        public sealed class MutableBeatmapAggregate
+        {
+            public Guid BeatmapId;
+            public string BeatmapName = string.Empty;
+            public double BestPp;
+            public ScoreRank BestPpRank;
+            public int PlayCount;
+        }
 
         public sealed class MutableRulesetStats
         {

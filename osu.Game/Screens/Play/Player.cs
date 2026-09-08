@@ -27,6 +27,7 @@ using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.Database;
 using osu.Game.Extensions;
+using osu.Game.Graphics;
 using osu.Game.Graphics.Backgrounds;
 using osu.Game.Graphics.Containers;
 using osu.Game.IO.Archives;
@@ -517,9 +518,6 @@ namespace osu.Game.Screens.Play
 
         private Drawable createUnderlayComponents(WorkingBeatmap working)
         {
-            bool hasStoryboardOrVideo = GameplayState.Storyboard.HasDrawable
-                                        || GameplayState.Storyboard.GetLayer(@"Video").Elements.Any();
-
             // Shared scale/position applied to a common wrapper holding both
             // background layer and DimmableStoryboard.
             float bgScale = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundScale);
@@ -541,17 +539,36 @@ namespace osu.Game.Screens.Play
                 Origin = Anchor.Centre,
             };
 
-            // Background overlay layer — uses BeatmapBackground which has a built-in
-            // fallback texture ("Backgrounds/bg1") when working.GetBackground() is null.
+            // Background overlay layer — always visible at full opacity. When the storyboard
+            // is displayed (DimmableStoryboard has content), it naturally renders on top of
+            // this layer. When the storyboard is disabled or absent, this layer shows through
+            // so the background image still receives the same scale/position transform.
+            //
+            // Dim is applied directly to this container via FadeColour(Gray(1 - dim)),
+            // matching the exact same transition used by UserDimContainer (800ms, OutQuint).
+            // This ensures both layers dim in perfect sync.
             var backgroundLayer = new Container
             {
                 RelativeSizeAxes = Axes.Both,
-                Alpha = hasStoryboardOrVideo ? 0 : 1,
                 AlwaysPresent = true,
                 Children = new Drawable[]
                 {
                     new BeatmapBackground(working),
                 },
+            };
+
+            // Bind dim to DimmableStoryboard's own dim level bindable so both layers
+            // stay in perfect sync with the user's "Background Dim" slider.
+            // Deferred to LoadComplete because DimmableStoryboard is not yet loaded
+            // at construction time — UserDimLevel becomes available only after DI.
+            backgroundLayer.OnLoadComplete += _ =>
+            {
+                DimmableStoryboard.DimLevelSource.ValueChanged += val =>
+                {
+                    float dim = Math.Max(0, (float)val.NewValue);
+                    backgroundLayer.Colour = OsuColour.Gray(1f - dim);
+                };
+                backgroundLayer.Colour = OsuColour.Gray(1f - Math.Max(0, (float)DimmableStoryboard.DimLevelSource.Value));
             };
 
             // Common wrapper: both background and storyboard share the same Scale/Position.

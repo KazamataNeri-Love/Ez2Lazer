@@ -259,6 +259,7 @@ namespace osu.Game
         private BeatmapDifficultyCache difficultyCache;
         private EzAnalysisPersistentStore ezAnalysisPersistentStore;
         private EzAnalysisCache ezAnalysisCache;
+
         private IBeatmapUpdater beatmapUpdater;
         private OnlineAssetCachingStore onlineAssetStore;
 

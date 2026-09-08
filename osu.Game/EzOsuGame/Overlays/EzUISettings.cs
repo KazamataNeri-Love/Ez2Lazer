@@ -87,6 +87,16 @@ namespace osu.Game.EzOsuGame.Overlays
 
                 new SettingsItemV2(new FormCheckBox
                 {
+                    Caption = EzSettingsStrings.PREVIEW_FROM_START,
+                    HintText = EzSettingsStrings.PREVIEW_FROM_START_TOOLTIP,
+                    Current = ezConfig.GetBindable<bool>(Ez2Setting.PreviewFromStart),
+                })
+                {
+                    Keywords = new[] { "preview", "audio", "song select", "从头播放", "预览" }
+                },
+
+                new SettingsItemV2(new FormCheckBox
+                {
                     Caption = EzSettingsStrings.SKIP_WITH_GAMEPLAY_KEYS,
                     HintText = EzSettingsStrings.SKIP_WITH_GAMEPLAY_KEYS_TOOLTIP,
                     Current = ezConfig.GetBindable<bool>(Ez2Setting.SkipWithGameplayKeys),

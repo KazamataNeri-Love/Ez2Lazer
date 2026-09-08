@@ -238,5 +238,47 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly LocalisableString SONG_PROGRESS_SHOW_REST_MARKERS_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
             "在进度条主体上用淡绿→淡黄渐变标出谱面休息区间。",
             "Tint rest intervals on the progress bar with a light-green to light-yellow gradient.");
+        // EzAudioVisualiser
+        public static readonly LocalisableString AUDIO_VISUALISER_BAR_WIDTH_LABEL = new EzLocalizationManager.EzLocalisableString("单柱宽度", "Bar Width");
+        public static readonly LocalisableString AUDIO_VISUALISER_BAR_WIDTH_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("单根柱体的像素宽度", "Pixel width of each bar.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_TOTAL_HEIGHT_LABEL = new EzLocalizationManager.EzLocalisableString("总高度", "Total Height");
+        public static readonly LocalisableString AUDIO_VISUALISER_TOTAL_HEIGHT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("柱状图的最大像素高度（满振幅时的总高度）", "Maximum pixel height of the bar chart at full amplitude.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_BAR_COUNT_LABEL = new EzLocalizationManager.EzLocalisableString("柱数量", "Bar Count");
+        public static readonly LocalisableString AUDIO_VISUALISER_BAR_COUNT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("平底柱状图使用的柱体数量", "Number of bars in the flat-bottom bar chart.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_SENSITIVITY_LABEL = new EzLocalizationManager.EzLocalisableString("灵敏度", "Sensitivity");
+        public static readonly LocalisableString AUDIO_VISUALISER_SENSITIVITY_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("音频幅度增益，数值越大柱状图对音频越灵敏", "Amplitude gain; higher values make the chart more sensitive to audio.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_LAYOUT_LABEL = new EzLocalizationManager.EzLocalisableString("布局", "Layout");
+        public static readonly LocalisableString AUDIO_VISUALISER_LAYOUT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("柱状图的频率排列布局", "Frequency arrangement layout of the bar chart.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_ALPHA_LABEL = new EzLocalizationManager.EzLocalisableString("柱体透明度", "Bar Alpha");
+        public static readonly LocalisableString AUDIO_VISUALISER_ALPHA_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("柱体的不透明度，0 为全透明，1 为不透明", "Opacity of the bars. 0 is fully transparent, 1 is fully opaque.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_COLOUR_TOP_LABEL = new EzLocalizationManager.EzLocalisableString("顶部颜色", "Colour Top");
+        public static readonly LocalisableString AUDIO_VISUALISER_COLOUR_TOP_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("柱体顶部的颜色（渐变上端）", "Colour of the top of the bars (top of the gradient).");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_COLOUR_BOTTOM_LABEL = new EzLocalizationManager.EzLocalisableString("底部颜色", "Colour Bottom");
+        public static readonly LocalisableString AUDIO_VISUALISER_COLOUR_BOTTOM_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("柱体底部的颜色（渐变下端）", "Colour of the bottom of the bars (bottom of the gradient).");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_STYLE_LABEL = new EzLocalizationManager.EzLocalisableString("显示样式", "Display Style");
+        public static readonly LocalisableString AUDIO_VISUALISER_STYLE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("柱状图或平滑曲线（线条+填充底部）", "Solid bars or a smooth curve (line + filled bottom).");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_SOLID_HEADER = new EzLocalizationManager.EzLocalisableString("—— 柱状图参数 ——", "— Solid Bars —");
+        public static readonly LocalisableString AUDIO_VISUALISER_CURVE_HEADER = new EzLocalizationManager.EzLocalisableString("—— 曲线参数 ——", "— Curve —");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_TOTAL_WIDTH_LABEL = new EzLocalizationManager.EzLocalisableString("元件总宽度", "Total Width");
+        public static readonly LocalisableString AUDIO_VISUALISER_TOTAL_WIDTH_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("曲线元件的水平总宽度（像素）", "Total horizontal width of the curve in pixels.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_POINT_COUNT_LABEL = new EzLocalizationManager.EzLocalisableString("位点数", "Point Count");
+        public static readonly LocalisableString AUDIO_VISUALISER_POINT_COUNT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("曲线被分割的位点数量（间距=总宽/(n-1)）", "Number of points along the curve (spacing = width/(n-1)).");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_LINE_THICKNESS_LABEL = new EzLocalizationManager.EzLocalisableString("线宽", "Line Thickness");
+        public static readonly LocalisableString AUDIO_VISUALISER_LINE_THICKNESS_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("曲线描边线条的宽度", "Width of the curve stroke line.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_EDGE_FADE_LABEL = new EzLocalizationManager.EzLocalisableString("端点衰减", "Edge Fade");
+        public static readonly LocalisableString AUDIO_VISUALISER_EDGE_FADE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("在左右两端各追加恒为 0 的虚拟位点数量（占真实位点数的比例，0=关闭）；真实频段保持不变", "Append zero-valued virtual points at each edge as a fraction of the real point count (0 = disabled); the real segment stays unchanged.");
     }
 }

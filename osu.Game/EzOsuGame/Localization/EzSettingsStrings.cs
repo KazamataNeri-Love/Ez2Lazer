@@ -505,6 +505,16 @@ namespace osu.Game.EzOsuGame.Localization
             "When enabled, pressing gameplay keys for the current mode also triggers skip during skippable periods."
             + "\nUses your current ruleset/variant key bindings (for example, mania key count bindings).");
 
+        public static readonly LocalisableString PREVIEW_FROM_START = new EzLocalizationManager.EzLocalisableString(
+            "启用音频预览从头播放音乐",
+            "Play preview audio from the start");
+
+        public static readonly LocalisableString PREVIEW_FROM_START_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "开启后，选歌界面选中谱面卡片时，音频预览将从歌曲开头开始播放，"
+            + "\n而非从谱面设定的预览时间点开始播放。",
+            "When enabled, selecting a beatmap card in song select will play the preview audio"
+            + "\nfrom the beginning of the track instead of the beatmap's specified preview time.");
+
         // public static readonly LocalisableString SKIP_EMPTY_EDGE_COLUMNS = new EzLocalizationManager.EzLocalisableString("跳过空边缘列", "Skip Empty Edge Columns");
         //
         // public static readonly LocalisableString SKIP_EMPTY_EDGE_COLUMNS_TOOLTIP = new EzLocalizationManager.EzLocalisableString(

@@ -54,6 +54,11 @@ namespace osu.Game.EzOsuGame.Audio
         /// </summary>
         public double? OverridePreviewStartTime { get; set; }
 
+        /// <summary>
+        /// 当为 true 时，预览从音频开头 (0ms) 开始播放，忽略 Metadata.PreviewTime。
+        /// </summary>
+        public bool PreviewFromStart { get; set; }
+
         private bool previewMainAudioAvailable;
         private bool previewHitSoundsEnabled;
         private bool previewStoryboardEnabled;
@@ -170,7 +175,9 @@ namespace osu.Game.EzOsuGame.Audio
         {
             try
             {
-                playback.PreviewStartTime = OverridePreviewStartTime ?? beatmap.BeatmapInfo.Metadata.PreviewTime;
+                playback.PreviewStartTime = PreviewFromStart
+                    ? 0
+                    : OverridePreviewStartTime ?? beatmap.BeatmapInfo.Metadata.PreviewTime;
 
                 if (playback.PreviewStartTime < 0 || playback.PreviewStartTime > (currentTrack?.Length ?? 0))
                 {
@@ -619,8 +626,10 @@ namespace osu.Game.EzOsuGame.Audio
             playback.ResetPlaybackProgress();
             playback.ResetLogicalClock(playback.PreviewStartTime, Time.Current);
 
+            // PreviewFromStart 模式下，每次循环也 seek 回起点。
+            double seekTarget = PreviewFromStart ? 0 : playback.PreviewStartTime;
             currentTrack.Volume.Value = 1f;
-            currentTrack.Seek(playback.PreviewStartTime);
+            currentTrack.Seek(seekTarget);
         }
 
         private void triggerHitSound(ScheduledHitSound scheduled)

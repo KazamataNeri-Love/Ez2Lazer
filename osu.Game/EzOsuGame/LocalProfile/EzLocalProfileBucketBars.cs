@@ -46,14 +46,32 @@ namespace osu.Game.EzOsuGame.LocalProfile
         }
 
         public static EzLocalProfileBucketBars FromStarPlayCounts(IEnumerable<EzLocalProfileStarPlayCount> stars) =>
-            new EzLocalProfileBucketBars(
-                stars.Select(s => (s.StarBucket, s.Count)),
-                bucket => $"{bucket}★–{bucket + 1}★");
+            createFixedBuckets(stars.Select(s => (s.StarBucket, s.Count)), "★");
 
         public static EzLocalProfileBucketBars FromXxyPlayCounts(IEnumerable<EzLocalProfileXxyPlayCount> plays) =>
-            new EzLocalProfileBucketBars(
-                plays.Select(s => (s.StarBucket, s.Count)),
-                bucket => $"{bucket}xxy–{bucket + 1}xxy");
+            createFixedBuckets(plays.Select(s => (s.StarBucket, s.Count)), "xxy");
+
+        /// <summary>
+        /// 常驻 11 个星级分类桶（0-1…9-10、10+），局数为 0 的桶也显示；官方星与 xxy 星同规则。
+        /// </summary>
+        private static EzLocalProfileBucketBars createFixedBuckets(IEnumerable<(int bucket, int count)> plays, string suffix)
+        {
+            var list = plays.ToList();
+            var buckets = new List<(int bucket, int count)>();
+
+            for (int b = 0; b <= 10; b++)
+            {
+                int c = b < 10
+                    ? list.Where(p => p.bucket == b).Sum(p => p.count)
+                    : list.Where(p => p.bucket >= 10).Sum(p => p.count);
+
+                buckets.Add((b, c));
+            }
+
+            return new EzLocalProfileBucketBars(
+                buckets,
+                bucket => bucket == 10 ? $"10{suffix}+" : $"{bucket}{suffix}–{bucket + 1}{suffix}");
+        }
 
         private partial class BucketBarRow : Container
         {

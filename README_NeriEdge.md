@@ -88,12 +88,10 @@
 
 | 组件 | 说明 |
 |---|---|
-| **EzHUDComboCounterPlus** | 增强版 Combo 计数器，支持更多自定义样式 |
 | **Default300GRateCounter** | 默认皮肤 300G 率计算器 — 计算 Perfect/Great 比率 |
 | **Legacy300GRateCounter** | Legacy 皮肤 300G 率计算器 — 使用 Legacy 字体显示 |
 
 **涉及文件：**
-- `osu.Game.Rulesets.Mania/EzMania/HUD/EzHUDComboCounterPlus.cs`
 - `osu.Game/Screens/Play/HUD/Default300GRateCounter.cs`
 - `osu.Game/Skinning/Legacy300GRateCounter.cs`
 

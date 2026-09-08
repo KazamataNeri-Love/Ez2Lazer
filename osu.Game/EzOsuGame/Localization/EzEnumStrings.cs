@@ -55,5 +55,12 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly LocalisableString LOGO_VIS_DOTS = new EzLocalizationManager.EzLocalisableString("圆点", "Dots");
         public static readonly LocalisableString LOGO_VIS_NET = new EzLocalizationManager.EzLocalisableString("网状", "Net");
         public static readonly LocalisableString LOGO_VIS_OFF = new EzLocalizationManager.EzLocalisableString("关闭", "Off");
+
+        public static readonly LocalisableString AUDIO_VIS_LEFT = new EzLocalizationManager.EzLocalisableString("左侧（低频→高频）", "Left (low → high)");
+        public static readonly LocalisableString AUDIO_VIS_SIDE = new EzLocalizationManager.EzLocalisableString("两侧（两侧高中间低）", "Side (edges high, centre low)");
+        public static readonly LocalisableString AUDIO_VIS_CENTER = new EzLocalizationManager.EzLocalisableString("居中（中间高两侧低）", "Center (centre high, edges low)");
+
+        public static readonly LocalisableString AUDIO_VIS_STYLE_SOLID = new EzLocalizationManager.EzLocalisableString("柱状图", "Solid Bars");
+        public static readonly LocalisableString AUDIO_VIS_STYLE_CURVE = new EzLocalizationManager.EzLocalisableString("曲线", "Curve");
     }
 }

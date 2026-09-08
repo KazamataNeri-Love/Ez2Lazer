@@ -184,6 +184,8 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
                 if (rulesetId == EzLocalProfileConstants.OSU_RULESET_ID)
                     accumulateStdAttr(result, beatmap, score);
+
+                accumulateBeatmap(result, rulesetId, beatmap, pp, score.Rank);
             }
 
             return byUser;
@@ -401,6 +403,32 @@ namespace osu.Game.EzOsuGame.LocalProfile
             bool highGrade = isHighGrade(score.Rank);
             addStd(result, EzLocalProfileStdAttr.ApproachRate, roundAttr(difficulty.ApproachRate), highGrade);
             addStd(result, EzLocalProfileStdAttr.CircleSize, roundAttr(difficulty.CircleSize), highGrade);
+        }
+
+        /// <summary>
+        /// 累计每谱面的最佳 PP 与游玩次数，供最优PP/最多游玩榜单使用。
+        /// </summary>
+        private static void accumulateBeatmap(EzLocalProfileAggregationResult result, int rulesetId, BeatmapInfo beatmap, double pp, ScoreRank rank)
+        {
+            if (!result.BeatmapAggregates.TryGetValue(rulesetId, out var byBeatmap))
+                result.BeatmapAggregates[rulesetId] = byBeatmap = new Dictionary<string, EzLocalProfileAggregationResult.MutableBeatmapAggregate>();
+
+            string key = beatmap.ID.ToString();
+
+            if (!byBeatmap.TryGetValue(key, out var agg))
+                byBeatmap[key] = agg = new EzLocalProfileAggregationResult.MutableBeatmapAggregate
+                {
+                    BeatmapId = beatmap.ID,
+                    BeatmapName = beatmap.ToString(),
+                };
+
+            agg.PlayCount++;
+
+            if (pp > agg.BestPp)
+            {
+                agg.BestPp = pp;
+                agg.BestPpRank = rank;
+            }
         }
 
         private static void addStd(EzLocalProfileAggregationResult result, EzLocalProfileStdAttr attr, double value, bool highGrade)

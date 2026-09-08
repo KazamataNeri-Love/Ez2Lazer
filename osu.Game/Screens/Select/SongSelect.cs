@@ -177,6 +177,8 @@ namespace osu.Game.Screens.Select
         private Bindable<bool> acrylicUiEnabled = null!;
         private Bindable<bool> showConvertedBeatmaps = null!;
         private Bindable<KeySoundPreviewMode> keySoundPreview = null!;
+        private Bindable<bool> previewFromStart = null!;
+        private BeatmapInfo? lastPreviewBeatmapInfo;
         private EzPreviewTrackManager ezPreviewManager = null!;
 
         private EzBeatmapPreviewOverlay ezBeatmapPreviewOverlay = null!;
@@ -360,6 +362,7 @@ namespace osu.Game.Screens.Select
             });
 
             keySoundPreview = ezConfig.GetBindable<KeySoundPreviewMode>(Ez2Setting.KeySoundPreviewMode);
+            previewFromStart = ezConfig.GetBindable<bool>(Ez2Setting.PreviewFromStart);
             showConvertedBeatmaps = config.GetBindable<bool>(OsuSetting.ShowConvertedBeatmaps);
         }
 
@@ -446,6 +449,12 @@ namespace osu.Game.Screens.Select
                 if (ShowOsuLogo)
                     logo?.FadeTo(v.NewValue == Visibility.Visible ? 0f : 1f, 200, Easing.OutQuint);
             });
+
+            // 必须在 BindValueChanged(..., true) 之前初始化音频标识，
+            // 否则首次触发 ensureTrackLooping 时 lastPreviewBeatmapInfo 为 null，
+            // 导致音频被错误地 seek(0)。
+            if (previewFromStart.Value && !Beatmap.IsDefault)
+                lastPreviewBeatmapInfo = Beatmap.Value.BeatmapInfo as BeatmapInfo;
 
             keySoundPreview.BindValueChanged(e =>
             {
@@ -602,12 +611,48 @@ namespace osu.Game.Screens.Select
 
         private void ensureTrackLooping(IWorkingBeatmap beatmap, TrackChangeDirection changeDirection)
         {
+            // 使用 BeatmapInfo.AudioEquals 判断音频是否真正改变（原理同 MusicController.changeBeatmap）。
+            // 首次进入时 lastPreviewBeatmapInfo == null → audioChanged = true（需要初始设置）。
+            // 同 Set 切难度时 AudioEquals 返回 true → audioChanged = false（不中断）。
+            // 不同 Set 且不同音频 → AudioEquals 返回 false → audioChanged = true（seek 到 0）。
+            var currentBeatmapInfo = beatmap.BeatmapInfo as BeatmapInfo;
+            bool audioChanged = lastPreviewBeatmapInfo == null
+                                || currentBeatmapInfo == null
+                                || !lastPreviewBeatmapInfo.AudioEquals(currentBeatmapInfo);
+
+            lastPreviewBeatmapInfo = currentBeatmapInfo;
+
+            // 音频不变时，用当前轨道位置覆盖预览起点，使 EzPreviewTrackManager
+            // 重建调度表（不同难度的 HitObject 可能不同）但不 Seek 轨道。
+            if (!audioChanged && previewFromStart.Value)
+            {
+                ezPreviewManager.OverridePreviewStartTime = beatmap.Track.CurrentTime;
+                ezPreviewManager.PreviewFromStart = false;
+            }
+            else
+            {
+                ezPreviewManager.OverridePreviewStartTime = null;
+                ezPreviewManager.PreviewFromStart = previewFromStart.Value;
+            }
+
             if (!ezPreviewManager.StartPreview(beatmap) && keySoundPreview.Value == 0)
             {
                 ezPreviewManager.StopPreview();
             }
 
             beatmap.PrepareTrackForPreview(true);
+
+            // PreviewFromStart 开启时：
+            //  - RestartPoint 始终设为 0，确保音频自然播放结束后下次循环从开头开始。
+            //  - Seek(0) 仅在音频真正改变时执行，避免中断正在流畅播放的共享 Track。
+            if (previewFromStart.Value)
+            {
+                beatmap.Track.RestartPoint = 0;
+                beatmap.Track.Looping = true;
+
+                if (audioChanged && beatmap.Track.IsRunning)
+                    beatmap.Track.Seek(0);
+            }
         }
 
         #endregion

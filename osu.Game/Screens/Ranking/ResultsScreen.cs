@@ -637,6 +637,9 @@ namespace osu.Game.Screens.Ranking
             // expanded statistics use their own OsuScrollContainer, collapsed list scrolls horizontally.
             protected override bool OnScroll(ScrollEvent e) => !e.ControlPressed && !e.AltPressed && !e.ShiftPressed && !e.SuperPressed;
 
+            // 结算界面的外层容器仅用于保证最小内容高度，不应被用户拖动（否则会把排行榜/左侧卡片一起垂直滚动）。
+            protected override bool OnDragStart(DragStartEvent e) => false;
+
             public VerticalScrollContainer()
             {
                 Masking = false;

@@ -90,4 +90,25 @@ namespace osu.Game.EzOsuGame.Configuration
         [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.LOGO_VIS_OFF))]
         Off,
     }
+
+    public enum EzAudioVisualiserLayout
+    {
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.AUDIO_VIS_LEFT))]
+        Left,
+
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.AUDIO_VIS_SIDE))]
+        Side,
+
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.AUDIO_VIS_CENTER))]
+        Center,
+    }
+
+    public enum EzAudioVisualiserStyle
+    {
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.AUDIO_VIS_STYLE_SOLID))]
+        Solid,
+
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.AUDIO_VIS_STYLE_CURVE))]
+        Curve,
+    }
 }

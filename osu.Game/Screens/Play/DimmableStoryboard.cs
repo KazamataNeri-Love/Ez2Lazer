@@ -25,6 +25,12 @@ namespace osu.Game.Screens.Play
     {
         public Container OverlayLayerContainer { get; private set; }
 
+        /// <summary>
+        /// Exposes the dim level bindable from <see cref="UserDimContainer"/> for external
+        /// layers (e.g. background overlay) to synchronise with.
+        /// </summary>
+        public Bindable<double> DimLevelSource => UserDimLevel;
+
         private readonly Storyboard storyboard;
         private readonly IReadOnlyList<Mod> mods;
 

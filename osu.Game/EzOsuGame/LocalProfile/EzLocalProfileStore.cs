@@ -75,6 +75,8 @@ namespace osu.Game.EzOsuGame.LocalProfile
                         StarPlayCounts = readStarPlayCounts(connection),
                         XxyPlayCounts = readXxyPlayCounts(connection),
                         StdAttrAffinities = readStdAttrAffinities(connection),
+                        TopPpScores = readTopPpScores(connection),
+                        TopPlayedBeatmaps = readTopPlayedBeatmaps(connection),
                     };
                 }
                 catch (Exception ex)
@@ -164,6 +166,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
             {
                 ensureInitialised();
                 using var connection = openConnection();
+                // 返回全量成绩（含同谱面多次游玩），供详情卡聚合 max/min/avg；列表按谱面去重在选择器层完成。
                 return readDrillScores(connection, rulesetId, usernameFilter);
             }
         }
@@ -280,6 +283,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 setMeta(connection, meta_content_version, CONTENT_VERSION.ToString(CultureInfo.InvariantCulture));
                 setMeta(connection, "last_computed_at", result.ComputedAt.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture));
                 setMeta(connection, "included_usernames_json", JsonSerializer.Serialize(result.IncludedUsernames.ToList()));
+                writeLeaderboardMeta(connection, result);
 
                 foreach (var (rulesetId, stats) in result.RulesetStats)
                 {
@@ -499,6 +503,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                     setMeta(connection, meta_content_version, CONTENT_VERSION.ToString(CultureInfo.InvariantCulture));
                 setMeta(connection, "last_computed_at", merged.ComputedAt.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture));
                 setMeta(connection, "included_usernames_json", JsonSerializer.Serialize(included));
+                writeLeaderboardMeta(connection, merged);
 
                 transaction.Commit();
             }
@@ -1238,6 +1243,75 @@ namespace osu.Game.EzOsuGame.LocalProfile
         private static string pullOffsetKey(EzLocalProfileOnlinePullKind kind, int rulesetId) => kind == EzLocalProfileOnlinePullKind.Best
             ? $"online_bp_offset_{rulesetId}"
             : $"online_mp_offset_{rulesetId}";
+
+        /// <summary>
+        /// 把最优PP/最多游玩榜单序列化到 meta（从聚合结果的每谱面数据提取 Top N）。
+        /// </summary>
+        private static void writeLeaderboardMeta(SqliteConnection connection, EzLocalProfileAggregationResult result)
+        {
+            const int top_count = 10;
+
+            var topPp = new List<EzLocalProfileTopPpScore>();
+            var topPlayed = new List<EzLocalProfileTopPlayedBeatmap>();
+
+            foreach (var (rulesetId, byBeatmap) in result.BeatmapAggregates)
+            {
+                foreach (var agg in byBeatmap.Values)
+                {
+                    if (agg.BestPp > 0)
+                        topPp.Add(new EzLocalProfileTopPpScore(rulesetId, agg.BeatmapId, agg.BeatmapName, agg.BestPp, agg.BestPpRank));
+
+                    if (agg.PlayCount > 0)
+                        topPlayed.Add(new EzLocalProfileTopPlayedBeatmap(rulesetId, agg.BeatmapId, agg.BeatmapName, agg.PlayCount));
+                }
+            }
+
+            // 每规则集各取 Top N（避免 mania 成绩过多挤掉其他规则集）。
+            setMeta(connection, "top_pp_scores_json",
+                JsonSerializer.Serialize(topPp
+                    .GroupBy(s => s.RulesetId)
+                    .SelectMany(g => g.OrderByDescending(s => s.Pp).Take(top_count))
+                    .ToList()));
+            setMeta(connection, "top_played_beatmaps_json",
+                JsonSerializer.Serialize(topPlayed
+                    .GroupBy(s => s.RulesetId)
+                    .SelectMany(g => g.OrderByDescending(s => s.PlayCount).Take(top_count))
+                    .ToList()));
+        }
+
+        private static IReadOnlyList<EzLocalProfileTopPpScore> readTopPpScores(SqliteConnection connection)
+        {
+            string? json = tryGetMeta(connection, "top_pp_scores_json");
+            if (string.IsNullOrEmpty(json))
+                return Array.Empty<EzLocalProfileTopPpScore>();
+
+            try
+            {
+                return JsonSerializer.Deserialize<List<EzLocalProfileTopPpScore>>(json) ?? new List<EzLocalProfileTopPpScore>();
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[EzLocalProfile] Failed to parse top PP scores: {ex.Message}", Ez2ConfigManager.LOGGER_NAME);
+                return Array.Empty<EzLocalProfileTopPpScore>();
+            }
+        }
+
+        private static IReadOnlyList<EzLocalProfileTopPlayedBeatmap> readTopPlayedBeatmaps(SqliteConnection connection)
+        {
+            string? json = tryGetMeta(connection, "top_played_beatmaps_json");
+            if (string.IsNullOrEmpty(json))
+                return Array.Empty<EzLocalProfileTopPlayedBeatmap>();
+
+            try
+            {
+                return JsonSerializer.Deserialize<List<EzLocalProfileTopPlayedBeatmap>>(json) ?? new List<EzLocalProfileTopPlayedBeatmap>();
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"[EzLocalProfile] Failed to parse top played beatmaps: {ex.Message}", Ez2ConfigManager.LOGGER_NAME);
+                return Array.Empty<EzLocalProfileTopPlayedBeatmap>();
+            }
+        }
 
         private static void setMeta(SqliteConnection connection, string key, string value)
         {

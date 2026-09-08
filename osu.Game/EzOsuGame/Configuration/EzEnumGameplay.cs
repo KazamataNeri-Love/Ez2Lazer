@@ -39,16 +39,16 @@ namespace osu.Game.EzOsuGame.Configuration
         LR2_HD = 4,
 
         [Description("Raja Normal")]
-        Raja_NM = 5,
+        Raja_NM = 6,
 
         [Description("Malody E Judge")]
-        Malody_E = 6,
+        Malody_E = 8,
 
         [Description("Malody B Judge")]
-        Malody_B = 7,
+        Malody_B = 9,
 
         [Description("")]
-        Classic = 8,
+        Classic = 10,
     }
 
     public enum EzEnumHealthMode
