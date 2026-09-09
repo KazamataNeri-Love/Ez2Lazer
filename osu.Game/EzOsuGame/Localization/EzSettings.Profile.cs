@@ -185,6 +185,9 @@ namespace osu.Game.EzOsuGame.Localization
                 "暂无该侧清除记录。请重新计算成绩分析。",
                 "No clear evidence for this side yet. Recompute Score Analysis.");
 
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DAN_CELL_CLEARS =
+            new EzLocalizationManager.EzLocalisableString("清除", "Clears");
+
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DAN_HEURISTIC_HINT =
             new EzLocalizationManager.EzLocalisableString(
                 "MSD→Dan 近似，非 LeoBlack",
