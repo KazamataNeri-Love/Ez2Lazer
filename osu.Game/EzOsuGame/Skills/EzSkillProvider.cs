@@ -38,16 +38,34 @@ namespace osu.Game.EzOsuGame.Skills
             => store.TryGetBeatmapSkill(beatmapHash, EzSkillIds.Msd(axisId), out value);
 
         public IReadOnlyDictionary<string, double> GetPlayerSsr(string username, int keyCount)
-            => store.GetPlayerSkills(username, keyCount, EzSkillSystems.PLAYER_SSR);
+            => GetPlayerSsrSnapshot(username, keyCount).Values;
 
         public EzPlayerSsrSnapshot GetPlayerSsrSnapshot(string username, int keyCount)
-            => store.GetPlayerSsrSnapshot(username, keyCount);
+        {
+            var snapshot = store.GetPlayerSsrSnapshot(username, keyCount);
+            if (snapshot.Values.Count > 0 || !EzLocalProfileConstants.IsGuestUsername(username))
+                return snapshot;
+
+            return store.GetPlayerSsrSnapshot(EzLocalProfileConstants.LEGACY_UNKNOWN_USERNAME, keyCount);
+        }
 
         public IReadOnlyList<int> GetPlayerSsrKeyCounts(string username)
-            => store.GetPlayerSsrKeyCounts(username);
+        {
+            var keys = store.GetPlayerSsrKeyCounts(username);
+            if (keys.Count > 0 || !EzLocalProfileConstants.IsGuestUsername(username))
+                return keys;
+
+            return store.GetPlayerSsrKeyCounts(EzLocalProfileConstants.LEGACY_UNKNOWN_USERNAME);
+        }
 
         public IReadOnlyList<EzPlayerSkillHistoryPoint> GetPlayerSkillHistory(string username, int keyCount, string skillId, int maxPoints = 64)
-            => store.GetPlayerSkillHistory(username, keyCount, skillId, maxPoints);
+        {
+            var history = store.GetPlayerSkillHistory(username, keyCount, skillId, maxPoints);
+            if (history.Count > 0 || !EzLocalProfileConstants.IsGuestUsername(username))
+                return history;
+
+            return store.GetPlayerSkillHistory(EzLocalProfileConstants.LEGACY_UNKNOWN_USERNAME, keyCount, skillId, maxPoints);
+        }
 
         public EzDanEstimate? GetDan(string username, int keyCount, string side)
             => store.GetDanEstimate(username, keyCount, side);
@@ -60,10 +78,30 @@ namespace osu.Game.EzOsuGame.Skills
 
         /// <summary>Dan clear evidence (sqlite). Empty when local-profile store unset.</summary>
         public IReadOnlyList<EzDanClearEvidenceRow> GetDanClears(string username, int? keyCount = null, string? side = null, int? algorithmVersion = null)
-            => localProfileStore?.GetDanClears(username, keyCount, side, algorithmVersion) ?? [];
+        {
+            var rows = localProfileStore?.GetDanClears(username, keyCount, side, algorithmVersion) ?? [];
+            if (rows.Count > 0 || !EzLocalProfileConstants.IsGuestUsername(username) || localProfileStore == null)
+                return rows;
+
+            return localProfileStore.GetDanClears(
+                EzLocalProfileConstants.LEGACY_UNKNOWN_USERNAME,
+                keyCount,
+                side,
+                algorithmVersion);
+        }
 
         /// <summary>SSR axis play evidence (sqlite). Empty when local-profile store unset.</summary>
         public IReadOnlyList<EzAxisPlayEvidenceRow> GetAxisPlays(string username, int? keyCount = null, string? skillId = null, int? algorithmVersion = null)
-            => localProfileStore?.GetAxisPlays(username, keyCount, skillId, algorithmVersion) ?? [];
+        {
+            var rows = localProfileStore?.GetAxisPlays(username, keyCount, skillId, algorithmVersion) ?? [];
+            if (rows.Count > 0 || !EzLocalProfileConstants.IsGuestUsername(username) || localProfileStore == null)
+                return rows;
+
+            return localProfileStore.GetAxisPlays(
+                EzLocalProfileConstants.LEGACY_UNKNOWN_USERNAME,
+                keyCount,
+                skillId,
+                algorithmVersion);
+        }
     }
 }

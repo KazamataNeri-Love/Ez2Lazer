@@ -4,8 +4,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
+using osu.Framework.Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
@@ -30,8 +33,9 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
         private FillFlowContainer contentFlow = null!;
         private Container emptyStateContainer = null!;
-        private Container analysisSystemRow = null!;
+        private EzLocalProfileAnalysisSystemSelector analysisSystemSelector = null!;
         private OsuDropdown<string> playerDropdown = null!;
+        private CancellationTokenSource? contentLoadCts;
 
         [Resolved]
         private EzLocalProfileService profileService { get; set; } = null!;
@@ -41,6 +45,9 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
         [Resolved]
         private RulesetStore rulesets { get; set; } = null!;
+
+        [Resolved]
+        private IBindable<RulesetInfo> gameRuleset { get; set; } = null!;
 
         public EzLocalProfileOverlay()
             : base(OverlayColourScheme.Pink)
@@ -84,7 +91,8 @@ namespace osu.Game.EzOsuGame.LocalProfile
                                     Child = new Box
                                     {
                                         RelativeSizeAxes = Axes.Both,
-                                        Colour = ColourProvider.Background5,
+                                        // Match Insights section chrome so Background5 controls read as filled.
+                                        Colour = ColourProvider.Background4,
                                     }
                                 },
                                 new Container
@@ -119,21 +127,6 @@ namespace osu.Game.EzOsuGame.LocalProfile
                                                         Current = { BindTarget = ruleset }
                                                     }
                                                 },
-                                                analysisSystemRow = new Container
-                                                {
-                                                    RelativeSizeAxes = Axes.X,
-                                                    AutoSizeAxes = Axes.Y,
-                                                    Padding = new MarginPadding
-                                                    {
-                                                        Horizontal = HORIZONTAL_PADDING,
-                                                        Bottom = 10
-                                                    },
-                                                    Alpha = 0,
-                                                    Child = new EzLocalProfileAnalysisSystemSelector
-                                                    {
-                                                        Current = { BindTarget = analysisSystem }
-                                                    }
-                                                }
                                             }
                                         }
                                     }
@@ -175,6 +168,8 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
         private Drawable createPlayerFilterLayer()
         {
+            // Background4 parent (same as Insights section): dropdown + Ez/Track chips keep
+            // their own Background5 idle / hover colours and stay visible without restyling OsuDropdown.
             return new Container
             {
                 RelativeSizeAxes = Axes.X,
@@ -185,7 +180,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                     new Box
                     {
                         RelativeSizeAxes = Axes.Both,
-                        Colour = ColourProvider.Background5,
+                        Colour = ColourProvider.Background4,
                     },
                     new Container
                     {
@@ -197,7 +192,6 @@ namespace osu.Game.EzOsuGame.LocalProfile
                             Horizontal = HORIZONTAL_PADDING,
                             Vertical = 10
                         },
-                        // TopLeft on the horizontal flow axis so the label stays put when the menu grows.
                         Child = new FillFlowContainer
                         {
                             AutoSizeAxes = Axes.Both,
@@ -210,7 +204,6 @@ namespace osu.Game.EzOsuGame.LocalProfile
                                     Anchor = Anchor.TopLeft,
                                     Origin = Anchor.TopLeft,
                                     AutoSizeAxes = Axes.X,
-                                    // Match OsuDropdownHeader height so the label lines up with the closed control.
                                     Height = 40,
                                     Child = new OsuSpriteText
                                     {
@@ -226,7 +219,21 @@ namespace osu.Game.EzOsuGame.LocalProfile
                                     Origin = Anchor.TopLeft,
                                     Width = 280,
                                     Current = { BindTarget = selectedPlayer },
-                                }
+                                },
+                                new Container
+                                {
+                                    Anchor = Anchor.TopLeft,
+                                    Origin = Anchor.TopLeft,
+                                    AutoSizeAxes = Axes.X,
+                                    Height = 40,
+                                    Child = analysisSystemSelector = new EzLocalProfileAnalysisSystemSelector
+                                    {
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft,
+                                        Current = { BindTarget = analysisSystem },
+                                        Alpha = 0,
+                                    }
+                                },
                             }
                         }
                     }
@@ -238,7 +245,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
         {
             base.LoadComplete();
 
-            ruleset.Value = rulesets.GetRuleset(0) ?? rulesets.AvailableRulesets.First();
+            applyActiveRulesetOrDefault();
             ruleset.BindValueChanged(_ => Schedule(() =>
             {
                 updateAnalysisSystemVisibility();
@@ -261,7 +268,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
         private void updateAnalysisSystemVisibility()
         {
             bool mania = (ruleset.Value?.OnlineID ?? -1) == EzLocalProfileConstants.MANIA_RULESET_ID;
-            analysisSystemRow.Alpha = mania ? 1 : 0;
+            analysisSystemSelector.Alpha = mania ? 1 : 0;
 
             if (!mania && analysisSystem.Value != EzLocalProfileAnalysisSystem.Ez)
                 analysisSystem.Value = EzLocalProfileAnalysisSystem.Ez;
@@ -270,8 +277,27 @@ namespace osu.Game.EzOsuGame.LocalProfile
         protected override void PopIn()
         {
             base.PopIn();
+            applyActiveRulesetOrDefault();
             profileService.ReloadFromDisk();
-            refreshContent();
+        }
+
+        /// <summary>
+        /// Prefer the game's current ruleset when opening; fall back to osu! (id 0) if unavailable.
+        /// </summary>
+        private void applyActiveRulesetOrDefault()
+        {
+            RulesetInfo? preferred = null;
+            var active = gameRuleset.Value;
+
+            if (active != null)
+            {
+                preferred = rulesets.AvailableRulesets.FirstOrDefault(r => r.OnlineID == active.OnlineID)
+                            ?? rulesets.GetRuleset(active.OnlineID);
+            }
+
+            ruleset.Value = preferred
+                            ?? rulesets.GetRuleset(0)
+                            ?? rulesets.AvailableRulesets.First();
         }
 
         private void refreshPlayerDropdownItems(EzLocalProfileSnapshot archiveSnapshot)
@@ -279,7 +305,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
             var items = new List<string> { EzLocalProfileConstants.ALL_PLAYERS };
 
             foreach (string name in archiveSnapshot.IncludedUsernames
-                                                   .Where(n => !string.IsNullOrWhiteSpace(n))
+                                                   .Select(EzLocalProfileConstants.NormaliseUsername)
                                                    .Distinct(StringComparer.Ordinal)
                                                    .OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
             {
@@ -294,6 +320,11 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
         private void refreshContent()
         {
+            contentLoadCts?.Cancel();
+            contentLoadCts?.Dispose();
+            contentLoadCts = new CancellationTokenSource();
+            var token = contentLoadCts.Token;
+
             contentFlow.Clear();
             currentDrillScore.Value = null;
 
@@ -308,55 +339,131 @@ namespace osu.Game.EzOsuGame.LocalProfile
             emptyStateContainer.Hide();
 
             int rulesetId = ruleset.Value?.OnlineID ?? 0;
+            string player = selectedPlayer.Value;
             var rulesetStats = snapshot.RulesetStats.FirstOrDefault(s => s.RulesetId == rulesetId);
-            bool trackMode = rulesetId == EzLocalProfileConstants.MANIA_RULESET_ID
-                             && analysisSystem.Value == EzLocalProfileAnalysisSystem.Track;
+            bool mania = rulesetId == EzLocalProfileConstants.MANIA_RULESET_ID;
+            bool trackMode = mania && analysisSystem.Value == EzLocalProfileAnalysisSystem.Track;
 
             contentFlow.Add(new EzLocalProfileSection(
                 EzSettingsProfile.LOCAL_PROFILE_SECTION_CAREER,
                 new EzLocalProfileCareerBody(rulesetStats, snapshot.GradeCounts.Where(g => g.RulesetId == rulesetId))));
 
-            if (trackMode)
-            {
-                if (string.Equals(selectedPlayer.Value, EzLocalProfileConstants.ALL_PLAYERS, StringComparison.Ordinal))
-                {
-                    contentFlow.Add(new EzLocalProfileSection(
-                        EzSettingsProfile.LOCAL_PROFILE_SECTION_TRACK_INSIGHTS,
-                        new OsuSpriteText
-                        {
-                            RelativeSizeAxes = Axes.X,
-                            Text = EzSettingsProfile.LOCAL_PROFILE_TRACK_NEEDS_PLAYER,
-                            Font = OsuFont.GetFont(size: 14),
-                        }));
-
-                    contentFlow.Add(new EzLocalProfileSection(
-                        EzSettingsProfile.LOCAL_PROFILE_SECTION_TRACK_SKILLS,
-                        new OsuSpriteText
-                        {
-                            RelativeSizeAxes = Axes.X,
-                            Text = EzSettingsProfile.LOCAL_PROFILE_TRACK_NEEDS_PLAYER,
-                            Font = OsuFont.GetFont(size: 14),
-                        }));
-                }
-                else
-                {
-                    contentFlow.Add(new EzLocalProfileSection(
-                        EzSettingsProfile.LOCAL_PROFILE_SECTION_TRACK_INSIGHTS,
-                        new EzLocalProfileTrackInsightsBody(selectedPlayer.Value, currentDrillScore)));
-
-                    contentFlow.Add(new EzLocalProfileSection(
-                        EzSettingsProfile.LOCAL_PROFILE_SECTION_TRACK_SKILLS,
-                        new EzLocalProfileTrackSkillsBody(selectedPlayer.Value)));
-                }
-            }
-            else
+            if (!mania)
             {
                 contentFlow.Add(new EzLocalProfileSection(
                     EzSettingsProfile.LOCAL_PROFILE_SECTION_MODE_DATA,
                     new EzLocalProfileModeDataBody(snapshot, rulesetId)));
+
+                // Non-mania drill is usually small; still load off UI thread.
+                var drillHost = createDeferredSectionHost();
+                contentFlow.Add(new EzLocalProfileSection(EzSettingsProfile.LOCAL_PROFILE_SECTION_SCORE_DRILL, drillHost));
+                contentFlow.Add(new EzLocalProfileSection(
+                    EzSettingsProfile.LOCAL_PROFILE_SECTION_TRENDS,
+                    new EzLocalProfileScoreTrendPanel(currentDrillScore)));
+
+                beginDeferredDrillLoad(token, rulesetId, player, drillHost);
+                return;
             }
 
-            refreshDrillContent(snapshot, rulesetId);
+            var insightsHost = createDeferredSectionHost();
+            contentFlow.Add(new EzLocalProfileSection(EzSettingsProfile.LOCAL_PROFILE_SECTION_TRACK_INSIGHTS, insightsHost));
+
+            Container skillsOrModeHost;
+
+            if (trackMode)
+            {
+                skillsOrModeHost = createDeferredSectionHost();
+                contentFlow.Add(new EzLocalProfileSection(EzSettingsProfile.LOCAL_PROFILE_SECTION_TRACK_SKILLS, skillsOrModeHost));
+            }
+            else
+            {
+                skillsOrModeHost = new Container
+                {
+                    RelativeSizeAxes = Axes.X,
+                    AutoSizeAxes = Axes.Y,
+                    Child = new EzLocalProfileModeDataBody(snapshot, rulesetId),
+                };
+                contentFlow.Add(new EzLocalProfileSection(EzSettingsProfile.LOCAL_PROFILE_SECTION_MODE_DATA, skillsOrModeHost));
+            }
+
+            var drillHostMania = createDeferredSectionHost();
+            contentFlow.Add(new EzLocalProfileSection(EzSettingsProfile.LOCAL_PROFILE_SECTION_SCORE_DRILL, drillHostMania));
+            contentFlow.Add(new EzLocalProfileSection(
+                EzSettingsProfile.LOCAL_PROFILE_SECTION_TRENDS,
+                new EzLocalProfileScoreTrendPanel(currentDrillScore)));
+
+            Task.Run(() => profileService.LoadDrillScores(rulesetId, player), token).ContinueWith(task => Schedule(() =>
+            {
+                if (token.IsCancellationRequested || task.IsCanceled)
+                    return;
+
+                if (task.IsFaulted)
+                {
+                    insightsHost.Child = createLoadFailedHint();
+                    if (trackMode)
+                        skillsOrModeHost.Child = createLoadFailedHint();
+                    drillHostMania.Child = createLoadFailedHint();
+                    return;
+                }
+
+                var drills = task.GetResultSafely();
+
+                insightsHost.Child = new EzLocalProfileInsightsBody(player, currentDrillScore, drills);
+
+                if (trackMode)
+                    skillsOrModeHost.Child = new EzLocalProfileTrackSkillsBody(player, currentDrillScore, drills);
+
+                drillHostMania.Child = new EzLocalProfileScoreDrillPanel(currentDrillScore, drillSearchQuery, drills);
+            }), token);
+        }
+
+        private void beginDeferredDrillLoad(CancellationToken token, int rulesetId, string player, Container drillHost)
+        {
+            Task.Run(() => profileService.LoadDrillScores(rulesetId, player), token).ContinueWith(task => Schedule(() =>
+            {
+                if (token.IsCancellationRequested || task.IsCanceled)
+                    return;
+
+                if (task.IsFaulted)
+                {
+                    drillHost.Child = createLoadFailedHint();
+                    return;
+                }
+
+                drillHost.Child = new EzLocalProfileScoreDrillPanel(currentDrillScore, drillSearchQuery, task.GetResultSafely());
+            }), token);
+        }
+
+        private static Container createDeferredSectionHost() => new Container
+        {
+            RelativeSizeAxes = Axes.X,
+            AutoSizeAxes = Axes.Y,
+            Child = new Container
+            {
+                RelativeSizeAxes = Axes.X,
+                Height = 80,
+                Child = new LoadingSpinner
+                {
+                    Anchor = Anchor.Centre,
+                    Origin = Anchor.Centre,
+                    State = { Value = Visibility.Visible },
+                },
+            },
+        };
+
+        private static OsuSpriteText createLoadFailedHint() => new OsuSpriteText
+        {
+            RelativeSizeAxes = Axes.X,
+            Text = EzSettingsProfile.LOCAL_PROFILE_TRACK_EMPTY,
+            Font = OsuFont.GetFont(size: 14),
+        };
+
+        protected override void Dispose(bool isDisposing)
+        {
+            contentLoadCts?.Cancel();
+            contentLoadCts?.Dispose();
+            contentLoadCts = null;
+            base.Dispose(isDisposing);
         }
     }
 }

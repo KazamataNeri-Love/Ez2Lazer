@@ -16,7 +16,6 @@ namespace osu.Game.EzOsuGame.LocalProfile
 {
     /// <summary>
     /// Mania play-count bars grouped by key mode (bar portion of former <see cref="EzLocalProfileManiaOverview"/>).
-    /// 常驻显示白名单键数档位（含 0 次），行高/间距/标签宽与星级条状（<see cref="EzLocalProfileBucketBars"/>）一致以便两卡对齐。
     /// </summary>
     public partial class EzLocalProfileManiaKeyPlayBars : FillFlowContainer
     {
@@ -25,20 +24,26 @@ namespace osu.Game.EzOsuGame.LocalProfile
             RelativeSizeAxes = Axes.X;
             AutoSizeAxes = Axes.Y;
             Direction = FillDirection.Vertical;
-            Spacing = new Vector2(0, 8); // 与星级条状一致
+            Spacing = new Vector2(0, 6);
 
-            var byKey = keyStats.ToDictionary(k => k.KeyCount);
+            var ordered = keyStats.OrderBy(k => k.KeyCount).ToList();
 
-            // 常驻白名单全部档位（4k…18k，含 0 次）。
-            var displayedKeys = EzLocalProfileConstants.MANIA_DISPLAYED_KEY_COUNTS.OrderBy(k => k).ToList();
-
-            int maxPlays = displayedKeys.Max(k => byKey.TryGetValue(k, out var s) ? s.ScoreCount : 0);
-
-            foreach (int keyCount in displayedKeys)
+            if (ordered.Count == 0)
             {
-                int plays = byKey.TryGetValue(keyCount, out var key) ? key.ScoreCount : 0;
-                float ratio = maxPlays <= 0 ? 0 : (float)plays / maxPlays;
-                Add(new KeyPlayBarRow($"{keyCount}K", plays, ratio));
+                Add(new OsuSpriteText
+                {
+                    Text = EzSettingsProfile.LOCAL_PROFILE_NO_RULESET_DATA,
+                    Font = OsuFont.GetFont(size: 14),
+                });
+                return;
+            }
+
+            int maxPlays = ordered.Max(k => k.ScoreCount);
+
+            foreach (var key in ordered)
+            {
+                float ratio = maxPlays <= 0 ? 0 : (float)key.ScoreCount / maxPlays;
+                Add(new KeyPlayBarRow($"{key.KeyCount}K", key.ScoreCount, ratio));
             }
         }
 
@@ -47,27 +52,35 @@ namespace osu.Game.EzOsuGame.LocalProfile
             public KeyPlayBarRow(string label, int plays, float ratio)
             {
                 RelativeSizeAxes = Axes.X;
-                Height = 22;
+                Height = 20;
                 Padding = new MarginPadding { Horizontal = 4 };
 
                 Children = new Drawable[]
                 {
-                    new OsuSpriteText
-                    {
-                        Anchor = Anchor.CentreLeft,
-                        Origin = Anchor.CentreLeft,
-                        Text = label,
-                        Font = OsuFont.GetFont(size: 12, weight: FontWeight.Bold),
-                        Width = 72,
-                    },
+                    new LabelText(label),
                     new Container
                     {
                         RelativeSizeAxes = Axes.Both,
-                        Padding = new MarginPadding { Left = 80, Right = 56 },
+                        Padding = new MarginPadding { Left = 40, Right = 48 },
                         Child = new EzLocalProfileRoundedBar(ratio),
                     },
                     new CountText(plays),
                 };
+            }
+
+            private partial class LabelText : OsuSpriteText
+            {
+                public LabelText(string text)
+                {
+                    Anchor = Anchor.CentreLeft;
+                    Origin = Anchor.CentreLeft;
+                    Text = text;
+                    Font = OsuFont.GetFont(size: 12, weight: FontWeight.Bold);
+                    Width = 36;
+                }
+
+                [BackgroundDependencyLoader]
+                private void load(OverlayColourProvider colours) => Colour = EzLocalProfileColours.Plays(colours);
             }
 
             private partial class CountText : OsuSpriteText
@@ -81,7 +94,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 }
 
                 [BackgroundDependencyLoader]
-                private void load(OverlayColourProvider colours) => Colour = colours.Content2;
+                private void load(OverlayColourProvider colours) => Colour = EzLocalProfileColours.Numeric(colours);
             }
         }
     }

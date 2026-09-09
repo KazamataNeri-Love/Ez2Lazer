@@ -2,19 +2,25 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
+using osu.Framework.Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
-using osu.Framework.Graphics.Shapes;
+using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
 using osu.Game.Beatmaps;
+using osu.Game.Database;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
+using osu.Game.Graphics.UserInterface;
 using osu.Game.Overlays;
 using osu.Game.Rulesets;
 using osuTK;
@@ -22,12 +28,13 @@ using osuTK;
 namespace osu.Game.EzOsuGame.LocalProfile
 {
     /// <summary>
-    /// Track-mode Profile Insights: Key Split / Mod / BPM / PP + newest/oldest top plays.
+    /// Profile Insights (Mania Ez / Track): Key Split / Mod / BPM / PP + newest/oldest top plays.
     /// </summary>
-    public partial class EzLocalProfileTrackInsightsBody : FillFlowContainer
+    public partial class EzLocalProfileInsightsBody : FillFlowContainer
     {
         private readonly string username;
         private readonly Bindable<EzLocalProfileDrillScoreRow?>? selectDrillScore;
+        private readonly IReadOnlyList<EzLocalProfileDrillScoreRow>? preloadedDrillScores;
 
         private enum DetailKind
         {
@@ -43,7 +50,9 @@ namespace osu.Game.EzOsuGame.LocalProfile
         private Container detailContainer = null!;
         private FillFlowContainer playCardsFlow = null!;
         private OsuSpriteText emptyHint = null!;
+        private Container loadingHost = null!;
         private EzLocalProfileInsights? insights;
+        private CancellationTokenSource? rebuildCts;
 
         [Resolved]
         private EzLocalProfileService profileService { get; set; } = null!;
@@ -54,10 +63,17 @@ namespace osu.Game.EzOsuGame.LocalProfile
         [Resolved]
         private RulesetStore rulesets { get; set; } = null!;
 
-        public EzLocalProfileTrackInsightsBody(string username, Bindable<EzLocalProfileDrillScoreRow?>? selectDrillScore = null)
+        [Resolved]
+        private RealmAccess realm { get; set; } = null!;
+
+        public EzLocalProfileInsightsBody(
+            string username,
+            Bindable<EzLocalProfileDrillScoreRow?>? selectDrillScore = null,
+            IReadOnlyList<EzLocalProfileDrillScoreRow>? preloadedDrillScores = null)
         {
             this.username = username;
             this.selectDrillScore = selectDrillScore;
+            this.preloadedDrillScores = preloadedDrillScores;
 
             RelativeSizeAxes = Axes.X;
             AutoSizeAxes = Axes.Y;
@@ -75,6 +91,17 @@ namespace osu.Game.EzOsuGame.LocalProfile
                     RelativeSizeAxes = Axes.X,
                     Font = OsuFont.GetFont(size: 14),
                     Alpha = 0,
+                },
+                loadingHost = new Container
+                {
+                    RelativeSizeAxes = Axes.X,
+                    Height = 64,
+                    Child = new LoadingSpinner
+                    {
+                        Anchor = Anchor.Centre,
+                        Origin = Anchor.Centre,
+                        State = { Value = Visibility.Visible },
+                    },
                 },
                 summaryFlow = new FillFlowContainer
                 {
@@ -104,17 +131,62 @@ namespace osu.Game.EzOsuGame.LocalProfile
             rebuild();
         }
 
+        protected override void Dispose(bool isDisposing)
+        {
+            rebuildCts?.Cancel();
+            rebuildCts?.Dispose();
+            rebuildCts = null;
+            base.Dispose(isDisposing);
+        }
+
         private void rebuild()
         {
+            rebuildCts?.Cancel();
+            rebuildCts?.Dispose();
+            rebuildCts = new CancellationTokenSource();
+            var token = rebuildCts.Token;
+
             summaryFlow.Clear();
             detailContainer.Clear();
             playCardsFlow.Clear();
             openDetail = DetailKind.None;
+            emptyHint.Hide();
+            loadingHost.Show();
 
-            var rows = profileService.LoadDrillScores(EzLocalProfileConstants.MANIA_RULESET_ID, username);
-            var plays = EzLocalProfileInsightScoreBuilder.Build(rows, beatmapManager, rulesets);
-            insights = EzLocalProfileInsightsCalculator.Calculate(plays);
+            var localProfileService = profileService;
+            string localUsername = username;
+            var localPreloaded = preloadedDrillScores;
+            var localRealm = realm;
+            var localBeatmaps = beatmapManager;
+            var localRulesets = rulesets;
 
+            Task.Run(() =>
+            {
+                var rows = localPreloaded
+                           ?? localProfileService.LoadDrillScores(EzLocalProfileConstants.MANIA_RULESET_ID, localUsername);
+                var plays = EzLocalProfileInsightScoreBuilder.Build(rows, localBeatmaps, localRulesets, localRealm);
+                return EzLocalProfileInsightsCalculator.Calculate(plays);
+            }, token).ContinueWith(task => Schedule(() =>
+            {
+                if (token.IsCancellationRequested || task.IsCanceled)
+                    return;
+
+                loadingHost.Hide();
+
+                if (task.IsFaulted)
+                {
+                    emptyHint.Text = EzSettingsProfile.LOCAL_PROFILE_INSIGHTS_EMPTY;
+                    emptyHint.Show();
+                    return;
+                }
+
+                insights = task.GetResultSafely();
+                applyInsightsUi(insights);
+            }), token);
+        }
+
+        private void applyInsightsUi(EzLocalProfileInsights insights)
+        {
             if (insights.SampleSize == 0)
             {
                 emptyHint.Text = EzSettingsProfile.LOCAL_PROFILE_INSIGHTS_EMPTY;
@@ -430,6 +502,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
         {
             private readonly LocalisableString title;
             private readonly string value;
+            private EzLocalProfileHoverBox background = null!;
 
             public InsightChip(LocalisableString title, string value, Action action)
             {
@@ -445,13 +518,12 @@ namespace osu.Game.EzOsuGame.LocalProfile
             [BackgroundDependencyLoader]
             private void load(OverlayColourProvider colours)
             {
+                background = new EzLocalProfileHoverBox();
+                background.Configure(colours);
+
                 Children = new Drawable[]
                 {
-                    new Box
-                    {
-                        RelativeSizeAxes = Axes.Both,
-                        Colour = colours.Background5,
-                    },
+                    background,
                     new FillFlowContainer
                     {
                         AutoSizeAxes = Axes.Both,
@@ -470,10 +542,23 @@ namespace osu.Game.EzOsuGame.LocalProfile
                             {
                                 Text = value,
                                 Font = OsuFont.GetFont(size: 16, weight: FontWeight.Bold),
+                                Colour = EzLocalProfileColours.Numeric(colours),
                             },
                         }
                     }
                 };
+            }
+
+            protected override bool OnHover(HoverEvent e)
+            {
+                background.Refresh(true);
+                return base.OnHover(e);
+            }
+
+            protected override void OnHoverLost(HoverLostEvent e)
+            {
+                background.Refresh(false);
+                base.OnHoverLost(e);
             }
         }
 
@@ -481,6 +566,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
         {
             private readonly LocalisableString caption;
             private readonly EzLocalProfileInsightPlay play;
+            private EzLocalProfileHoverBox background = null!;
 
             public TopPlayCard(LocalisableString caption, EzLocalProfileInsightPlay play, Action action)
             {
@@ -495,15 +581,14 @@ namespace osu.Game.EzOsuGame.LocalProfile
             }
 
             [BackgroundDependencyLoader]
-            private void load(OverlayColourProvider colours)
+            private void load(OverlayColourProvider colours, OsuColour osuColours)
             {
+                background = new EzLocalProfileHoverBox();
+                background.Configure(colours);
+
                 Children = new Drawable[]
                 {
-                    new Box
-                    {
-                        RelativeSizeAxes = Axes.Both,
-                        Colour = colours.Background5,
-                    },
+                    background,
                     new FillFlowContainer
                     {
                         RelativeSizeAxes = Axes.X,
@@ -524,52 +609,84 @@ namespace osu.Game.EzOsuGame.LocalProfile
                                 RelativeSizeAxes = Axes.X,
                                 Text = string.IsNullOrEmpty(play.Artist) ? play.Title : $"{play.Artist} - {play.Title}",
                                 Font = OsuFont.GetFont(size: 13, weight: FontWeight.Bold),
+                                Colour = colours.Content1,
                             },
                             new TruncatingSpriteText
                             {
                                 RelativeSizeAxes = Axes.X,
-                                Text = $"{play.DifficultyName} · {EzLocalProfileFormat.FormatPp(play.Pp)}pp · {play.Rank}",
+                                Text = $"{play.DifficultyName} · {play.Rank}",
                                 Font = OsuFont.GetFont(size: 12),
-                                Colour = colours.Content1,
+                                Colour = EzLocalProfileColours.Meta(colours),
+                            },
+                            new OsuSpriteText
+                            {
+                                Text = $"{EzLocalProfileFormat.FormatPp(play.Pp)}pp",
+                                Font = OsuFont.GetFont(size: 12, weight: FontWeight.Bold),
+                                Colour = EzLocalProfileColours.Pp(osuColours),
                             },
                         }
                     }
                 };
             }
+
+            protected override bool OnHover(HoverEvent e)
+            {
+                background.Refresh(true);
+                return base.OnHover(e);
+            }
+
+            protected override void OnHoverLost(HoverLostEvent e)
+            {
+                background.Refresh(false);
+                base.OnHoverLost(e);
+            }
         }
 
         private partial class LabeledBarRow : Container
         {
+            private readonly OsuSpriteText labelText;
+            private readonly OsuSpriteText valueLabel;
+
             public LabeledBarRow(string label, string valueText, float ratio)
             {
                 RelativeSizeAxes = Axes.X;
                 Height = 22;
                 Padding = new MarginPadding { Horizontal = 4 };
 
+                labelText = new OsuSpriteText
+                {
+                    Anchor = Anchor.CentreLeft,
+                    Origin = Anchor.CentreLeft,
+                    Text = label,
+                    Font = OsuFont.GetFont(size: 12, weight: FontWeight.Bold),
+                    Width = 72,
+                };
+                valueLabel = new OsuSpriteText
+                {
+                    Anchor = Anchor.CentreRight,
+                    Origin = Anchor.CentreRight,
+                    Text = valueText,
+                    Font = OsuFont.GetFont(size: 12, weight: FontWeight.Bold),
+                };
+
                 Children = new Drawable[]
                 {
-                    new OsuSpriteText
-                    {
-                        Anchor = Anchor.CentreLeft,
-                        Origin = Anchor.CentreLeft,
-                        Text = label,
-                        Font = OsuFont.GetFont(size: 12, weight: FontWeight.Bold),
-                        Width = 72,
-                    },
+                    labelText,
                     new Container
                     {
                         RelativeSizeAxes = Axes.Both,
                         Padding = new MarginPadding { Left = 80, Right = 96 },
                         Child = new EzLocalProfileRoundedBar(ratio),
                     },
-                    new OsuSpriteText
-                    {
-                        Anchor = Anchor.CentreRight,
-                        Origin = Anchor.CentreRight,
-                        Text = valueText,
-                        Font = OsuFont.GetFont(size: 12, weight: FontWeight.Bold),
-                    },
+                    valueLabel,
                 };
+            }
+
+            [BackgroundDependencyLoader]
+            private void load(OverlayColourProvider colours)
+            {
+                labelText.Colour = EzLocalProfileColours.Plays(colours);
+                valueLabel.Colour = EzLocalProfileColours.Numeric(colours);
             }
         }
     }

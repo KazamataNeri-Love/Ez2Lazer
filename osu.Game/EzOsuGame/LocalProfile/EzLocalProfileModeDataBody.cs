@@ -2,10 +2,12 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Sprites;
 using osu.Framework.Localisation;
 using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Localization;
@@ -59,11 +61,12 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
             Add(lineSection);
 
-            var barColumns = new List<Drawable>();
-
-            barColumns.Add(createBarColumn(
-                EzSettingsProfile.LOCAL_PROFILE_SECTION_STARS,
-                EzLocalProfileBucketBars.FromStarPlayCounts(snapshot.StarPlayCounts.Where(s => s.RulesetId == rulesetId))));
+            var barColumns = new List<Drawable>
+            {
+                createBarColumn(
+                    EzSettingsProfile.LOCAL_PROFILE_SECTION_STARS,
+                    EzLocalProfileBucketBars.FromStarPlayCounts(snapshot.StarPlayCounts.Where(s => s.RulesetId == rulesetId)))
+            };
 
             if (showXxy)
             {
@@ -105,10 +108,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 Spacing = new Vector2(0, 12),
             };
 
-            var keyStats = snapshot.ManiaKeyStats
-                                  .Where(k => EzLocalProfileConstants.MANIA_DISPLAYED_KEY_COUNTS.Contains(k.KeyCount))
-                                  .OrderBy(k => k.KeyCount)
-                                  .ToList();
+            var keyStats = snapshot.ManiaKeyStats.OrderBy(k => k.KeyCount).ToList();
 
             if (keyStats.Count == 0)
             {
@@ -134,47 +134,31 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
         private EzLocalProfileLabeledLineChart? createStarLineChart()
         {
-            var counts = snapshot.StarPlayCounts.Where(s => s.RulesetId == rulesetId).ToList();
-            if (counts.Count == 0)
+            var list = snapshot.StarPlayCounts.Where(s => s.RulesetId == rulesetId).OrderBy(s => s.StarBucket).ToList();
+            if (list.Count == 0)
                 return null;
 
-            return createFixedBucketLine(counts.Select(s => (s.StarBucket, s.Count)).ToList(), "★");
+            return new EzLocalProfileLabeledLineChart(
+                list.Select(s => (float)s.Count).ToArray(),
+                list.Select(s => s.StarBucket.ToString(CultureInfo.InvariantCulture)).ToArray(),
+                FontAwesome.Solid.Star);
         }
 
         private EzLocalProfileLabeledLineChart? createXxyLineChart()
         {
-            var counts = snapshot.XxyPlayCounts.Where(s => s.RulesetId == rulesetId).ToList();
-            if (counts.Count == 0)
+            var list = snapshot.XxyPlayCounts.Where(s => s.RulesetId == rulesetId).OrderBy(s => s.StarBucket).ToList();
+            if (list.Count == 0)
                 return null;
 
-            return createFixedBucketLine(counts.Select(s => (s.StarBucket, s.Count)).ToList(), "xxy");
-        }
-
-        /// <summary>生成常驻 11 桶（0-1…10+）的折线数据。</summary>
-        private static EzLocalProfileLabeledLineChart createFixedBucketLine(List<(int bucket, int count)> plays, string suffix)
-        {
-            var values = new List<float>();
-            var labels = new List<string>();
-
-            for (int b = 0; b <= 10; b++)
-            {
-                int c = b < 10
-                    ? plays.Where(p => p.bucket == b).Sum(p => p.count)
-                    : plays.Where(p => p.bucket >= 10).Sum(p => p.count);
-
-                values.Add(c);
-                labels.Add(b == 10 ? $"10{suffix}+" : $"{b}{suffix}");
-            }
-
-            return new EzLocalProfileLabeledLineChart(values.ToArray(), labels.ToArray());
+            return new EzLocalProfileLabeledLineChart(
+                list.Select(s => (float)s.Count).ToArray(),
+                list.Select(s => s.StarBucket.ToString(CultureInfo.InvariantCulture)).ToArray(),
+                FontAwesome.Solid.Moon);
         }
 
         private EzLocalProfileLabeledLineChart? createManiaKpsLineChart()
         {
-            var ordered = snapshot.ManiaKeyStats
-                                  .Where(k => EzLocalProfileConstants.MANIA_DISPLAYED_KEY_COUNTS.Contains(k.KeyCount))
-                                  .OrderBy(k => k.KeyCount)
-                                  .ToList();
+            var ordered = snapshot.ManiaKeyStats.OrderBy(k => k.KeyCount).ToList();
             if (ordered.Count == 0)
                 return null;
 

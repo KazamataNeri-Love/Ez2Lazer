@@ -46,32 +46,14 @@ namespace osu.Game.EzOsuGame.LocalProfile
         }
 
         public static EzLocalProfileBucketBars FromStarPlayCounts(IEnumerable<EzLocalProfileStarPlayCount> stars) =>
-            createFixedBuckets(stars.Select(s => (s.StarBucket, s.Count)), "★");
+            new EzLocalProfileBucketBars(
+                stars.Select(s => (s.StarBucket, s.Count)),
+                bucket => $"{bucket}★–{bucket + 1}★");
 
         public static EzLocalProfileBucketBars FromXxyPlayCounts(IEnumerable<EzLocalProfileXxyPlayCount> plays) =>
-            createFixedBuckets(plays.Select(s => (s.StarBucket, s.Count)), "xxy");
-
-        /// <summary>
-        /// 常驻 11 个星级分类桶（0-1…9-10、10+），局数为 0 的桶也显示；官方星与 xxy 星同规则。
-        /// </summary>
-        private static EzLocalProfileBucketBars createFixedBuckets(IEnumerable<(int bucket, int count)> plays, string suffix)
-        {
-            var list = plays.ToList();
-            var buckets = new List<(int bucket, int count)>();
-
-            for (int b = 0; b <= 10; b++)
-            {
-                int c = b < 10
-                    ? list.Where(p => p.bucket == b).Sum(p => p.count)
-                    : list.Where(p => p.bucket >= 10).Sum(p => p.count);
-
-                buckets.Add((b, c));
-            }
-
-            return new EzLocalProfileBucketBars(
-                buckets,
-                bucket => bucket == 10 ? $"10{suffix}+" : $"{bucket}{suffix}–{bucket + 1}{suffix}");
-        }
+            new EzLocalProfileBucketBars(
+                plays.Select(s => (s.StarBucket, s.Count)),
+                bucket => $"{bucket}–{bucket + 1} SR");
 
         private partial class BucketBarRow : Container
         {
@@ -85,14 +67,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
                 Children = new Drawable[]
                 {
-                    new OsuSpriteText
-                    {
-                        Anchor = Anchor.CentreLeft,
-                        Origin = Anchor.CentreLeft,
-                        Text = formatBucketLabel(bucket),
-                        Font = OsuFont.GetFont(size: 12, weight: FontWeight.Bold),
-                        Width = 72,
-                    },
+                    new LabelText(formatBucketLabel(bucket)),
                     new Container
                     {
                         RelativeSizeAxes = Axes.Both,
@@ -101,6 +76,21 @@ namespace osu.Game.EzOsuGame.LocalProfile
                     },
                     new CountText(count),
                 };
+            }
+
+            private partial class LabelText : OsuSpriteText
+            {
+                public LabelText(string text)
+                {
+                    Anchor = Anchor.CentreLeft;
+                    Origin = Anchor.CentreLeft;
+                    Text = text;
+                    Font = OsuFont.GetFont(size: 12, weight: FontWeight.Bold);
+                    Width = 72;
+                }
+
+                [BackgroundDependencyLoader]
+                private void load(OverlayColourProvider colours) => Colour = EzLocalProfileColours.Plays(colours);
             }
 
             private partial class CountText : OsuSpriteText
@@ -114,7 +104,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 }
 
                 [BackgroundDependencyLoader]
-                private void load(OverlayColourProvider colours) => Colour = colours.Content2;
+                private void load(OverlayColourProvider colours) => Colour = EzLocalProfileColours.Numeric(colours);
             }
         }
     }
