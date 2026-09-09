@@ -20,7 +20,6 @@ namespace osu.Game.EzOsuGame.LocalProfile
         public List<PartitionXxyPlayCount> XxyPlayCounts { get; set; } = new List<PartitionXxyPlayCount>();
         public List<PartitionStdAttrAffinity> StdAttrAffinities { get; set; } = new List<PartitionStdAttrAffinity>();
         public List<EzLocalProfileDrillScoreRow> DrillScores { get; set; } = new List<EzLocalProfileDrillScoreRow>();
-        public List<PartitionBeatmapAggregate> BeatmapAggregates { get; set; } = new List<PartitionBeatmapAggregate>();
 
         public static EzLocalProfilePartitionPayload FromAggregation(EzLocalProfileAggregationResult result)
         {
@@ -91,23 +90,6 @@ namespace osu.Game.EzOsuGame.LocalProfile
             }
 
             payload.DrillScores.AddRange(result.DrillScores);
-
-            foreach (var (rulesetId, byBeatmap) in result.BeatmapAggregates)
-            {
-                foreach (var (beatmapKey, agg) in byBeatmap)
-                {
-                    payload.BeatmapAggregates.Add(new PartitionBeatmapAggregate
-                    {
-                        RulesetId = rulesetId,
-                        BeatmapKey = beatmapKey,
-                        BeatmapName = agg.BeatmapName,
-                        BestPp = agg.BestPp,
-                        BestPpRank = (int)agg.BestPpRank,
-                        PlayCount = agg.PlayCount,
-                        BeatmapId = agg.BeatmapId,
-                    });
-                }
-            }
 
             return payload;
         }
@@ -181,27 +163,6 @@ namespace osu.Game.EzOsuGame.LocalProfile
             }
 
             target.DrillScores.AddRange(DrillScores);
-
-            foreach (var row in BeatmapAggregates)
-            {
-                if (!target.BeatmapAggregates.TryGetValue(row.RulesetId, out var byBeatmap))
-                    target.BeatmapAggregates[row.RulesetId] = byBeatmap = new Dictionary<string, EzLocalProfileAggregationResult.MutableBeatmapAggregate>();
-
-                if (!byBeatmap.TryGetValue(row.BeatmapKey, out var agg))
-                    byBeatmap[row.BeatmapKey] = agg = new EzLocalProfileAggregationResult.MutableBeatmapAggregate
-                    {
-                        BeatmapId = row.BeatmapId,
-                        BeatmapName = row.BeatmapName,
-                    };
-
-                agg.PlayCount += row.PlayCount;
-
-                if (row.BestPp > agg.BestPp)
-                {
-                    agg.BestPp = row.BestPp;
-                    agg.BestPpRank = (ScoreRank)row.BestPpRank;
-                }
-            }
         }
 
         private static TValue getOrCreate<TKey, TValue>(Dictionary<TKey, TValue> dict, TKey key, Func<TValue> factory)
@@ -279,16 +240,5 @@ namespace osu.Game.EzOsuGame.LocalProfile
         public double Value { get; set; }
         public int PlayCount { get; set; }
         public int HighGradeCount { get; set; }
-    }
-
-    public sealed class PartitionBeatmapAggregate
-    {
-        public int RulesetId { get; set; }
-        public string BeatmapKey { get; set; } = string.Empty;
-        public string BeatmapName { get; set; } = string.Empty;
-        public double BestPp { get; set; }
-        public int BestPpRank { get; set; }
-        public int PlayCount { get; set; }
-        public Guid BeatmapId { get; set; }
     }
 }

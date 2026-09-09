@@ -24,11 +24,20 @@ namespace osu.Game.EzOsuGame.LocalProfile
             Direction = FillDirection.Horizontal;
             Spacing = new Vector2(12, 0);
 
-            var countsByRank = grades.GroupBy(g => g.Rank).ToDictionary(g => g.Key, g => g.Sum(x => x.Count));
+            var list = grades.OrderByDescending(g => g.Rank).ToList();
 
-            // 常驻 9 个评分（XH/X/SH/S/A/B/C/D/F），局数为 0 的也显示。
-            foreach (var rank in System.Enum.GetValues<ScoreRank>().OrderByDescending(r => r))
-                Add(new GradeCell(rank, countsByRank.GetValueOrDefault(rank)));
+            if (list.Count == 0)
+            {
+                Add(new OsuSpriteText
+                {
+                    Text = EzSettingsProfile.LOCAL_PROFILE_NO_RULESET_DATA,
+                    Font = OsuFont.GetFont(size: 14),
+                });
+                return;
+            }
+
+            foreach (var grade in list)
+                Add(new GradeCell(grade.Rank, grade.Count));
         }
 
         private partial class GradeCell : CompositeDrawable
