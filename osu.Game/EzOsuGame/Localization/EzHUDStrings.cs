@@ -287,5 +287,23 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly LocalisableString AUDIO_VISUALISER_EDGE_FADE_LABEL = new EzLocalizationManager.EzLocalisableString("端点衰减", "Edge Fade");
         public static readonly LocalisableString AUDIO_VISUALISER_EDGE_FADE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("在左右两端各追加恒为 0 的虚拟位点数量（占真实位点数的比例，0=关闭）；真实频段保持不变", "Append zero-valued virtual points at each edge as a fraction of the real point count (0 = disabled); the real segment stays unchanged.");
+
+        public static readonly LocalisableString DAN_PANEL_DATA_SOURCE = new EzLocalizationManager.EzLocalisableString("段位数据源", "Dan Data Source");
+
+        public static readonly LocalisableString DAN_PANEL_DATA_SOURCE_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "Chart：谱面 MSD；Player：玩家 SSR/段位；Both：双源叠加（对齐 Skill 雷达黄/绿层）。",
+            "Chart: beatmap MSD; Player: SSR/dan; Both: overlay both (Skill radar yellow/green).");
+
+        public static readonly LocalisableString DAN_PANEL_DUAL_LAYOUT = new EzLocalizationManager.EzLocalisableString("RC|LN 布局", "RC|LN Layout");
+
+        public static readonly LocalisableString DAN_PANEL_DUAL_LAYOUT_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "Auto：按宽度切换；Horizontal：左右分列；Vertical：上下堆叠。",
+            "Auto by width; Horizontal side-by-side; Vertical stacked.");
+
+        public static readonly LocalisableString DAN_PANEL_SHOW_EVIDENCE = new EzLocalizationManager.EzLocalisableString("显示 Clear", "Show Clear");
+
+        public static readonly LocalisableString DAN_PANEL_SHOW_EVIDENCE_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "仅个人档案建议开启：Player/Both 时在每侧下方显示 Top-15 Clear 成绩卡。选歌 HUD 默认关闭。",
+            "Prefer Local Profile only: when Player/Both, show Top-15 Clear cards under each side. Song-select HUD defaults off.");
     }
 }

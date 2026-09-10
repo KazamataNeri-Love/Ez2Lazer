@@ -15,8 +15,6 @@ using osu.Framework.Localisation;
 using osu.Game.EzOsuGame.HUD;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.EzOsuGame.Skills;
-using osu.Game.EzOsuGame.Skills.Dan;
-using osu.Game.EzOsuGame.UserInterface;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
@@ -43,7 +41,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
         private FillFlowContainer keyChipFlow = null!;
         private Container headerSlot = null!;
         private Container radarSlot = null!;
-        private EzDanDualPanel danPanel = null!;
+        private EzHUDDanDualPanel danPanel = null!;
         private FillFlowContainer skillBarsFlow = null!;
         private Container detailContainer = null!;
         private OsuSpriteText emptyHint = null!;
@@ -118,7 +116,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                     Font = OsuFont.GetFont(size: 14),
                     Alpha = 0,
                 },
-                danPanel = new EzDanDualPanel
+                danPanel = new EzHUDDanDualPanel
                 {
                     RelativeSizeAxes = Axes.X,
                 },
@@ -141,16 +139,17 @@ namespace osu.Game.EzOsuGame.LocalProfile
         {
             base.LoadComplete();
 
-            danPanel.SetUsername(username);
+            danPanel.TargetUsername.Value = username;
             danPanel.KeyCount.BindTo(selectedKeyCount);
-            danPanel.Configure(
+            danPanel.DataSource.Value = EzDanPanelDataSource.Player;
+            danPanel.DualLayout.Value = EzDanPanelDualLayout.Auto;
+            danPanel.ShowEvidence.Value = true;
+            danPanel.ConfigureEvidence(
                 preloadedDrillScores,
                 drill =>
                 {
                     selectDrillScore?.Value = drill;
-                },
-                showChartAxes: false,
-                usePlayerSsr: true);
+                });
 
             selectedKeyCount.BindValueChanged(_ =>
             {
@@ -329,10 +328,12 @@ namespace osu.Game.EzOsuGame.LocalProfile
         {
             var points = skillProvider.GetPlayerSkillHistory(username, keyCount, skillId);
 
-            if (points.Count == 0)
+            string cardTitle = EzSettingsProfile.LOCAL_PROFILE_SKILL_HISTORY_FOR.Format(displayName);
+
+            if (points.Count < 2)
             {
                 return new EzLocalProfileChartCard(
-                    EzSettingsProfile.LOCAL_PROFILE_SKILL_HISTORY_FOR.Format(displayName),
+                    cardTitle,
                     new OsuSpriteText
                     {
                         Text = EzSettingsProfile.LOCAL_PROFILE_SKILL_HISTORY_EMPTY,
@@ -341,11 +342,23 @@ namespace osu.Game.EzOsuGame.LocalProfile
             }
 
             float[] values = points.Select(p => (float)p.Value).ToArray();
-            string[] labels = points.Select(p => p.RecordedAt.ToLocalTime().ToString("MM-dd", CultureInfo.InvariantCulture)).ToArray();
+            string[] labels = formatHistoryLabels(points);
 
             return new EzLocalProfileChartCard(
-                EzSettingsProfile.LOCAL_PROFILE_SKILL_HISTORY_FOR.Format(displayName),
-                new EzLocalProfileLabeledLineChart(values, labels));
+                cardTitle,
+                new EzLocalProfileTrendChart(values, labels, displayName));
+        }
+
+        private static string[] formatHistoryLabels(IReadOnlyList<EzPlayerSkillHistoryPoint> points)
+        {
+            var first = points[0].RecordedAt.ToLocalTime();
+            var last = points[^1].RecordedAt.ToLocalTime();
+            bool spanYears = last.Year != first.Year || (last - first).TotalDays > 300;
+            string format = spanYears ? "yyyy-MM" : "MM-dd";
+
+            return points
+                   .Select(p => p.RecordedAt.ToLocalTime().ToString(format, CultureInfo.InvariantCulture))
+                   .ToArray();
         }
 
         private Drawable buildAxisPlaysCard(string skillId, int keyCount, string displayName)
@@ -524,7 +537,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
         }
 
         /// <summary>
-        /// One axis metric: per-axis dan badge, skill short name, then numeric SSR.
+        /// One axis metric: skill short name + numeric SSR. Skillset dans live on DualPanel only (no SrToRawDan badges).
         /// </summary>
         private partial class RadarAxisIndicator : FillFlowContainer
         {
@@ -534,26 +547,8 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 Direction = FillDirection.Vertical;
                 Spacing = new Vector2(0, 2);
 
-                var dan = new EzDisplayDan
-                {
-                    Anchor = Anchor.TopCentre,
-                    Origin = Anchor.TopCentre,
-                    BadgeSize = 18,
-                    PreferImage = true,
-                    Alpha = 0,
-                };
-
-                if (data.Value > 0 && double.IsFinite(data.Value))
-                {
-                    double rawDan = EzDanLabels.SrToRawDan(data.Value, data.Axis);
-                    string label = EzDanLadders.For(data.KeyCount, data.Side).ParseLabel(rawDan);
-                    dan.SetLabel(label, data.KeyCount, data.Side);
-                    dan.Show();
-                }
-
                 Children = new Drawable[]
                 {
-                    dan,
                     new OsuSpriteText
                     {
                         Anchor = Anchor.TopCentre,

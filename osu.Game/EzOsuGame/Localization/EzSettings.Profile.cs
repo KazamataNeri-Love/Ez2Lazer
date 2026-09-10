@@ -146,8 +146,8 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_SKILL_HISTORY_EMPTY =
             new EzLocalizationManager.EzLocalisableString(
-                "暂无历史点。重新计算成绩分析后会写入。",
-                "No history points yet. Recompute Score Analysis to record them.");
+                "暂无历史点。重新计算成绩分析后会按游玩时间重建。",
+                "No history points yet. Recompute Score Analysis to rebuild them from play dates.");
 
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_AXIS_PLAYS_FOR =
             new EzLocalizationManager.EzLocalisableString("支撑成绩 · {0}", "Supporting plays · {0}");
@@ -174,19 +174,19 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DAN_CHIP_HINT =
             new EzLocalizationManager.EzLocalisableString(
-                "点击查看清除记录 · 启发式非 LeoBlack",
-                "Tap for clear evidence · heuristic, not LeoBlack");
+                "点击查看 Clear · 启发式非 LeoBlack",
+                "Tap for Clear · heuristic, not LeoBlack");
 
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DAN_CLEARS_FOR =
-            new EzLocalizationManager.EzLocalisableString("清除记录 · {0}", "Clear evidence · {0}");
+            new EzLocalizationManager.EzLocalisableString("Clear · {0}", "Clear · {0}");
 
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DAN_CLEARS_EMPTY =
             new EzLocalizationManager.EzLocalisableString(
-                "暂无该侧清除记录。请重新计算成绩分析。",
-                "No clear evidence for this side yet. Recompute Score Analysis.");
+                "暂无该侧 Clear。请重新计算成绩分析。",
+                "No Clear for this side yet. Recompute Score Analysis.");
 
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DAN_CELL_CLEARS =
-            new EzLocalizationManager.EzLocalisableString("清除", "Clears");
+            new EzLocalizationManager.EzLocalisableString("Clear", "Clear");
 
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DAN_HEURISTIC_HINT =
             new EzLocalizationManager.EzLocalisableString(

@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
@@ -11,7 +10,6 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Layout;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.EzOsuGame.LocalProfile;
-using osu.Game.EzOsuGame.Skills.Dan;
 using osu.Game.EzOsuGame.UserInterface;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
@@ -21,31 +19,37 @@ using osuTK;
 namespace osu.Game.EzOsuGame.Skills
 {
     /// <summary>
-    /// One RC/LN side: label + optional aggregate dan + full radar-axis <see cref="EzDisplaySkillsDan"/> + clear evidence.
+    /// One RC/LN side: aggregate dans + hub skillset chips (slots from <see cref="EzDanSkillsetBuckets"/>) + clear evidence.
+    /// UI never invents per-skill dans via <c>SrToRawDan</c> — only Provider verdicts / chart labels.
     /// </summary>
     public partial class EzDanLabeledStatList : CompositeDrawable
     {
+        /// <summary>Max clear-evidence cards under this side (player clears only).</summary>
         private const int clears_top_n = 15;
 
-        private readonly EzDanSide side;
+        private float displayScale => 1.5f;
+
         private readonly Colour4 accent;
 
-        private FillFlowContainer headerFlow = null!;
+        /// <summary>RC or LN column this list represents.</summary>
+        public EzDanSide Side { get; }
+
         private OsuSpriteText sideLabel = null!;
-        private EzDisplayDan aggregateDan = null!;
-        private OsuSpriteText clearsText = null!;
+        private EzDisplayDan chartAggregateDan = null!;
+        private EzDisplayDan playerAggregateDan = null!;
         private FillFlowContainer cellsFlow = null!;
         private FillFlowContainer evidenceFlow = null!;
         private OsuSpriteText emptyEvidence = null!;
+        private Container evidenceSection = null!;
 
         private FillDirection cellsDirection = FillDirection.Horizontal;
         private readonly LayoutValue sizeLayout = new LayoutValue(Invalidation.DrawSize);
 
-        private readonly Dictionary<EzMinaSkillAxis, EzDisplaySkillsDan> axisChips = new Dictionary<EzMinaSkillAxis, EzDisplaySkillsDan>();
+        private readonly Dictionary<string, EzDisplaySkillsDan> skillsetChips = new Dictionary<string, EzDisplaySkillsDan>(StringComparer.Ordinal);
 
         public EzDanLabeledStatList(EzDanSide side, Colour4 accent)
         {
-            this.side = side;
+            this.Side = side;
             this.accent = accent;
 
             RelativeSizeAxes = Axes.X;
@@ -58,18 +62,6 @@ namespace osu.Game.EzOsuGame.Skills
         [BackgroundDependencyLoader]
         private void load(OverlayColourProvider colours)
         {
-            foreach (var axis in EzMinaSkillAxisExtensions.RadarAxes)
-            {
-                axisChips[axis] = new EzDisplaySkillsDan
-                {
-                    PreferDanImage = true,
-                    ShowValue = true,
-                    Anchor = Anchor.TopLeft,
-                    Origin = Anchor.TopLeft,
-                    Alpha = 0,
-                };
-            }
-
             InternalChild = new FillFlowContainer
             {
                 RelativeSizeAxes = Axes.X,
@@ -78,7 +70,7 @@ namespace osu.Game.EzOsuGame.Skills
                 Spacing = new Vector2(0, 8),
                 Children = new Drawable[]
                 {
-                    headerFlow = new FillFlowContainer
+                    new FillFlowContainer
                     {
                         RelativeSizeAxes = Axes.X,
                         AutoSizeAxes = Axes.Y,
@@ -90,23 +82,25 @@ namespace osu.Game.EzOsuGame.Skills
                             {
                                 Anchor = Anchor.CentreLeft,
                                 Origin = Anchor.CentreLeft,
-                                Font = OsuFont.GetFont(size: 14, weight: FontWeight.Bold),
+                                Font = OsuFont.GetFont(size: 16, weight: FontWeight.Bold),
                                 Colour = accent,
                             },
-                            aggregateDan = new EzDisplayDan
+                            chartAggregateDan = new EzDisplayDan
                             {
                                 Anchor = Anchor.CentreLeft,
                                 Origin = Anchor.CentreLeft,
                                 BadgeSize = 20,
                                 PreferImage = true,
+                                Scale = new Vector2(displayScale),
                                 Alpha = 0,
                             },
-                            clearsText = new OsuSpriteText
+                            playerAggregateDan = new EzDisplayDan
                             {
                                 Anchor = Anchor.CentreLeft,
                                 Origin = Anchor.CentreLeft,
-                                Font = OsuFont.GetFont(size: 11, weight: FontWeight.SemiBold),
-                                Colour = colours.Content2,
+                                BadgeSize = 18,
+                                PreferImage = true,
+                                Scale = new Vector2(displayScale),
                                 Alpha = 0,
                             },
                         },
@@ -118,28 +112,33 @@ namespace osu.Game.EzOsuGame.Skills
                         Direction = cellsDirection,
                         Spacing = new Vector2(10, 8),
                     },
-                    emptyEvidence = new OsuSpriteText
-                    {
-                        RelativeSizeAxes = Axes.X,
-                        Font = OsuFont.GetFont(size: 12),
-                        Colour = colours.Content2,
-                        Text = EzSettingsProfile.LOCAL_PROFILE_DAN_CLEARS_EMPTY,
-                        Alpha = 0,
-                    },
-                    evidenceFlow = new FillFlowContainer
+                    evidenceSection = new Container
                     {
                         RelativeSizeAxes = Axes.X,
                         AutoSizeAxes = Axes.Y,
-                        Direction = FillDirection.Full,
-                        Spacing = new Vector2(8),
+                        Children = new Drawable[]
+                        {
+                            emptyEvidence = new OsuSpriteText
+                            {
+                                RelativeSizeAxes = Axes.X,
+                                Font = OsuFont.GetFont(size: 12),
+                                Colour = colours.Content2,
+                                Text = EzSettingsProfile.LOCAL_PROFILE_DAN_CLEARS_EMPTY,
+                                Alpha = 0,
+                            },
+                            evidenceFlow = new FillFlowContainer
+                            {
+                                RelativeSizeAxes = Axes.X,
+                                AutoSizeAxes = Axes.Y,
+                                Direction = FillDirection.Full,
+                                Spacing = new Vector2(8),
+                            },
+                        },
                     },
                 },
             };
 
-            foreach (var chip in axisChips.Values)
-                cellsFlow.Add(chip);
-
-            sideLabel.Text = side == EzDanSide.Ln
+            sideLabel.Text = Side == EzDanSide.Ln
                 ? EzSettingsProfile.LOCAL_PROFILE_DAN_SIDE_LN
                 : EzSettingsProfile.LOCAL_PROFILE_DAN_SIDE_RC;
         }
@@ -154,72 +153,122 @@ namespace osu.Game.EzOsuGame.Skills
 
         public void UpdateContent(
             int keyCount,
-            EzDanEstimate? estimate,
-            IReadOnlyDictionary<string, double> axisValues,
+            string? chartAggregateLabel,
+            string? playerAggregateLabel,
+            IReadOnlyList<EzDanSkillsetSlot> slots,
+            IReadOnlyDictionary<string, string> chartLabelsBySkillset,
+            IReadOnlyDictionary<string, EzDanSkillsetVerdict> playerSkillsets,
             IReadOnlyList<EzDanClearEvidenceRow> clears,
             Func<string, string> resolveTitle,
-            Action<EzDanClearEvidenceRow>? onSelectClear)
+            Action<EzDanClearEvidenceRow>? onSelectClear,
+            bool showEvidence)
         {
             if (LoadState < LoadState.Ready)
             {
-                Schedule(() => UpdateContent(keyCount, estimate, axisValues, clears, resolveTitle, onSelectClear));
+                Schedule(() => UpdateContent(
+                    keyCount, chartAggregateLabel, playerAggregateLabel,
+                    slots, chartLabelsBySkillset, playerSkillsets,
+                    clears, resolveTitle, onSelectClear, showEvidence));
                 return;
             }
 
             cellsFlow.Direction = cellsDirection;
 
-            sideLabel.Text = side == EzDanSide.Ln
+            sideLabel.Text = Side == EzDanSide.Ln
                 ? EzSettingsProfile.LOCAL_PROFILE_DAN_SIDE_LN
                 : EzSettingsProfile.LOCAL_PROFILE_DAN_SIDE_RC;
 
-            if (estimate != null && !string.IsNullOrEmpty(estimate.Label) && estimate.RawDan >= 0)
-            {
-                aggregateDan.SetLabel(estimate.Label, keyCount, side);
-                aggregateDan.Show();
-            }
-            else
-            {
-                aggregateDan.Hide();
-            }
+            setAggregate(chartAggregateDan, chartAggregateLabel, keyCount, Side);
+            setAggregate(playerAggregateDan, playerAggregateLabel, keyCount, Side);
 
-            if (estimate is { Clears: > 0 })
+            rebuildSkillsetChips(keyCount, slots, chartLabelsBySkillset, playerSkillsets);
+
+            if (!showEvidence)
             {
-                clearsText.Text = $"{EzSettingsProfile.LOCAL_PROFILE_DAN_CELL_CLEARS}: {estimate.Clears.ToString(CultureInfo.InvariantCulture)}";
-                clearsText.Show();
-            }
-            else
-            {
-                clearsText.Hide();
+                evidenceSection.Hide();
+                return;
             }
 
-            var ladder = EzDanLadders.For(keyCount, side);
+            evidenceSection.Show();
+            rebuildEvidence(clears, resolveTitle, onSelectClear);
+        }
 
-            foreach (var axis in EzMinaSkillAxisExtensions.RadarAxes)
+        private void rebuildSkillsetChips(
+            int keyCount,
+            IReadOnlyList<EzDanSkillsetSlot> slots,
+            IReadOnlyDictionary<string, string> chartLabelsBySkillset,
+            IReadOnlyDictionary<string, EzDanSkillsetVerdict> playerSkillsets)
+        {
+            if (slots.Count == 0)
             {
-                var chip = axisChips[axis];
-                string skillIdMsd = axis.ToMsdSkillId();
-                string skillIdSsr = axis.ToSsrSkillId();
+                cellsFlow.Clear();
+                skillsetChips.Clear();
+                cellsFlow.Hide();
+                return;
+            }
 
-                double value = 0;
-                if (axisValues.TryGetValue(skillIdMsd, out double msd) && msd > 0)
-                    value = msd;
-                else if (axisValues.TryGetValue(skillIdSsr, out double ssr) && ssr > 0)
-                    value = ssr;
-                else if (axisValues.TryGetValue(axis.ToId(), out double bare) && bare > 0)
-                    value = bare;
+            cellsFlow.Show();
 
-                if (value <= 0 || !double.IsFinite(value))
+            var keep = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var slot in slots)
+            {
+                keep.Add(slot.Id);
+
+                if (!skillsetChips.TryGetValue(slot.Id, out var chip))
                 {
-                    chip.Clear();
-                    continue;
+                    chip = new EzDisplaySkillsDan
+                    {
+                        PreferDanImage = true,
+                        ShowValue = true,
+                        Anchor = Anchor.TopLeft,
+                        Origin = Anchor.TopLeft,
+                        Scale = new Vector2(displayScale),
+                    };
+                    skillsetChips[slot.Id] = chip;
+                    cellsFlow.Add(chip);
                 }
 
-                double rawDan = EzDanLabels.SrToRawDan(value, axis);
-                string label = ladder.ParseLabel(rawDan);
-                chip.Set(axis, label, value, keyCount, side);
+                chartLabelsBySkillset.TryGetValue(slot.Id, out string? chartLabel);
+
+                string? playerLabel = null;
+                int? playerClears = null;
+
+                if (playerSkillsets.TryGetValue(slot.Id, out var verdict))
+                {
+                    playerLabel = verdict.Label;
+                    playerClears = verdict.Clears;
+                }
+
+                chip.SetSkillset(slot, chartLabel, playerLabel, playerClears, keyCount, Side);
             }
 
-            rebuildEvidence(clears, resolveTitle, onSelectClear);
+            foreach (string id in skillsetChips.Keys.Where(id => !keep.Contains(id)).ToList())
+            {
+                cellsFlow.Remove(skillsetChips[id], true);
+                skillsetChips.Remove(id);
+            }
+
+            // Keep visual order = slots order.
+            for (int i = 0; i < slots.Count; i++)
+            {
+                var chip = skillsetChips[slots[i].Id];
+                if (cellsFlow.GetLayoutPosition(chip) != i)
+                    cellsFlow.SetLayoutPosition(chip, i);
+            }
+        }
+
+        private static void setAggregate(EzDisplayDan display, string? label, int keyCount, EzDanSide side)
+        {
+            if (!string.IsNullOrEmpty(label))
+            {
+                display.SetLabel(label, keyCount, side);
+                display.Show();
+            }
+            else
+            {
+                display.Hide();
+            }
         }
 
         private void rebuildEvidence(

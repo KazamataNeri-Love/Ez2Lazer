@@ -9,7 +9,8 @@ using osu.Game.Database;
 namespace osu.Game.EzOsuGame.Skills
 {
     /// <summary>
-    /// Read/write helpers for skill Realm objects. Does not open the game for the caller.
+    /// Single Realm persistence facade for mania skill metrics (MSD / SSR / Dan / ChartSkillInfo / reserved skillset cache).
+    /// Does not open the game for the caller. Evidence lists stay in local-profile SQLite.
     /// </summary>
     public sealed class EzSkillStore
     {
@@ -32,6 +33,42 @@ namespace osu.Game.EzOsuGame.Skills
                                         && v.AlgorithmVersion == version);
 
                 return rows.ToDictionary(v => v.SkillId, v => v.Value, StringComparer.Ordinal);
+            });
+        }
+
+        /// <summary>
+        /// Batch-read beatmap MSD (or other system) rows for many hashes in one Realm run.
+        /// Missing hashes are omitted from the result.
+        /// </summary>
+        public IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>> GetBeatmapSkillsForHashes(
+            IEnumerable<string> beatmapHashes,
+            string systemId,
+            int? algorithmVersion = null)
+        {
+            ArgumentNullException.ThrowIfNull(beatmapHashes);
+
+            var hashSet = beatmapHashes
+                          .Where(static h => !string.IsNullOrEmpty(h))
+                          .ToHashSet(StringComparer.Ordinal);
+
+            if (hashSet.Count == 0)
+                return new Dictionary<string, IReadOnlyDictionary<string, double>>(StringComparer.Ordinal);
+
+            int version = algorithmVersion ?? EzManiaSkillAlgorithm.VERSION;
+
+            return realmAccess.Run(r =>
+            {
+                var result = new Dictionary<string, IReadOnlyDictionary<string, double>>(hashSet.Count, StringComparer.Ordinal);
+
+                var rows = r.All<EzBeatmapSkillValue>()
+                            .Where(v => v.SystemId == systemId && v.AlgorithmVersion == version)
+                            .AsEnumerable()
+                            .Where(v => hashSet.Contains(v.BeatmapHash));
+
+                foreach (var group in rows.GroupBy(v => v.BeatmapHash, StringComparer.Ordinal))
+                    result[group.Key] = group.ToDictionary(v => v.SkillId, v => v.Value, StringComparer.Ordinal);
+
+                return result;
             });
         }
 
@@ -297,6 +334,50 @@ namespace osu.Game.EzOsuGame.Skills
             });
         }
 
+        /// <summary>
+        /// Replace all history points for <paramref name="username"/> + <paramref name="keyCount"/>
+        /// with chronologically sampled skill snapshots (typically keyed by score play time).
+        /// </summary>
+        public void ReplacePlayerSkillHistory(
+            string username,
+            int keyCount,
+            IReadOnlyList<(DateTimeOffset RecordedAt, EzSkillsetVector Vector)> samples)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(username);
+            ArgumentNullException.ThrowIfNull(samples);
+
+            int version = EzManiaSkillAlgorithm.VERSION;
+
+            realmAccess.Write(r =>
+            {
+                var existing = r.All<EzPlayerSkillHistoryPoint>()
+                                .Where(v => v.Username == username && v.KeyCount == keyCount)
+                                .ToList();
+
+                foreach (var row in existing)
+                    r.Remove(row);
+
+                foreach (var (recordedAt, vector) in samples)
+                {
+                    foreach (var (axis, value) in vector.Enumerate())
+                    {
+                        if (value <= 0 || !double.IsFinite(value))
+                            continue;
+
+                        r.Add(new EzPlayerSkillHistoryPoint
+                        {
+                            Username = username,
+                            KeyCount = keyCount,
+                            SkillId = axis.ToSsrSkillId(),
+                            Value = value,
+                            RecordedAt = recordedAt,
+                            AlgorithmVersion = version,
+                        });
+                    }
+                }
+            });
+        }
+
         public IReadOnlyList<EzPlayerSkillHistoryPoint> GetPlayerSkillHistory(
             string username,
             int keyCount,
@@ -365,6 +446,351 @@ namespace osu.Game.EzOsuGame.Skills
                     ComputedAt = estimate.ComputedAt == default ? DateTimeOffset.UtcNow : estimate.ComputedAt,
                 });
             });
+        }
+
+        /// <summary>
+        /// Typed Realm ChartSkillInfo (EZ≥9). Miss → callers recompute; no SQLite JSON fallback.
+        /// </summary>
+        public bool TryGetChartSkillInfo(string beatmapHash, out EzChartSkillInfo? info)
+        {
+            info = null;
+
+            if (string.IsNullOrEmpty(beatmapHash))
+                return false;
+
+            EzChartSkillInfo? fromRealm = null;
+
+            realmAccess.Run(r =>
+            {
+                var row = r.All<EzBeatmapChartSkillInfo>()
+                           .FirstOrDefault(v => v.BeatmapHash == beatmapHash
+                                                && v.InfoVersion == EzChartSkillInfo.VERSION);
+                if (row != null)
+                    fromRealm = chartSkillInfoToDto(row);
+            });
+
+            if (fromRealm == null)
+                return false;
+
+            info = fromRealm;
+            return true;
+        }
+
+        public void UpsertChartSkillInfo(string beatmapHash, EzChartSkillInfo info, Guid beatmapId = default, DateTimeOffset? computedAt = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(beatmapHash);
+            ArgumentNullException.ThrowIfNull(info);
+
+            DateTimeOffset at = computedAt ?? DateTimeOffset.UtcNow;
+
+            realmAccess.Write(r =>
+            {
+                var existing = r.All<EzBeatmapChartSkillInfo>()
+                                .Where(v => v.BeatmapHash == beatmapHash)
+                                .ToList();
+
+                foreach (var row in existing)
+                    r.Remove(row);
+
+                r.Add(new EzBeatmapChartSkillInfo
+                {
+                    BeatmapHash = beatmapHash,
+                    BeatmapId = beatmapId,
+                    InfoVersion = EzChartSkillInfo.VERSION,
+                    ComputedAt = at,
+                    PatternTagsJoined = joinPatterns(info.Patterns),
+                    JackDemand = info.JackDemand,
+                    JackShare = info.JackShare ?? -1,
+                    StreamShare = info.StreamShare ?? -1,
+                    TechCategory = info.TechCategory,
+                    ClusterTrill = info.ClusterTrill,
+                    HandstreamCluster = info.HandstreamCluster,
+                    HandstreamEndurance = info.HandstreamEndurance,
+                    TechScore = info.TechScore,
+                    ChordjackScore = info.ChordjackScore,
+                    JackScore = info.JackScore ?? -1,
+                    MotionRhythmBreak = info.Motion?.RhythmBreak ?? -1,
+                    MotionCrossHandTrill = info.Motion?.CrossHandTrill ?? -1,
+                    MotionMiniJack = info.Motion?.MiniJack ?? -1,
+                    MotionSameHand = info.Motion?.SameHand ?? -1,
+                    LnRatio = info.LnRatio ?? -1,
+                    Vibro = info.Vibro,
+                    DanEligible = info.DanEligible,
+                    LengthSeconds = info.LengthSeconds ?? -1,
+                    KeyCount = info.KeyCount ?? -1,
+                });
+            });
+        }
+
+        /// <summary>Hashes that already have a current-version ChartSkillInfo row.</summary>
+        public HashSet<string> GetPersistedChartSkillInfoHashes()
+        {
+            return realmAccess.Run(r =>
+            {
+                return r.All<EzBeatmapChartSkillInfo>()
+                        .Where(v => v.InfoVersion == EzChartSkillInfo.VERSION)
+                        .AsEnumerable()
+                        .Select(v => v.BeatmapHash)
+                        .Where(static h => !string.IsNullOrEmpty(h))
+                        .ToHashSet(StringComparer.Ordinal);
+            });
+        }
+
+        public void ClearChartSkillInfo()
+        {
+            realmAccess.Write(r =>
+            {
+                var rows = r.All<EzBeatmapChartSkillInfo>().ToList();
+
+                foreach (var row in rows)
+                    r.Remove(row);
+            });
+        }
+
+        /// <summary>
+        /// Batch-read typed ChartSkillInfo rows for many hashes in one Realm run.
+        /// Missing / wrong-version hashes are omitted.
+        /// </summary>
+        public IReadOnlyDictionary<string, EzChartSkillInfo> GetChartSkillInfoForHashes(IEnumerable<string> beatmapHashes)
+        {
+            ArgumentNullException.ThrowIfNull(beatmapHashes);
+
+            var hashSet = beatmapHashes
+                          .Where(static h => !string.IsNullOrEmpty(h))
+                          .ToHashSet(StringComparer.Ordinal);
+
+            if (hashSet.Count == 0)
+                return new Dictionary<string, EzChartSkillInfo>(StringComparer.Ordinal);
+
+            return realmAccess.Run(r =>
+            {
+                var result = new Dictionary<string, EzChartSkillInfo>(hashSet.Count, StringComparer.Ordinal);
+
+                var rows = r.All<EzBeatmapChartSkillInfo>()
+                            .Where(v => v.InfoVersion == EzChartSkillInfo.VERSION)
+                            .AsEnumerable()
+                            .Where(v => hashSet.Contains(v.BeatmapHash));
+
+                foreach (var row in rows)
+                {
+                    var dto = chartSkillInfoToDto(row);
+                    if (dto.IsUnavailable)
+                        continue;
+
+                    result[row.BeatmapHash] = dto;
+                }
+
+                return result;
+            });
+        }
+
+        /// <summary>True when a skillset cache stamp exists for this username/key/side/version (including empty sentinel).</summary>
+        public bool HasDanSkillsetCache(string username, int keyCount, string side, int? algorithmVersion = null)
+        {
+            int version = algorithmVersion ?? EzDanAlgorithm.VERSION;
+
+            return realmAccess.Run(r =>
+                r.All<EzPlayerDanSkillsetValue>()
+                 .Any(v => v.Username == username
+                           && v.KeyCount == keyCount
+                           && v.Side == side
+                           && v.AlgorithmVersion == version));
+        }
+
+        /// <summary>Cached skillset tiles (excludes empty sentinel). Empty list may mean hit-empty or miss — use <see cref="HasDanSkillsetCache"/>.</summary>
+        public IReadOnlyList<EzPlayerDanSkillsetValue> GetDanSkillsetValues(
+            string username,
+            int keyCount,
+            string side,
+            int? algorithmVersion = null)
+        {
+            int version = algorithmVersion ?? EzDanAlgorithm.VERSION;
+
+            return realmAccess.Run(r =>
+            {
+                return r.All<EzPlayerDanSkillsetValue>()
+                        .Where(v => v.Username == username
+                                    && v.KeyCount == keyCount
+                                    && v.Side == side
+                                    && v.AlgorithmVersion == version
+                                    && v.SkillsetId != EzDanSkillsetBuckets.CACHE_EMPTY_SENTINEL)
+                        .ToList()
+                        .Select(v => v.Detach())
+                        .ToList();
+            });
+        }
+
+        /// <summary>Replace skillset cache for one username/key/side. Empty verdicts write a sentinel row.</summary>
+        public void WriteDanSkillsetVerdicts(
+            string username,
+            int keyCount,
+            string side,
+            IReadOnlyDictionary<string, EzDanSkillsetVerdict> verdicts,
+            DateTimeOffset? computedAt = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(username);
+            ArgumentNullException.ThrowIfNull(verdicts);
+
+            DateTimeOffset at = computedAt ?? DateTimeOffset.UtcNow;
+            int version = EzDanAlgorithm.VERSION;
+
+            realmAccess.Write(r =>
+            {
+                var existing = r.All<EzPlayerDanSkillsetValue>()
+                                .Where(v => v.Username == username
+                                            && v.KeyCount == keyCount
+                                            && v.Side == side)
+                                .ToList();
+
+                foreach (var row in existing)
+                    r.Remove(row);
+
+                if (verdicts.Count == 0)
+                {
+                    r.Add(new EzPlayerDanSkillsetValue
+                    {
+                        Username = username,
+                        KeyCount = keyCount,
+                        Side = side,
+                        SkillsetId = EzDanSkillsetBuckets.CACHE_EMPTY_SENTINEL,
+                        RawDan = -1,
+                        Label = string.Empty,
+                        Clears = 0,
+                        AlgorithmVersion = version,
+                        ComputedAt = at,
+                    });
+                    return;
+                }
+
+                foreach (var (id, verdict) in verdicts)
+                {
+                    r.Add(new EzPlayerDanSkillsetValue
+                    {
+                        Username = username,
+                        KeyCount = keyCount,
+                        Side = side,
+                        SkillsetId = string.IsNullOrEmpty(verdict.SkillsetId) ? id : verdict.SkillsetId,
+                        RawDan = verdict.RawDan,
+                        Label = verdict.Label,
+                        Clears = verdict.Clears,
+                        AlgorithmVersion = version,
+                        ComputedAt = at,
+                    });
+                }
+            });
+        }
+
+        /// <summary>Drop all skillset cache rows for a username (all keys/sides).</summary>
+        public void ClearDanSkillsetValues(string username)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(username);
+
+            realmAccess.Write(r =>
+            {
+                var existing = r.All<EzPlayerDanSkillsetValue>()
+                                .Where(v => v.Username == username)
+                                .ToList();
+
+                foreach (var row in existing)
+                    r.Remove(row);
+            });
+        }
+
+        /// <summary>Drop side GetDan estimates for a username (all keys/sides/versions).</summary>
+        public void ClearDanEstimates(string username)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(username);
+
+            realmAccess.Write(r =>
+            {
+                var existing = r.All<EzDanEstimate>()
+                                .Where(v => v.Username == username)
+                                .ToList();
+
+                foreach (var row in existing)
+                    r.Remove(row);
+            });
+        }
+
+        /// <summary>Legacy row writer; prefer <see cref="WriteDanSkillsetVerdicts"/>.</summary>
+        public void WriteDanSkillsetValues(string username, int keyCount, string side, IEnumerable<EzPlayerDanSkillsetValue> values)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(username);
+            ArgumentNullException.ThrowIfNull(values);
+
+            var list = values as IList<EzPlayerDanSkillsetValue> ?? values.ToList();
+            var map = new Dictionary<string, EzDanSkillsetVerdict>(StringComparer.Ordinal);
+
+            foreach (var value in list)
+            {
+                if (value.SkillsetId == EzDanSkillsetBuckets.CACHE_EMPTY_SENTINEL)
+                    continue;
+
+                map[value.SkillsetId] = new EzDanSkillsetVerdict(value.SkillsetId, value.RawDan, value.Label, value.Clears);
+            }
+
+            WriteDanSkillsetVerdicts(username, keyCount, side, map);
+        }
+
+        private const char pattern_separator = '\u001f';
+
+        private static string joinPatterns(string[]? patterns)
+        {
+            if (patterns == null || patterns.Length == 0)
+                return string.Empty;
+
+            return string.Join(pattern_separator, patterns.Where(static t => !string.IsNullOrWhiteSpace(t)));
+        }
+
+        private static string[] splitPatterns(string? joined)
+        {
+            if (string.IsNullOrEmpty(joined))
+                return [];
+
+            return joined.Split(pattern_separator, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        private static double? optionalDouble(double value)
+            => value < 0 ? null : value;
+
+        private static EzChartSkillInfo chartSkillInfoToDto(EzBeatmapChartSkillInfo row)
+        {
+            EzMotionFeatures? motion = null;
+
+            if (row.MotionRhythmBreak >= 0
+                || row.MotionCrossHandTrill >= 0
+                || row.MotionMiniJack >= 0
+                || row.MotionSameHand >= 0)
+            {
+                motion = new EzMotionFeatures
+                {
+                    RhythmBreak = row.MotionRhythmBreak < 0 ? 0 : row.MotionRhythmBreak,
+                    CrossHandTrill = row.MotionCrossHandTrill < 0 ? 0 : row.MotionCrossHandTrill,
+                    MiniJack = row.MotionMiniJack < 0 ? 0 : row.MotionMiniJack,
+                    SameHand = row.MotionSameHand < 0 ? 0 : row.MotionSameHand,
+                };
+            }
+
+            return new EzChartSkillInfo
+            {
+                Patterns = splitPatterns(row.PatternTagsJoined),
+                JackDemand = row.JackDemand,
+                JackShare = optionalDouble(row.JackShare),
+                StreamShare = optionalDouble(row.StreamShare),
+                TechCategory = row.TechCategory,
+                ClusterTrill = row.ClusterTrill,
+                HandstreamCluster = row.HandstreamCluster,
+                HandstreamEndurance = row.HandstreamEndurance,
+                TechScore = row.TechScore,
+                ChordjackScore = row.ChordjackScore,
+                JackScore = optionalDouble(row.JackScore),
+                Motion = motion,
+                LnRatio = optionalDouble(row.LnRatio),
+                Vibro = row.Vibro,
+                DanEligible = row.DanEligible,
+                LengthSeconds = optionalDouble(row.LengthSeconds),
+                KeyCount = row.KeyCount,
+            };
         }
     }
 }

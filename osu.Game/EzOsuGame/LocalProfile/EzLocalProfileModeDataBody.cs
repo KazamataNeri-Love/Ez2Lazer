@@ -135,26 +135,29 @@ namespace osu.Game.EzOsuGame.LocalProfile
             return flow;
         }
 
-        private EzLocalProfileLabeledLineChart? createStarLineChart()
+        private EzLocalProfileTrendChart? createStarLineChart()
         {
             var counts = snapshot.StarPlayCounts.Where(s => s.RulesetId == rulesetId).ToList();
             if (counts.Count == 0)
                 return null;
 
-            return createFixedBucketLine(counts.Select(s => (s.StarBucket, s.Count)).ToList(), "★", FontAwesome.Solid.Star);
+            return createFixedBucketLine(counts.Select(s => (s.StarBucket, s.Count)).ToList(), EzSettingsProfile.LOCAL_PROFILE_STAR_PLAY_LINE, FontAwesome.Solid.Star);
         }
 
-        private EzLocalProfileLabeledLineChart? createXxyLineChart()
+        private EzLocalProfileTrendChart? createXxyLineChart()
         {
             var counts = snapshot.XxyPlayCounts.Where(s => s.RulesetId == rulesetId).ToList();
             if (counts.Count == 0)
                 return null;
 
-            return createFixedBucketLine(counts.Select(s => (s.StarBucket, s.Count)).ToList(), "xxy", FontAwesome.Solid.Moon);
+            return createFixedBucketLine(counts.Select(s => (s.StarBucket, s.Count)).ToList(), EzSettingsProfile.LOCAL_PROFILE_XXY_PLAY_LINE, FontAwesome.Solid.Moon);
         }
 
-        /// <summary>生成常驻 11 桶（0-1…10+）的折线数据，局数为 0 的桶也展示。</summary>
-        private static EzLocalProfileLabeledLineChart createFixedBucketLine(List<(int bucket, int count)> plays, string suffix, IconUsage labelIcon)
+        /// <summary>
+        /// 生成常驻 11 桶（0-1…9-10、10+）的趋势图，局数为 0 的桶也展示；
+        /// 官方星与 xxy 星同规则，多出的 10+ 桶合计所有 ≥10 的档位。
+        /// </summary>
+        private static EzLocalProfileTrendChart createFixedBucketLine(List<(int bucket, int count)> plays, LocalisableString title, IconUsage labelIcon)
         {
             var values = new List<float>();
             var labels = new List<string>();
@@ -166,37 +169,34 @@ namespace osu.Game.EzOsuGame.LocalProfile
                     : plays.Where(p => p.bucket >= 10).Sum(p => p.count);
 
                 values.Add(c);
-                labels.Add(b == 10 ? $"10{suffix}+" : $"{b}{suffix}–{b + 1}{suffix}");
+                labels.Add(b == 10 ? "10+" : b.ToString(CultureInfo.InvariantCulture));
             }
 
-            return new EzLocalProfileLabeledLineChart(values.ToArray(), labels.ToArray(), labelIcon);
+            return new EzLocalProfileTrendChart(values.ToArray(), labels.ToArray(), title, labelIcon, minValue: 0);
         }
 
-        private EzLocalProfileLabeledLineChart? createManiaKpsLineChart()
+        private EzLocalProfileTrendChart? createManiaKpsLineChart()
         {
             var ordered = snapshot.ManiaKeyStats
                                   .Where(k => EzLocalProfileConstants.MANIA_DISPLAYED_KEY_COUNTS.Contains(k.KeyCount))
                                   .OrderBy(k => k.KeyCount)
                                   .ToList();
-            if (ordered.Count == 0)
+            if (ordered.Count < 2)
                 return null;
 
-            return new EzLocalProfileLabeledLineChart(
+            return new EzLocalProfileTrendChart(
                 ordered.Select(k => (float)k.AvgKps).ToArray(),
-                ordered.Select(k => $"{k.KeyCount}K").ToArray());
+                ordered.Select(k => $"{k.KeyCount}K").ToArray(),
+                EzSettingsProfile.LOCAL_PROFILE_MANIA_AVG_KPS_LINE,
+                minValue: 0);
         }
 
-        private static void addLineChart(FillFlowContainer parent, LocalisableString title, EzLocalProfileLabeledLineChart? chart)
+        private static void addLineChart(FillFlowContainer parent, LocalisableString title, EzLocalProfileTrendChart? chart)
         {
             if (chart == null)
                 return;
 
-            parent.Add(new OsuSpriteText
-            {
-                Text = title,
-                Font = OsuFont.GetFont(size: 13, weight: FontWeight.Bold),
-            });
-            parent.Add(chart);
+            parent.Add(new EzLocalProfileChartCard(title, chart));
         }
 
         private static Drawable createBarColumn(LocalisableString title, Drawable body) =>

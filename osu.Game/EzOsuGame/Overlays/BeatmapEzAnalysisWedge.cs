@@ -21,13 +21,15 @@ namespace osu.Game.EzOsuGame.Overlays
     {
         private EzHUDRadarPanel leftRadar = null!;
         private EzHUDRadarPanel rightRadar = null!;
-        private EzDanDualPanel danPanel = null!;
 
         public Bindable<string?> TargetUsername { get; } = new Bindable<string?>();
 
         public Bindable<EzRadarDisplayMode> LeftRadarMode { get; } = new Bindable<EzRadarDisplayMode>(EzRadarDisplayMode.XxySrPattern);
 
         public Bindable<EzRadarDisplayMode> RightRadarMode { get; } = new Bindable<EzRadarDisplayMode>(EzRadarDisplayMode.Skill);
+
+        /// <summary>Exposed for visual tests / host configuration.</summary>
+        public EzHUDDanDualPanel DanPanel { get; private set; } = null!;
 
         [Resolved]
         private IBindable<WorkingBeatmap> beatmap { get; set; } = null!;
@@ -42,7 +44,7 @@ namespace osu.Game.EzOsuGame.Overlays
             AutoSizeAxes = Axes.Y;
             Padding = new MarginPadding { Top = 4f };
 
-            Width = 0.9f;
+            Width = 0.8f;
 
             InternalChild = new ShearAligningWrapper(new Container
             {
@@ -50,7 +52,7 @@ namespace osu.Game.EzOsuGame.Overlays
                 Masking = true,
                 RelativeSizeAxes = Axes.X,
                 AutoSizeAxes = Axes.Y,
-                Shear = OsuGame.SHEAR,
+                // Shear = OsuGame.SHEAR,
                 Children = new Drawable[]
                 {
                     new EzSongSelectWedgeBackground(),
@@ -58,6 +60,7 @@ namespace osu.Game.EzOsuGame.Overlays
                     {
                         RelativeSizeAxes = Axes.X,
                         AutoSizeAxes = Axes.Y,
+                        // Shear = -OsuGame.SHEAR,
                         Padding = new MarginPadding { Left = SongSelect.WEDGE_CONTENT_MARGIN, Right = 35, Vertical = 16 },
                         Child = new FillFlowContainer
                         {
@@ -72,27 +75,25 @@ namespace osu.Game.EzOsuGame.Overlays
                                     RelativeSizeAxes = Axes.X,
                                     AutoSizeAxes = Axes.Y,
                                     Direction = FillDirection.Horizontal,
-                                    Spacing = new Vector2(-10f, 0f),
+                                    Spacing = new Vector2(16f, 0f),
                                     Children = new Drawable[]
                                     {
                                         leftRadar = new EzHUDRadarPanel
                                         {
                                             Anchor = Anchor.TopLeft,
                                             Origin = Anchor.TopLeft,
-                                            Shear = -OsuGame.SHEAR,
                                         },
                                         rightRadar = new EzHUDRadarPanel
                                         {
                                             Anchor = Anchor.TopLeft,
                                             Origin = Anchor.TopLeft,
-                                            Shear = -OsuGame.SHEAR,
                                         },
                                     },
                                 },
-                                danPanel = new EzDanDualPanel
+                                // Same pattern as radars: instantiate HUD component, bind hosts, set defaults.
+                                DanPanel = new EzHUDDanDualPanel
                                 {
                                     RelativeSizeAxes = Axes.X,
-                                    Shear = -OsuGame.SHEAR,
                                 },
                             },
                         },
@@ -110,8 +111,10 @@ namespace osu.Game.EzOsuGame.Overlays
             leftRadar.TargetUsername.BindTo(TargetUsername);
             rightRadar.TargetUsername.BindTo(TargetUsername);
 
-            danPanel.BindUsername(TargetUsername);
-            danPanel.Configure(showChartAxes: true, usePlayerSsr: false);
+            DanPanel.TargetUsername.BindTo(TargetUsername);
+            DanPanel.DataSource.Value = EzDanPanelDataSource.Both;
+            DanPanel.DualLayout.Value = EzDanPanelDualLayout.Auto;
+            DanPanel.ShowEvidence.Value = false;
 
             beatmap.BindValueChanged(_ => updateDanKeyCount(), true);
             mods.BindValueChanged(_ => updateDanKeyCount());
@@ -122,11 +125,11 @@ namespace osu.Game.EzOsuGame.Overlays
             try
             {
                 var playable = beatmap.Value.GetPlayableBeatmap(beatmap.Value.BeatmapInfo.Ruleset, mods.Value);
-                danPanel.KeyCount.Value = EzMinaNoteConverter.ResolveKeyCount(playable);
+                DanPanel.KeyCount.Value = EzMinaNoteConverter.ResolveKeyCount(playable);
             }
             catch
             {
-                danPanel.KeyCount.Value = 0;
+                DanPanel.KeyCount.Value = 0;
             }
         }
 
