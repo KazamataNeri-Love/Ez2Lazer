@@ -1216,7 +1216,7 @@ namespace osu.Game.Screens.Play
                 if (EzQuickRotationCoordinator.Session.IsActive)
                 {
                     EzOsuGame.Diagnostics.EzTimingTrace.Record("ResultsDelegate.QuickRotation", "Navigating to quick rotation flow");
-                    LatencyTracker?.GenerateLatencyReport();
+                    LatencyTracker?.GenerateLatencyReport(postNotification: true);
                     (GameplayClockContainer as MasterGameplayClockContainer)?.StopUsingBeatmapClock();
 
                     if (Beatmap.Value.TrackLoaded)
@@ -1231,13 +1231,13 @@ namespace osu.Game.Screens.Play
                 if (EzFlowMode.ShouldSkipResults(this))
                 {
                     EzOsuGame.Diagnostics.EzTimingTrace.Record("ResultsDelegate.FlowMode", "Skipping results screen – returning to song select");
-                    LatencyTracker?.GenerateLatencyReport();
+                    LatencyTracker?.GenerateLatencyReport(postNotification: true);
                     EzFlowMode.ReturnToSongSelect(game as OsuGame);
                     return;
                 }
 
                 EzOsuGame.Diagnostics.EzTimingTrace.Record("ResultsDelegate.Push", "Navigating to results screen");
-                LatencyTracker?.GenerateLatencyReport();
+                LatencyTracker?.GenerateLatencyReport(postNotification: true);
                 OnShowingResults?.Invoke();
                 this.Push(CreateResults(prepareScoreForDisplayTask.GetResultSafely()));
             }, Time.Current + delay, 50);
