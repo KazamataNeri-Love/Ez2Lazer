@@ -24,26 +24,20 @@ namespace osu.Game.EzOsuGame.LocalProfile
             RelativeSizeAxes = Axes.X;
             AutoSizeAxes = Axes.Y;
             Direction = FillDirection.Vertical;
-            Spacing = new Vector2(0, 6);
+            Spacing = new Vector2(0, 8); // 与星级条状一致
 
-            var ordered = keyStats.OrderBy(k => k.KeyCount).ToList();
+            var byKey = keyStats.ToDictionary(k => k.KeyCount);
 
-            if (ordered.Count == 0)
+            // 常驻白名单全部档位（4k…18k，含 0 次）。
+            var displayedKeys = EzLocalProfileConstants.MANIA_DISPLAYED_KEY_COUNTS.OrderBy(k => k).ToList();
+
+            int maxPlays = displayedKeys.Max(k => byKey.TryGetValue(k, out var s) ? s.ScoreCount : 0);
+
+            foreach (int keyCount in displayedKeys)
             {
-                Add(new OsuSpriteText
-                {
-                    Text = EzSettingsProfile.LOCAL_PROFILE_NO_RULESET_DATA,
-                    Font = OsuFont.GetFont(size: 14),
-                });
-                return;
-            }
-
-            int maxPlays = ordered.Max(k => k.ScoreCount);
-
-            foreach (var key in ordered)
-            {
-                float ratio = maxPlays <= 0 ? 0 : (float)key.ScoreCount / maxPlays;
-                Add(new KeyPlayBarRow($"{key.KeyCount}K", key.ScoreCount, ratio));
+                int plays = byKey.TryGetValue(keyCount, out var key) ? key.ScoreCount : 0;
+                float ratio = maxPlays <= 0 ? 0 : (float)plays / maxPlays;
+                Add(new KeyPlayBarRow($"{keyCount}K", plays, ratio));
             }
         }
 
@@ -52,7 +46,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
             public KeyPlayBarRow(string label, int plays, float ratio)
             {
                 RelativeSizeAxes = Axes.X;
-                Height = 20;
+                Height = 22;
                 Padding = new MarginPadding { Horizontal = 4 };
 
                 Children = new Drawable[]
@@ -61,7 +55,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                     new Container
                     {
                         RelativeSizeAxes = Axes.Both,
-                        Padding = new MarginPadding { Left = 40, Right = 48 },
+                        Padding = new MarginPadding { Left = 80, Right = 56 },
                         Child = new EzLocalProfileRoundedBar(ratio),
                     },
                     new CountText(plays),
@@ -76,7 +70,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                     Origin = Anchor.CentreLeft;
                     Text = text;
                     Font = OsuFont.GetFont(size: 12, weight: FontWeight.Bold);
-                    Width = 36;
+                    Width = 72;
                 }
 
                 [BackgroundDependencyLoader]

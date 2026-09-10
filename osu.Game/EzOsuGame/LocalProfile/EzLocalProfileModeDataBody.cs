@@ -108,7 +108,10 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 Spacing = new Vector2(0, 12),
             };
 
-            var keyStats = snapshot.ManiaKeyStats.OrderBy(k => k.KeyCount).ToList();
+            var keyStats = snapshot.ManiaKeyStats
+                                  .Where(k => EzLocalProfileConstants.MANIA_DISPLAYED_KEY_COUNTS.Contains(k.KeyCount))
+                                  .OrderBy(k => k.KeyCount)
+                                  .ToList();
 
             if (keyStats.Count == 0)
             {
@@ -134,31 +137,47 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
         private EzLocalProfileLabeledLineChart? createStarLineChart()
         {
-            var list = snapshot.StarPlayCounts.Where(s => s.RulesetId == rulesetId).OrderBy(s => s.StarBucket).ToList();
-            if (list.Count == 0)
+            var counts = snapshot.StarPlayCounts.Where(s => s.RulesetId == rulesetId).ToList();
+            if (counts.Count == 0)
                 return null;
 
-            return new EzLocalProfileLabeledLineChart(
-                list.Select(s => (float)s.Count).ToArray(),
-                list.Select(s => s.StarBucket.ToString(CultureInfo.InvariantCulture)).ToArray(),
-                FontAwesome.Solid.Star);
+            return createFixedBucketLine(counts.Select(s => (s.StarBucket, s.Count)).ToList(), "★", FontAwesome.Solid.Star);
         }
 
         private EzLocalProfileLabeledLineChart? createXxyLineChart()
         {
-            var list = snapshot.XxyPlayCounts.Where(s => s.RulesetId == rulesetId).OrderBy(s => s.StarBucket).ToList();
-            if (list.Count == 0)
+            var counts = snapshot.XxyPlayCounts.Where(s => s.RulesetId == rulesetId).ToList();
+            if (counts.Count == 0)
                 return null;
 
-            return new EzLocalProfileLabeledLineChart(
-                list.Select(s => (float)s.Count).ToArray(),
-                list.Select(s => s.StarBucket.ToString(CultureInfo.InvariantCulture)).ToArray(),
-                FontAwesome.Solid.Moon);
+            return createFixedBucketLine(counts.Select(s => (s.StarBucket, s.Count)).ToList(), "xxy", FontAwesome.Solid.Moon);
+        }
+
+        /// <summary>生成常驻 11 桶（0-1…10+）的折线数据，局数为 0 的桶也展示。</summary>
+        private static EzLocalProfileLabeledLineChart createFixedBucketLine(List<(int bucket, int count)> plays, string suffix, IconUsage labelIcon)
+        {
+            var values = new List<float>();
+            var labels = new List<string>();
+
+            for (int b = 0; b <= 10; b++)
+            {
+                int c = b < 10
+                    ? plays.Where(p => p.bucket == b).Sum(p => p.count)
+                    : plays.Where(p => p.bucket >= 10).Sum(p => p.count);
+
+                values.Add(c);
+                labels.Add(b == 10 ? $"10{suffix}+" : $"{b}{suffix}–{b + 1}{suffix}");
+            }
+
+            return new EzLocalProfileLabeledLineChart(values.ToArray(), labels.ToArray(), labelIcon);
         }
 
         private EzLocalProfileLabeledLineChart? createManiaKpsLineChart()
         {
-            var ordered = snapshot.ManiaKeyStats.OrderBy(k => k.KeyCount).ToList();
+            var ordered = snapshot.ManiaKeyStats
+                                  .Where(k => EzLocalProfileConstants.MANIA_DISPLAYED_KEY_COUNTS.Contains(k.KeyCount))
+                                  .OrderBy(k => k.KeyCount)
+                                  .ToList();
             if (ordered.Count == 0)
                 return null;
 

@@ -11,7 +11,9 @@ using osu.Game.EzOsuGame.Localization;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Overlays;
+using osu.Game.Utils;
 using osuTK;
+using osuTK.Graphics;
 
 namespace osu.Game.EzOsuGame.LocalProfile
 {
@@ -42,22 +44,53 @@ namespace osu.Game.EzOsuGame.LocalProfile
             int max = list.Max(b => b.count);
 
             foreach (var (bucket, count) in list)
-                Add(new BucketBarRow(bucket, count, max, formatBucketLabel));
+                Add(new BucketBarRow(bucket, count, max, formatBucketLabel, difficultyColourFor(bucket)));
         }
 
+        /// <summary>
+        /// 星级难度档位色（与难度筛选/分组面板一致，见 <see cref="PanelGroupStarDifficulty"/>）：
+        /// 1★ 蓝、2★ 绿、3★ 黄等取自 <see cref="OsuColour.STAR_DIFFICULTY_SPECTRUM"/>；9★ 及以上与官方一致回落深灰。
+        /// </summary>
+        private static Color4 difficultyColourFor(int bucket)
+        {
+            if (bucket >= 9)
+                return OsuColour.Gray(0.2f);
+
+            return ColourUtils.SampleFromLinearGradient(OsuColour.STAR_DIFFICULTY_SPECTRUM, bucket);
+        }
+
+
         public static EzLocalProfileBucketBars FromStarPlayCounts(IEnumerable<EzLocalProfileStarPlayCount> stars) =>
-            new EzLocalProfileBucketBars(
-                stars.Select(s => (s.StarBucket, s.Count)),
-                bucket => $"{bucket}★–{bucket + 1}★");
+            createFixedBuckets(stars.Select(s => (s.StarBucket, s.Count)), "★");
 
         public static EzLocalProfileBucketBars FromXxyPlayCounts(IEnumerable<EzLocalProfileXxyPlayCount> plays) =>
-            new EzLocalProfileBucketBars(
-                plays.Select(s => (s.StarBucket, s.Count)),
-                bucket => $"{bucket}–{bucket + 1} SR");
+            createFixedBuckets(plays.Select(s => (s.StarBucket, s.Count)), "xxy");
+
+        /// <summary>
+        /// 常驻 11 个星级分类桶（0-1…9-10、10+），局数为 0 的桶也显示；官方星与 xxy 星同规则。
+        /// </summary>
+        private static EzLocalProfileBucketBars createFixedBuckets(IEnumerable<(int bucket, int count)> plays, string suffix)
+        {
+            var list = plays.ToList();
+            var buckets = new List<(int bucket, int count)>();
+
+            for (int b = 0; b <= 10; b++)
+            {
+                int c = b < 10
+                    ? list.Where(p => p.bucket == b).Sum(p => p.count)
+                    : list.Where(p => p.bucket >= 10).Sum(p => p.count);
+
+                buckets.Add((b, c));
+            }
+
+            return new EzLocalProfileBucketBars(
+                buckets,
+                bucket => bucket == 10 ? $"10{suffix}+" : $"{bucket}{suffix}–{bucket + 1}{suffix}");
+        }
 
         private partial class BucketBarRow : Container
         {
-            public BucketBarRow(int bucket, int count, int max, Func<int, string> formatBucketLabel)
+            public BucketBarRow(int bucket, int count, int max, Func<int, string> formatBucketLabel, Color4 fillColour)
             {
                 RelativeSizeAxes = Axes.X;
                 Height = 22;
@@ -72,7 +105,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                     {
                         RelativeSizeAxes = Axes.Both,
                         Padding = new MarginPadding { Left = 80, Right = 56 },
-                        Child = new EzLocalProfileRoundedBar(ratio),
+                        Child = new EzLocalProfileRoundedBar(ratio, fillColour),
                     },
                     new CountText(count),
                 };

@@ -26,6 +26,9 @@ namespace osu.Game.EzOsuGame.LocalProfile
         public const int OSU_RULESET_ID = 0;
         public const int MANIA_RULESET_ID = 3;
 
+        /// <summary>Key 成绩展示白名单：仅列出这些键数档。</summary>
+        public static readonly int[] MANIA_DISPLAYED_KEY_COUNTS = { 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18 };
+
         public static string NormaliseUsername(string? username)
         {
             if (string.IsNullOrWhiteSpace(username))
