@@ -334,6 +334,84 @@ namespace osu.Game.EzOsuGame.Skills
             });
         }
 
+        public IReadOnlyList<EzPatternRating> GetPlayerPatternRatings(string username, int keyCount, int? algorithmVersion = null)
+        {
+            int version = algorithmVersion ?? EzManiaSkillAlgorithm.VERSION;
+
+            return realmAccess.Run(r =>
+            {
+                var rows = r.All<EzPlayerSkillValue>()
+                            .Where(v => v.Username == username
+                                        && v.KeyCount == keyCount
+                                        && v.SystemId == EzSkillSystems.PLAYER_PATTERN
+                                        && v.AlgorithmVersion == version)
+                            .ToList();
+
+                var list = new List<EzPatternRating>(rows.Count);
+
+                foreach (var row in rows)
+                {
+                    if (!EzPatternRatings.TryParseSkillId(row.SkillId, out string patternId))
+                        continue;
+
+                    list.Add(new EzPatternRating(patternId, row.Value, row.AnalyzedPlays));
+                }
+
+                return list.OrderByDescending(static p => p.Rating).ToList();
+            });
+        }
+
+        /// <summary>
+        /// Replace pattern ratings for one username×keymode (hub mode.patterns).
+        /// Uses existing <see cref="EzPlayerSkillValue"/> — DATA-Skills-PatternRatings.
+        /// </summary>
+        public void WritePlayerPatternRatings(
+            string username,
+            int keyCount,
+            IReadOnlyList<EzPatternRating> ratings,
+            bool provisional = false,
+            bool stale = false,
+            DateTimeOffset? computedAt = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(username);
+            ArgumentNullException.ThrowIfNull(ratings);
+
+            DateTimeOffset at = computedAt ?? DateTimeOffset.UtcNow;
+            int version = EzManiaSkillAlgorithm.VERSION;
+
+            realmAccess.Write(r =>
+            {
+                var existing = r.All<EzPlayerSkillValue>()
+                                .Where(v => v.Username == username
+                                            && v.KeyCount == keyCount
+                                            && v.SystemId == EzSkillSystems.PLAYER_PATTERN)
+                                .ToList();
+
+                foreach (var row in existing)
+                    r.Remove(row);
+
+                foreach (var rating in ratings)
+                {
+                    if (string.IsNullOrWhiteSpace(rating.Id) || !(rating.Rating > 0))
+                        continue;
+
+                    r.Add(new EzPlayerSkillValue
+                    {
+                        Username = username,
+                        KeyCount = keyCount,
+                        SystemId = EzSkillSystems.PLAYER_PATTERN,
+                        SkillId = EzPatternRatings.ToSkillId(rating.Id),
+                        Value = rating.Rating,
+                        AnalyzedPlays = rating.Plays,
+                        Provisional = provisional,
+                        Stale = stale,
+                        AlgorithmVersion = version,
+                        ComputedAt = at,
+                    });
+                }
+            });
+        }
+
         /// <summary>
         /// Replace all history points for <paramref name="username"/> + <paramref name="keyCount"/>
         /// with chronologically sampled skill snapshots (typically keyed by score play time).
@@ -481,6 +559,10 @@ namespace osu.Game.EzOsuGame.Skills
             ArgumentException.ThrowIfNullOrWhiteSpace(beatmapHash);
             ArgumentNullException.ThrowIfNull(info);
 
+            // Never persist Unavailable stubs — they fake “already processed” and block BDSP retries.
+            if (info.IsUnavailable)
+                return;
+
             DateTimeOffset at = computedAt ?? DateTimeOffset.UtcNow;
 
             realmAccess.Write(r =>
@@ -522,13 +604,16 @@ namespace osu.Game.EzOsuGame.Skills
             });
         }
 
-        /// <summary>Hashes that already have a current-version ChartSkillInfo row.</summary>
+        /// <summary>
+        /// Hashes with a current-version ChartSkillInfo row that is not an Unavailable stub.
+        /// Stubs (KeyCount &lt; 0) stay miss so BDSP can retry when the chart becomes loadable.
+        /// </summary>
         public HashSet<string> GetPersistedChartSkillInfoHashes()
         {
             return realmAccess.Run(r =>
             {
                 return r.All<EzBeatmapChartSkillInfo>()
-                        .Where(v => v.InfoVersion == EzChartSkillInfo.VERSION)
+                        .Where(v => v.InfoVersion == EzChartSkillInfo.VERSION && v.KeyCount >= 0)
                         .AsEnumerable()
                         .Select(v => v.BeatmapHash)
                         .Where(static h => !string.IsNullOrEmpty(h))
@@ -584,20 +669,39 @@ namespace osu.Game.EzOsuGame.Skills
             });
         }
 
-        /// <summary>True when a skillset cache stamp exists for this username/key/side/version (including empty sentinel).</summary>
+        /// <summary>
+        /// True when at least one non-sentinel skillset tile exists for this username/key/side/version.
+        /// Legacy <see cref="EzDanSkillsetBuckets.CACHE_EMPTY_SENTINEL"/> rows are removed and treated as miss.
+        /// </summary>
         public bool HasDanSkillsetCache(string username, int keyCount, string side, int? algorithmVersion = null)
         {
             int version = algorithmVersion ?? EzDanAlgorithm.VERSION;
+            bool hasReal = false;
 
-            return realmAccess.Run(r =>
-                r.All<EzPlayerDanSkillsetValue>()
-                 .Any(v => v.Username == username
-                           && v.KeyCount == keyCount
-                           && v.Side == side
-                           && v.AlgorithmVersion == version));
+            realmAccess.Write(r =>
+            {
+                var rows = r.All<EzPlayerDanSkillsetValue>()
+                            .Where(v => v.Username == username
+                                        && v.KeyCount == keyCount
+                                        && v.Side == side
+                                        && v.AlgorithmVersion == version)
+                            .ToList();
+
+                hasReal = false;
+
+                foreach (var row in rows)
+                {
+                    if (row.SkillsetId == EzDanSkillsetBuckets.CACHE_EMPTY_SENTINEL)
+                        r.Remove(row);
+                    else
+                        hasReal = true;
+                }
+            });
+
+            return hasReal;
         }
 
-        /// <summary>Cached skillset tiles (excludes empty sentinel). Empty list may mean hit-empty or miss — use <see cref="HasDanSkillsetCache"/>.</summary>
+        /// <summary>Cached skillset tiles (excludes legacy empty sentinel). Empty list means miss.</summary>
         public IReadOnlyList<EzPlayerDanSkillsetValue> GetDanSkillsetValues(
             string username,
             int keyCount,
@@ -620,7 +724,10 @@ namespace osu.Game.EzOsuGame.Skills
             });
         }
 
-        /// <summary>Replace skillset cache for one username/key/side. Empty verdicts write a sentinel row.</summary>
+        /// <summary>
+        /// Replace skillset cache for one username/key/side.
+        /// Empty <paramref name="verdicts"/> only deletes existing rows (keeps miss — no empty sentinel).
+        /// </summary>
         public void WriteDanSkillsetVerdicts(
             string username,
             int keyCount,
@@ -646,21 +753,7 @@ namespace osu.Game.EzOsuGame.Skills
                     r.Remove(row);
 
                 if (verdicts.Count == 0)
-                {
-                    r.Add(new EzPlayerDanSkillsetValue
-                    {
-                        Username = username,
-                        KeyCount = keyCount,
-                        Side = side,
-                        SkillsetId = EzDanSkillsetBuckets.CACHE_EMPTY_SENTINEL,
-                        RawDan = -1,
-                        Label = string.Empty,
-                        Clears = 0,
-                        AlgorithmVersion = version,
-                        ComputedAt = at,
-                    });
                     return;
-                }
 
                 foreach (var (id, verdict) in verdicts)
                 {

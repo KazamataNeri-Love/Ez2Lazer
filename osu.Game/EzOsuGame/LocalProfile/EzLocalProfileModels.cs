@@ -19,7 +19,9 @@ namespace osu.Game.EzOsuGame.LocalProfile
         public const string UNKNOWN_USERNAME = GUEST_USERNAME;
 
         /// <summary>
-        /// Sentinel value for the player filter dropdown: show merged archive totals.
+        /// Sentinel for the player filter: archive-wide totals (no per-player username filter).
+        /// Career / Drill / evidence reads treat this as unfiltered; SSR / Dan headlines are
+        /// materialised under this key as a hypothetical player (small rows only — evidence is not duplicated).
         /// </summary>
         public const string ALL_PLAYERS = "All";
 
@@ -28,6 +30,14 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
         /// <summary>Key 成绩展示白名单：仅列出这些键数档。</summary>
         public static readonly int[] MANIA_DISPLAYED_KEY_COUNTS = { 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18 };
+
+        /// <summary>
+        /// True when the filter means archive-wide / no per-player username constraint
+        /// (<see langword="null"/>, blank, or <see cref="ALL_PLAYERS"/>).
+        /// </summary>
+        public static bool IsAllPlayersFilter(string? username)
+            => string.IsNullOrWhiteSpace(username)
+               || string.Equals(username.Trim(), ALL_PLAYERS, StringComparison.Ordinal);
 
         public static string NormaliseUsername(string? username)
         {

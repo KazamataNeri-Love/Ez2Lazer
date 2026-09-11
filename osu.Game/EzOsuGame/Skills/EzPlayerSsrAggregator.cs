@@ -22,6 +22,12 @@ namespace osu.Game.EzOsuGame.Skills
         /// <summary>Max skill-history samples stored per keymode (trend chart cap).</summary>
         public const int HISTORY_MAX_POINTS = 64;
 
+        /// <summary>
+        /// Rolling play count for history AggregateSSRs (recent window so the curve can fall).
+        /// Career-prefix Aggregate is structurally monotonic.
+        /// </summary>
+        public const int HISTORY_ROLLING_PLAYS = 50;
+
         private readonly BeatmapManager beatmapManager;
         private readonly EzSkillStore skillStore;
 
@@ -36,6 +42,8 @@ namespace osu.Game.EzOsuGame.Skills
 
         private readonly record struct TimedPlay(DateTimeOffset ScoredAt, EzSkillsetVector Vector);
 
+        private readonly record struct PatternPlay(double Overall, IReadOnlyList<string> Patterns);
+
         public void ComputeAndStore(
             string username,
             IEnumerable<ScoreInfo> scores,
@@ -45,6 +53,7 @@ namespace osu.Game.EzOsuGame.Skills
             ArgumentException.ThrowIfNullOrWhiteSpace(username);
 
             var byKey = new Dictionary<int, List<TimedPlay>>();
+            var patternPlaysByKey = new Dictionary<int, List<PatternPlay>>();
             var evidence = new List<EzAxisPlayEvidenceRow>();
 
             using var calc = new EzMinaCalcFacade();
@@ -109,6 +118,60 @@ namespace osu.Game.EzOsuGame.Skills
 
                     list.Add(new TimedPlay(score.Date, vector));
 
+                    string[] patterns = Array.Empty<string>();
+
+                    // Hub pattern ratings need chart pattern tags (ChartSkillInfo). Prefer stored rows
+                    // (DATA-ChartSkillInfo-Batch). On miss, compute in-memory for this play only —
+                    // TODO(DATA-Skills-PatternRatings): do not Upsert per-score here; if SSR recompute
+                    // still races empty ChartSkillInfo in the wild, batch-ensure hashes before Aggregate.
+                    if (skillStore.TryGetChartSkillInfo(score.BeatmapHash, out var chart) && chart is { IsUnavailable: false })
+                    {
+                        patterns = chart.Patterns;
+                    }
+                    else
+                    {
+                        try
+                        {
+                            var msd = skillStore.GetBeatmapSkills(score.BeatmapHash, EzSkillSystems.BEATMAP_MSD);
+                            var computed = EzChartSkillInfoComputer.Compute(
+                                EzChartSkillInfoComputer.FromPlayable(playable),
+                                msd,
+                                rate);
+                            patterns = computed.Patterns;
+                        }
+                        catch
+                        {
+                            // leave empty — play contributes no pattern axes
+                        }
+                    }
+
+                    if (patterns.Length > 0)
+                    {
+                        if (!patternPlaysByKey.TryGetValue(keyCount, out var patternList))
+                            patternPlaysByKey[keyCount] = patternList = new List<PatternPlay>();
+
+                        patternList.Add(new PatternPlay(vector.Overall, patterns));
+
+                        foreach (string patternId in patterns.Distinct(StringComparer.Ordinal))
+                        {
+                            if (string.IsNullOrWhiteSpace(patternId))
+                                continue;
+
+                            evidence.Add(new EzAxisPlayEvidenceRow
+                            {
+                                Username = username,
+                                KeyCount = keyCount,
+                                SkillId = EzPatternRatings.ToSkillId(patternId),
+                                BeatmapHash = score.BeatmapHash,
+                                AxisValue = vector.Overall,
+                                Accuracy = score.Accuracy,
+                                Rate = rate,
+                                ScoredAt = score.Date,
+                                AlgorithmVersion = EzManiaSkillAlgorithm.VERSION,
+                            });
+                        }
+                    }
+
                     foreach (var (axis, axisValue) in vector.Enumerate())
                     {
                         if (axisValue <= 0 || !double.IsFinite(axisValue))
@@ -145,36 +208,50 @@ namespace osu.Game.EzOsuGame.Skills
                 // Final rating write must not stamp UtcNow history points — career curve is rebuilt below.
                 skillStore.WritePlayerSsr(username, keyCount, aggregated, plays.Count, provisional, appendHistory: false);
                 skillStore.ReplacePlayerSkillHistory(username, keyCount, buildChronologicalHistorySamples(timed));
+
+                IReadOnlyList<PatternPlay> patternPlays = patternPlaysByKey.TryGetValue(keyCount, out var pp)
+                    ? pp
+                    : Array.Empty<PatternPlay>();
+
+                var patternRatings = EzPatternRatings.AggregateModePatternRatings(
+                    patternPlays.Select(static p => (p.Overall, p.Patterns)));
+
+                skillStore.WritePlayerPatternRatings(username, keyCount, patternRatings, provisional);
             }
 
             PendingEvidence = evidence;
         }
 
         /// <summary>
-        /// Running AggregateSSRs after each sampled play, timestamped with that play's <see cref="ScoreInfo.Date"/>.
-        /// Evenly samples up to <see cref="HISTORY_MAX_POINTS"/> points across the career (always includes first and last).
+        /// Running AggregateSSRs over a rolling window of recent plays, timestamped with that play's
+        /// <see cref="ScoreInfo.Date"/>. Evenly samples up to <see cref="HISTORY_MAX_POINTS"/> points
+        /// across the career (always includes first and last). Unlike a career-prefix Aggregate,
+        /// values can fall when strong early plays leave the window.
         /// </summary>
         public static IReadOnlyList<(DateTimeOffset RecordedAt, EzSkillsetVector Vector)> BuildChronologicalHistorySamples(
             IReadOnlyList<(DateTimeOffset ScoredAt, EzSkillsetVector Vector)> orderedPlays,
-            int maxPoints = HISTORY_MAX_POINTS)
+            int maxPoints = HISTORY_MAX_POINTS,
+            int rollingPlays = HISTORY_ROLLING_PLAYS)
         {
             if (orderedPlays.Count == 0 || maxPoints < 1)
                 return Array.Empty<(DateTimeOffset, EzSkillsetVector)>();
 
+            if (rollingPlays < 1)
+                rollingPlays = 1;
+
             var indices = SampleIndices(orderedPlays.Count, maxPoints);
-            var prefix = new List<EzSkillsetVector>(orderedPlays.Count);
             var samples = new List<(DateTimeOffset, EzSkillsetVector)>(indices.Count);
-            int nextSample = 0;
 
-            for (int i = 0; i < orderedPlays.Count; i++)
+            foreach (int i in indices)
             {
-                prefix.Add(orderedPlays[i].Vector);
+                int start = Math.Max(0, i - rollingPlays + 1);
+                int count = i - start + 1;
+                var window = new List<EzSkillsetVector>(count);
 
-                if (nextSample >= indices.Count || indices[nextSample] != i)
-                    continue;
+                for (int j = start; j <= i; j++)
+                    window.Add(orderedPlays[j].Vector);
 
-                samples.Add((orderedPlays[i].ScoredAt, EzSsrAggregator.AggregateVectors(prefix)));
-                nextSample++;
+                samples.Add((orderedPlays[i].ScoredAt, EzSsrAggregator.AggregateVectors(window)));
             }
 
             return samples;

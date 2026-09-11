@@ -26,6 +26,9 @@ namespace osu.Game.EzOsuGame.Skills
         private readonly EzAnalysisDatabase? analysisDatabase;
         private readonly BeatmapManager? beatmapManager;
 
+        /// <summary>Session-only CSI compute failures — keep miss in Realm so BDSP can retry next launch.</summary>
+        private readonly HashSet<string> chartSkillInfoSessionMisses = new HashSet<string>(StringComparer.Ordinal);
+
         public EzSkillProvider(
             EzSkillStore store,
             EzSkillRegistry? registry = null,
@@ -102,6 +105,23 @@ namespace osu.Game.EzOsuGame.Skills
             return store.GetPlayerSsrSnapshot(EzLocalProfileConstants.LEGACY_UNKNOWN_USERNAME, keyCount);
         }
 
+        public IReadOnlyList<EzPatternRating> GetPlayerPatternRatings(string username, int keyCount)
+        {
+            var ratings = store.GetPlayerPatternRatings(username, keyCount);
+            if (ratings.Count > 0 || !EzLocalProfileConstants.IsGuestUsername(username))
+                return ratings;
+
+            return store.GetPlayerPatternRatings(EzLocalProfileConstants.LEGACY_UNKNOWN_USERNAME, keyCount);
+        }
+
+        /// <summary>Hub <c>skillModeEntries</c> for LocalProfile Track / Skills HUD.</summary>
+        public IReadOnlyList<EzSkillModeEntry> GetSkillModeEntries(string username, int keyCount)
+        {
+            var snapshot = GetPlayerSsrSnapshot(username, keyCount);
+            var patterns = GetPlayerPatternRatings(username, keyCount);
+            return EzPatternRatings.SkillModeEntries(keyCount, snapshot.Values, patterns);
+        }
+
         public IReadOnlyList<int> GetPlayerSsrKeyCounts(string username)
         {
             var keys = store.GetPlayerSsrKeyCounts(username);
@@ -140,12 +160,13 @@ namespace osu.Game.EzOsuGame.Skills
             => GetDanSkillsetSlots(keyCount, EzDanSideExtensions.ParseOrRc(sideId));
 
         /// <summary>
-        /// Skillset dan verdicts (clear-bucket averages). Prefers Realm cache; miss → compute, write skillsets + side headline, return.
-        /// Missing keys = under quorum / no filing data yet.
+        /// Skillset dan verdicts (clear-bucket averages). Prefers Realm cache; miss → compute when clears exist.
+        /// Only positive verdicts are persisted (no empty sentinel). Missing keys = under quorum / no filing data yet.
         /// </summary>
         public IReadOnlyDictionary<string, EzDanSkillsetVerdict> GetDanSkillsets(string username, int keyCount, string side)
         {
             string resolvedUser = resolveSkillsUsername(username);
+            var clears = GetDanClears(resolvedUser, keyCount, side, EzDanAlgorithm.VERSION);
 
             if (store.HasDanSkillsetCache(resolvedUser, keyCount, side))
                 return danSkillsetsFromCache(resolvedUser, keyCount, side);
@@ -157,19 +178,26 @@ namespace osu.Game.EzOsuGame.Skills
                 return danSkillsetsFromCache(username, keyCount, side);
             }
 
-            var verdicts = computeDanSkillsets(resolvedUser, keyCount, side, allowComputeChart: true);
-            store.WriteDanSkillsetVerdicts(resolvedUser, keyCount, side, verdicts);
+            // No clears for current EzDanAlgorithm.VERSION → keep miss (do not write empty).
+            if (clears.Count == 0)
+                return new Dictionary<string, EzDanSkillsetVerdict>(StringComparer.Ordinal);
 
-            var clears = GetDanClears(resolvedUser, keyCount, side, EzDanAlgorithm.VERSION);
-            writeSideHeadline(resolvedUser, keyCount, EzDanSideExtensions.ParseOrRc(side), clears, verdicts);
+            var verdicts = computeDanSkillsets(resolvedUser, keyCount, side, allowComputeChart: true);
+
+            if (verdicts.Count > 0)
+            {
+                store.WriteDanSkillsetVerdicts(resolvedUser, keyCount, side, verdicts);
+                writeSideHeadline(resolvedUser, keyCount, EzDanSideExtensions.ParseOrRc(side), clears, verdicts);
+            }
 
             return verdicts;
         }
 
         /// <summary>
         /// Recompute and persist skillset caches for a user after dan clears are replaced.
-        /// Prefetches MSD + ChartSkillInfo for all clear hashes in one Realm pass (no per-clear Run).
-        /// Chart resolve uses stored ChartSkillInfo only (no WorkingBeatmap load).
+        /// Prefetches play SSR (axis evidence = hub <c>play.values</c>) and ChartSkillInfo for clear hashes.
+        /// Missing ChartSkillInfo is computed (hub load + heal), not left permanently null.
+        /// Empty verdicts leave a miss (no empty sentinel write).
         /// </summary>
         public void RefreshDanSkillsets(string username, Action? tick = null)
         {
@@ -192,8 +220,8 @@ namespace osu.Game.EzOsuGame.Skills
                          .Distinct(StringComparer.Ordinal)
                          .ToList();
 
-            var msdByHash = store.GetBeatmapSkillsForHashes(hashes, EzSkillSystems.BEATMAP_MSD);
-            var chartByHash = store.GetChartSkillInfoForHashes(hashes);
+            var playSsr = EzDanPlaySsrIndex.FromAxisPlays(GetAxisPlays(resolvedUser, algorithmVersion: EzManiaSkillAlgorithm.VERSION));
+            var chartByHash = ensureChartSkillInfoForHashes(hashes);
 
             foreach (int keyCount in tracked_skillset_key_counts)
             {
@@ -204,7 +232,6 @@ namespace osu.Game.EzOsuGame.Skills
 
                     if (clears.Count == 0 && EzDanSkillsetBuckets.Slots(keyCount, side).Count == 0)
                     {
-                        // No evidence and no UI slots — skip writing a cache stamp.
                         tick?.Invoke();
                         continue;
                     }
@@ -213,11 +240,15 @@ namespace osu.Game.EzOsuGame.Skills
                         keyCount,
                         side,
                         clears,
-                        hash => msdByHash.TryGetValue(hash, out var msd) && msd.Count > 0 ? msd : null,
+                        playSsr.Resolve,
                         chartByHash.GetValueOrDefault);
 
-                    store.WriteDanSkillsetVerdicts(resolvedUser, keyCount, sideId, verdicts);
-                    writeSideHeadline(resolvedUser, keyCount, side, clears, verdicts);
+                    if (verdicts.Count > 0)
+                    {
+                        store.WriteDanSkillsetVerdicts(resolvedUser, keyCount, sideId, verdicts);
+                        writeSideHeadline(resolvedUser, keyCount, side, clears, verdicts);
+                    }
+
                     tick?.Invoke();
                 }
             }
@@ -242,15 +273,12 @@ namespace osu.Game.EzOsuGame.Skills
                 return;
 
             var headline = EzDanSideHeadline.FromSkillsets(keyCount, side, verdicts, clearDans)
-                           ?? EzDanSideHeadline.FromSideClears(keyCount, side, clearDans);
+                           ?? EzDanSideHeadline.FromSideClears(keyCount, side, clears);
 
             if (headline == null)
                 return;
 
-            var window = clearDans
-                         .OrderByDescending(v => v)
-                         .Take(EzDanAlgorithm.CLEAR_WINDOW)
-                         .ToList();
+            var (_, _, have) = EzDanClearWindow.Select(clears);
 
             store.WriteDanEstimate(new EzDanEstimate
             {
@@ -261,7 +289,7 @@ namespace osu.Game.EzOsuGame.Skills
                 Label = headline.Value.Label,
                 Clears = clears.Count,
                 BeyondTable = headline.Value.BeyondTable,
-                ClearWindowHave = window.Count,
+                ClearWindowHave = (int)Math.Round(have),
                 ClearWindowNeed = EzDanAlgorithm.CLEAR_WINDOW,
                 AlgorithmVersion = EzDanAlgorithm.VERSION,
                 ComputedAt = DateTimeOffset.UtcNow,
@@ -317,25 +345,45 @@ namespace osu.Game.EzOsuGame.Skills
                          .Distinct(StringComparer.Ordinal)
                          .ToList();
 
-            var msdByHash = store.GetBeatmapSkillsForHashes(hashes, EzSkillSystems.BEATMAP_MSD);
-            var chartByHash = store.GetChartSkillInfoForHashes(hashes);
+            var playSsr = EzDanPlaySsrIndex.FromAxisPlays(GetAxisPlays(username, keyCount, algorithmVersion: EzManiaSkillAlgorithm.VERSION));
+            IReadOnlyDictionary<string, EzChartSkillInfo> chartByHash = allowComputeChart
+                ? ensureChartSkillInfoForHashes(hashes)
+                : store.GetChartSkillInfoForHashes(hashes);
 
             return EzDanSkillsetBuckets.ComputeFromClears(
                 keyCount,
                 sideEnum,
                 clears,
-                hash => msdByHash.TryGetValue(hash, out var msd) && msd.Count > 0 ? msd : null,
-                hash =>
-                {
-                    if (chartByHash.TryGetValue(hash, out var stored))
-                        return stored;
+                playSsr.Resolve,
+                chartByHash.GetValueOrDefault);
+        }
 
-                    if (!allowComputeChart || beatmapManager == null || string.IsNullOrEmpty(hash))
-                        return null;
+        /// <summary>
+        /// Hub <c>loadChartSkillInfo</c> + heal missing rows (sync compute; no separate job queue).
+        /// DATA-Dan-Skillset-PlaySsr: ChartSkillInfo must exist for tag keymodes before filing.
+        /// </summary>
+        private Dictionary<string, EzChartSkillInfo> ensureChartSkillInfoForHashes(IReadOnlyList<string> hashes)
+        {
+            var chartByHash = new Dictionary<string, EzChartSkillInfo>(store.GetChartSkillInfoForHashes(hashes), StringComparer.Ordinal);
 
-                    var info = beatmapManager.QueryBeatmap(b => b.Hash == hash);
-                    return info == null ? null : TryGetOrComputeChartSkillInfo(info);
-                });
+            foreach (string hash in hashes)
+            {
+                if (chartByHash.TryGetValue(hash, out var existing) && existing is { IsUnavailable: false })
+                    continue;
+
+                if (beatmapManager == null || string.IsNullOrEmpty(hash))
+                    continue;
+
+                var info = beatmapManager.QueryBeatmap(b => b.Hash == hash);
+                if (info == null)
+                    continue;
+
+                var computed = TryGetOrComputeChartSkillInfo(info);
+                if (computed != null && !computed.IsUnavailable)
+                    chartByHash[hash] = computed;
+            }
+
+            return chartByHash;
         }
 
         private string resolveSkillsUsername(string username)
@@ -355,13 +403,15 @@ namespace osu.Game.EzOsuGame.Skills
 
         /// <summary>
         /// Chart-side skillset labels for one DualPanel side via hub filing
-        /// (<see cref="EzDanSkillsetFiling.BucketsForValues"/>). Same aggregate label on every hit bucket.
+        /// (<see cref="EzDanSkillsetFiling.BucketsForValues"/>). Same aggregate label on every hit bucket
+        /// (hub DualPanel-style chart half; not primary-only).
         /// </summary>
         public IReadOnlyDictionary<string, string> GetChartDanSkillsetLabels(
             BeatmapInfo beatmapInfo,
             int keyCount,
             EzDanSide side,
-            IReadOnlyList<Mod>? mods = null)
+            IReadOnlyList<Mod>? mods = null,
+            IBeatmap? playable = null)
         {
             var result = new Dictionary<string, string>(StringComparer.Ordinal);
             if (keyCount <= 0 || beatmapInfo.Ruleset.OnlineID != 3)
@@ -370,37 +420,37 @@ namespace osu.Game.EzOsuGame.Skills
             mods ??= Array.Empty<Mod>();
             float rate = EzModRate.Resolve(mods);
 
-            var chartVerdict = TryGetChartDan(beatmapInfo, mods) ?? TryGetCachedChartDan(beatmapInfo);
-            string? aggregateLabel = null;
-
-            if (chartVerdict != null && chartVerdict.Side == side && !string.IsNullOrEmpty(chartVerdict.Label))
-                aggregateLabel = chartVerdict.Label;
-
             var msd = GetBeatmapMsd(beatmapInfo.Hash);
             double holdRatio = 0;
             if (msd.TryGetValue(EzSkillSystems.MsdHoldRatioSkillId, out double cachedHold) && double.IsFinite(cachedHold))
                 holdRatio = Math.Clamp(cachedHold, 0, 1);
-            else if (chartVerdict != null && double.IsFinite(chartVerdict.HoldRatio))
+
+            var chartVerdict = TryGetChartDan(beatmapInfo, mods) ?? TryGetCachedChartDan(beatmapInfo);
+            if (holdRatio <= 0 && chartVerdict != null && double.IsFinite(chartVerdict.HoldRatio))
                 holdRatio = Math.Clamp(chartVerdict.HoldRatio, 0, 1);
 
-            if (string.IsNullOrEmpty(aggregateLabel)
-                && EzDanAlgorithm.AllowsChartSideHalf(side, keyCount, holdRatio))
-            {
-                // Sunny/xxy only when this side is the chart's primary identity by hold ratio.
-                double xxy = beatmapInfo.XxyStarRating;
+            if (!EzDanAlgorithm.AllowsChartSideHalf(side, keyCount, holdRatio))
+                return result;
 
-                if (xxy >= 0 && double.IsFinite(xxy)
-                             && EzSunnyDanIntervals.TryLookup(keyCount, side.ToId(), xxy, out var sunny)
-                             && !string.IsNullOrEmpty(sunny.DisplayLabel))
-                {
-                    aggregateLabel = sunny.DisplayLabel;
-                }
+            // Same priority as DualPanel headline: Sunny/xxy first, then chart verdict label.
+            string? aggregateLabel = null;
+            double xxy = beatmapInfo.XxyStarRating;
+
+            if (xxy >= 0 && double.IsFinite(xxy)
+                         && EzSunnyDanIntervals.TryLookup(keyCount, side.ToId(), xxy, out var sunny)
+                         && !string.IsNullOrEmpty(sunny.DisplayLabel))
+            {
+                aggregateLabel = sunny.DisplayLabel;
+            }
+            else if (chartVerdict != null && chartVerdict.Side == side && !string.IsNullOrEmpty(chartVerdict.Label))
+            {
+                aggregateLabel = chartVerdict.Label;
             }
 
             if (string.IsNullOrEmpty(aggregateLabel))
                 return result;
 
-            var chartInfo = TryGetOrComputeChartSkillInfo(beatmapInfo, playable: null, mods);
+            var chartInfo = TryGetOrComputeChartSkillInfo(beatmapInfo, playable, mods);
             double? length = chartInfo?.LengthSeconds ?? (beatmapInfo.Length > 0 ? beatmapInfo.Length / 1000.0 : null);
 
             var buckets = EzDanSkillsetFiling.BucketsForValues(keyCount, side, msd, length, rate, chartInfo);
@@ -422,6 +472,7 @@ namespace osu.Game.EzOsuGame.Skills
 
         /// <summary>
         /// Stored chart skill info, or compute+upsert when a playable (or WorkingBeatmap) is available.
+        /// Failures stay Realm miss (no Unavailable stub). Session set skips hot-path retries without playable.
         /// </summary>
         public EzChartSkillInfo? TryGetOrComputeChartSkillInfo(
             BeatmapInfo beatmapInfo,
@@ -431,11 +482,12 @@ namespace osu.Game.EzOsuGame.Skills
             if (beatmapInfo.Ruleset.OnlineID != 3)
                 return null;
 
-            if (store.TryGetChartSkillInfo(beatmapInfo.Hash, out var stored) && stored != null)
-            {
-                // Unavailable stubs satisfy backfill completeness but are misses for filing/UI.
-                return stored.IsUnavailable ? null : stored;
-            }
+            if (store.TryGetChartSkillInfo(beatmapInfo.Hash, out var stored) && stored != null && !stored.IsUnavailable)
+                return stored;
+
+            // Existing Unavailable stub (or miss): retry when caller supplies playable; otherwise leave miss.
+            if (playable == null && chartSkillInfoSessionMisses.Contains(beatmapInfo.Hash))
+                return null;
 
             try
             {
@@ -450,7 +502,7 @@ namespace osu.Game.EzOsuGame.Skills
 
                 if (map == null)
                 {
-                    store.UpsertChartSkillInfo(beatmapInfo.Hash, EzChartSkillInfo.Unavailable, beatmapInfo.ID);
+                    chartSkillInfoSessionMisses.Add(beatmapInfo.Hash);
                     return null;
                 }
 
@@ -459,20 +511,12 @@ namespace osu.Game.EzOsuGame.Skills
                 // Motion / pattern shares are rate-invariant; always measure at 1.0x like hub.
                 var info = EzChartSkillInfoComputer.Compute(input, msd.Count > 0 ? msd : null, rate: 1);
                 store.UpsertChartSkillInfo(beatmapInfo.Hash, info, beatmapInfo.ID);
+                chartSkillInfoSessionMisses.Remove(beatmapInfo.Hash);
                 return info;
             }
             catch
             {
-                // Persist a stub so startup backfill does not retry this hash every launch.
-                try
-                {
-                    store.UpsertChartSkillInfo(beatmapInfo.Hash, EzChartSkillInfo.Unavailable, beatmapInfo.ID);
-                }
-                catch
-                {
-                    // ignore secondary failure
-                }
-
+                chartSkillInfoSessionMisses.Add(beatmapInfo.Hash);
                 return null;
             }
         }
