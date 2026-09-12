@@ -576,11 +576,15 @@ namespace osu.Game.Database
                 populateMissingBeatmapTagFlags();
 
             // MSD before ChartSkillInfo — filing prefers stored axes when present.
+            // ChartDan after MSD (+ CSI when available) — FromMsd + BucketsForValues, no playable.
             if (scope.HasFlag(EzRealmMetadataScope.Msd))
                 populateMissingBeatmapMsd();
 
             if (scope.HasFlag(EzRealmMetadataScope.ChartSkillInfo))
                 populateMissingChartSkillInfo();
+
+            if (scope.HasFlag(EzRealmMetadataScope.ChartDan))
+                populateMissingChartDan();
         }
 
         private void clearEzRealmMetadata(EzRealmMetadataScope scope)
@@ -597,6 +601,12 @@ namespace osu.Game.Database
             {
                 Logger.Log("Clearing persisted ChartSkillInfo rows...");
                 skillStore.ClearChartSkillInfo();
+            }
+
+            if (scope.HasFlag(EzRealmMetadataScope.ChartDan))
+            {
+                Logger.Log("Clearing persisted ChartDan rows...");
+                skillStore.ClearChartDan();
             }
 
             bool clearBeatmapInfoFields = scope.HasFlag(EzRealmMetadataScope.Tags)
@@ -881,7 +891,7 @@ namespace osu.Game.Database
             if (candidates.Count == 0)
                 return;
 
-            var completeHashes = skillStore.GetCompleteBeatmapMsdHashes();
+            var completeHashes = skillStore.GetSettledBeatmapMsdHashes();
             var missing = candidates.Where(c => !completeHashes.Contains(c.Hash)).ToList();
 
             if (missing.Count == 0)
@@ -916,7 +926,14 @@ namespace osu.Game.Database
                 try
                 {
                     if (beatmapMsdComputer.ComputeAndStore(beatmap) == null)
-                        ++failedCount;
+                    {
+                        // Zero-vector charts write __unrateable and count as settled, not failure.
+                        var skills = skillStore.GetBeatmapSkills(beatmap.Hash, EzSkillSystems.BEATMAP_MSD);
+                        if (EzBeatmapMsdComputer.IsUnrateableMsd(skills))
+                            ++processedCount;
+                        else
+                            ++failedCount;
+                    }
                     else
                         ++processedCount;
                 }
@@ -1024,6 +1041,184 @@ namespace osu.Game.Database
             }
 
             completeNotification(notification, processedCount, missing.Count, failedCount);
+        }
+
+        /// <summary>
+        /// Backfill nomod <see cref="EzBeatmapChartDan"/> from stored MSD (+ CSI / xxy when present).
+        /// Prefer no <c>GetPlayable</c> — hold from MSD <c>hold_ratio</c> or CSI <c>LnRatio</c>.
+        /// Candidate set mirrors MSD: skip unsupported keymodes; only attempt hashes with complete MSD
+        /// (missing MSD is deferred, not counted as ChartDan failure).
+        /// </summary>
+        private void populateMissingChartDan()
+        {
+            Logger.Log("Querying for mania beatmaps with missing ChartDan...");
+
+            List<(Guid Id, string Hash)> candidates = new List<(Guid, string)>();
+            int skippedUnsupportedKeyCount = 0;
+
+            realmAccess.Run(r =>
+            {
+                foreach (var b in r.All<BeatmapInfo>())
+                {
+                    if (b.BeatmapSet == null)
+                        continue;
+
+                    if (b.Ruleset.OnlineID != 3)
+                        continue;
+
+                    if (string.IsNullOrEmpty(b.Hash))
+                        continue;
+
+                    int keyCount = (int)Math.Round(b.Difficulty.CircleSize);
+
+                    if (keyCount > 0
+                        && !EzMinaCalcFacade.SupportsOsuTextKeyCount(keyCount)
+                        && !EzMinaCalcFacade.SupportsNoteArrayKeyCount(keyCount))
+                    {
+                        ++skippedUnsupportedKeyCount;
+                        continue;
+                    }
+
+                    candidates.Add((b.ID, b.Hash));
+                }
+            });
+
+            if (skippedUnsupportedKeyCount > 0)
+                Logger.Log($"Skipping {skippedUnsupportedKeyCount} mania beatmaps with unsupported keycounts for ChartDan (same as MSD).");
+
+            if (candidates.Count == 0)
+                return;
+
+            var completeChartDan = skillStore.GetPersistedChartDanHashes();
+            var settledMsd = skillStore.GetSettledBeatmapMsdHashes();
+            var completeMsd = skillStore.GetCompleteBeatmapMsdHashes();
+
+            int waitingOnMsd = 0;
+            int skippedUnrateableMsd = 0;
+            var missing = new List<(Guid Id, string Hash)>();
+
+            foreach (var candidate in candidates)
+            {
+                if (completeChartDan.Contains(candidate.Hash))
+                    continue;
+
+                if (!settledMsd.Contains(candidate.Hash))
+                {
+                    ++waitingOnMsd;
+                    continue;
+                }
+
+                // Settled as unrateable: no ChartDan possible; do not fail-loop.
+                if (!completeMsd.Contains(candidate.Hash))
+                {
+                    ++skippedUnrateableMsd;
+                    continue;
+                }
+
+                missing.Add(candidate);
+            }
+
+            if (waitingOnMsd > 0)
+                Logger.Log($"Deferring {waitingOnMsd} ChartDan candidates until MSD is complete (run Realm MSD first).");
+
+            if (skippedUnrateableMsd > 0)
+                Logger.Log($"Skipping {skippedUnrateableMsd} ChartDan candidates with unrateable MSD.");
+
+            if (missing.Count == 0)
+            {
+                Logger.Log($"ChartDan backfill: nothing ready (have ChartDan or waiting on MSD). unsupportedKeymode={skippedUnsupportedKeyCount}, waitingOnMsd={waitingOnMsd}, unrateableMsd={skippedUnrateableMsd}");
+                return;
+            }
+
+            Logger.Log($"Found {missing.Count} beatmaps which require ChartDan reprocessing (have complete MSD).");
+
+            var notification = showProgressNotification(missing.Count, "Reprocessing ChartDan", "beatmaps' ChartDan have been updated");
+
+            int processedCount = 0;
+            int failedCount = 0;
+            int attemptedCount = 0;
+            const int log_every = 25;
+
+            foreach (var (id, hash) in missing)
+            {
+                if (notification?.State == ProgressNotificationState.Cancelled)
+                    break;
+
+                sleepIfRequired();
+
+                var beatmap = realmAccess.Run(r => r.Find<BeatmapInfo>(id)?.Detach());
+
+                if (beatmap == null)
+                {
+                    ++failedCount;
+                    ++attemptedCount;
+                    updateNotificationProgress(notification, attemptedCount, missing.Count);
+                    continue;
+                }
+
+                try
+                {
+                    var msd = skillStore.GetBeatmapSkills(hash, EzSkillSystems.BEATMAP_MSD);
+
+                    // completeMsd already filtered; re-check guards races / version drift mid-run.
+                    if (!EzBeatmapMsdComputer.IsCurrentMsdCache(msd))
+                    {
+                        ++failedCount;
+                        ++attemptedCount;
+                        updateNotificationProgress(notification, attemptedCount, missing.Count);
+                        continue;
+                    }
+
+                    int keyCount = (int)Math.Round(beatmap.Difficulty.CircleSize);
+                    if (keyCount <= 0)
+                        keyCount = 4;
+
+                    double holdRatio = 0;
+                    if (msd.TryGetValue(EzSkillSystems.MsdHoldRatioSkillId, out double cachedHold) && double.IsFinite(cachedHold))
+                        holdRatio = Math.Clamp(cachedHold, 0, 1);
+                    else if (skillStore.TryGetChartSkillInfo(hash, out var csiHold) && csiHold?.LnRatio is double lnRatio && double.IsFinite(lnRatio))
+                        holdRatio = Math.Clamp(lnRatio, 0, 1);
+
+                    skillStore.TryGetChartSkillInfo(hash, out var chartInfo);
+                    if (chartInfo is { IsUnavailable: true })
+                        chartInfo = null;
+
+                    double? xxySr = beatmap.XxyStarRating >= 0 ? beatmap.XxyStarRating : null;
+
+                    var persisted = EzPersistedChartDan.TryComputeFromStored(
+                        hash,
+                        beatmap.ID,
+                        msd,
+                        keyCount,
+                        holdRatio,
+                        xxySr,
+                        chartInfo);
+
+                    if (persisted == null)
+                    {
+                        ++failedCount;
+                    }
+                    else
+                    {
+                        skillStore.UpsertChartDan(persisted);
+                        ++processedCount;
+                    }
+                }
+                catch (Exception e)
+                {
+                    Logger.Log($"Background ChartDan processing failed on {beatmap}: {e}");
+                    ++failedCount;
+                }
+
+                ++attemptedCount;
+                updateNotificationProgress(notification, attemptedCount, missing.Count);
+
+                if (attemptedCount % log_every == 0 || attemptedCount >= missing.Count)
+                    Logger.Log($"ChartDan backfill progress: {attemptedCount} of {missing.Count} (ok={processedCount}, fail={failedCount}; deferredNoMsd={waitingOnMsd}, unrateableMsd={skippedUnrateableMsd}, unsupportedKeymode={skippedUnsupportedKeyCount})");
+            }
+
+            completeNotification(notification, processedCount, missing.Count, failedCount);
+            Logger.Log($"ChartDan backfill finished: ok={processedCount}, fail={failedCount}, deferredNoMsd={waitingOnMsd}, unrateableMsd={skippedUnrateableMsd}, unsupportedKeymode={skippedUnsupportedKeyCount}");
         }
 
         /// <summary>
