@@ -15,7 +15,6 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
 using osu.Game.Beatmaps;
-using osu.Game.Database;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
@@ -62,9 +61,6 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
         [Resolved]
         private RulesetStore rulesets { get; set; } = null!;
-
-        [Resolved]
-        private RealmAccess realm { get; set; } = null!;
 
         public EzLocalProfileInsightsBody(
             string username,
@@ -156,16 +152,21 @@ namespace osu.Game.EzOsuGame.LocalProfile
             var localProfileService = profileService;
             string localUsername = username;
             var localPreloaded = preloadedDrillScores;
-            var localRealm = realm;
             var localBeatmaps = beatmapManager;
             var localRulesets = rulesets;
 
             Task.Run(() =>
             {
+                if (localProfileService.TryGetCachedInsights(localUsername, out var cached) && cached != null)
+                    return cached;
+
                 var rows = localPreloaded
                            ?? localProfileService.LoadDrillScores(EzLocalProfileConstants.MANIA_RULESET_ID, localUsername);
-                var plays = EzLocalProfileInsightScoreBuilder.Build(rows, localBeatmaps, localRulesets, localRealm);
-                return EzLocalProfileInsightsCalculator.Calculate(plays);
+                // Prefer drill insight columns; only QueryBeatmap for legacy rows missing meta.
+                var plays = EzLocalProfileInsightScoreBuilder.Build(rows, localBeatmaps, localRulesets);
+                var calculated = EzLocalProfileInsightsCalculator.Calculate(plays);
+                localProfileService.SetCachedInsights(localUsername, calculated);
+                return calculated;
             }, token).ContinueWith(task => Schedule(() =>
             {
                 if (token.IsCancellationRequested || task.IsCanceled)
@@ -218,24 +219,36 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
             if (insights.NewestTopPlay != null)
             {
-                playCardsFlow.Add(new TopPlayCard(
+                playCardsFlow.Add(createTopPlayCard(
                     EzSettingsProfile.LOCAL_PROFILE_INSIGHTS_NEWEST_TOP,
-                    insights.NewestTopPlay,
-                    () => selectPlay(insights.NewestTopPlay)));
+                    insights.NewestTopPlay));
             }
 
             if (insights.OldestTopPlay != null)
             {
-                playCardsFlow.Add(new TopPlayCard(
+                playCardsFlow.Add(createTopPlayCard(
                     EzSettingsProfile.LOCAL_PROFILE_INSIGHTS_OLDEST_TOP,
-                    insights.OldestTopPlay,
-                    () => selectPlay(insights.OldestTopPlay)));
+                    insights.OldestTopPlay));
             }
         }
 
         private void selectPlay(EzLocalProfileInsightPlay play)
         {
             selectDrillScore?.Value = play.Row;
+        }
+
+        private EzLocalProfileScoreNarrowCard createTopPlayCard(LocalisableString caption, EzLocalProfileInsightPlay play)
+        {
+            return new EzLocalProfileScoreNarrowCard(
+                play.Row,
+                EzLocalProfileDrillMods.Resolve(play.Row, rulesets),
+                () => selectPlay(play),
+                caption)
+            {
+                Width = 320,
+                RelativeSizeAxes = Axes.None,
+                AutoSizeAxes = Axes.Y,
+            };
         }
 
         private void toggleDetail(DetailKind kind)
@@ -543,86 +556,6 @@ namespace osu.Game.EzOsuGame.LocalProfile
                                 Text = value,
                                 Font = OsuFont.GetFont(size: 16, weight: FontWeight.Bold),
                                 Colour = EzLocalProfileColours.Numeric(colours),
-                            },
-                        }
-                    }
-                };
-            }
-
-            protected override bool OnHover(HoverEvent e)
-            {
-                background.Refresh(true);
-                return base.OnHover(e);
-            }
-
-            protected override void OnHoverLost(HoverLostEvent e)
-            {
-                background.Refresh(false);
-                base.OnHoverLost(e);
-            }
-        }
-
-        private partial class TopPlayCard : OsuClickableContainer
-        {
-            private readonly LocalisableString caption;
-            private readonly EzLocalProfileInsightPlay play;
-            private EzLocalProfileHoverBox background = null!;
-
-            public TopPlayCard(LocalisableString caption, EzLocalProfileInsightPlay play, Action action)
-            {
-                this.caption = caption;
-                this.play = play;
-
-                Width = 320;
-                AutoSizeAxes = Axes.Y;
-                Masking = true;
-                CornerRadius = 8;
-                Action = action;
-            }
-
-            [BackgroundDependencyLoader]
-            private void load(OverlayColourProvider colours, OsuColour osuColours)
-            {
-                background = new EzLocalProfileHoverBox();
-                background.Configure(colours);
-
-                Children = new Drawable[]
-                {
-                    background,
-                    new FillFlowContainer
-                    {
-                        RelativeSizeAxes = Axes.X,
-                        AutoSizeAxes = Axes.Y,
-                        Direction = FillDirection.Vertical,
-                        Padding = new MarginPadding(12),
-                        Spacing = new Vector2(0, 4),
-                        Children = new Drawable[]
-                        {
-                            new OsuSpriteText
-                            {
-                                Text = caption,
-                                Font = OsuFont.GetFont(size: 11, weight: FontWeight.SemiBold),
-                                Colour = colours.Content2,
-                            },
-                            new TruncatingSpriteText
-                            {
-                                RelativeSizeAxes = Axes.X,
-                                Text = string.IsNullOrEmpty(play.Artist) ? play.Title : $"{play.Artist} - {play.Title}",
-                                Font = OsuFont.GetFont(size: 13, weight: FontWeight.Bold),
-                                Colour = colours.Content1,
-                            },
-                            new TruncatingSpriteText
-                            {
-                                RelativeSizeAxes = Axes.X,
-                                Text = $"{play.DifficultyName} · {play.Rank}",
-                                Font = OsuFont.GetFont(size: 12),
-                                Colour = EzLocalProfileColours.Meta(colours),
-                            },
-                            new OsuSpriteText
-                            {
-                                Text = $"{EzLocalProfileFormat.FormatPp(play.Pp)}pp",
-                                Font = OsuFont.GetFont(size: 12, weight: FontWeight.Bold),
-                                Colour = EzLocalProfileColours.Pp(osuColours),
                             },
                         }
                     }

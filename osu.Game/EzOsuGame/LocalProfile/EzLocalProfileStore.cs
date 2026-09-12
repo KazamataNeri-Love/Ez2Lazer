@@ -29,7 +29,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
         /// Logic version for aggregated stats (independent of table schema).
         /// Bump when recompute is required for correct numbers (e.g. playable-mod analysis).
         /// </summary>
-        public const int CONTENT_VERSION = 2;
+        public const int CONTENT_VERSION = 3;
 
         private const string meta_content_version = "content_version";
 
@@ -168,6 +168,35 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 ensureInitialised();
                 using var connection = openConnection();
                 return readDrillScores(connection, rulesetId, usernameFilter);
+            }
+        }
+
+        /// <summary>
+        /// Per-second KPS series for one drill score. Kept out of <see cref="LoadDrillScores"/> (the widest column)
+        /// and fetched only for the currently selected score.
+        /// </summary>
+        public IReadOnlyList<double> LoadKpsList(Guid scoreId)
+        {
+            lock (sync)
+            {
+                ensureInitialised();
+                using var connection = openConnection();
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "SELECT kps_list_json FROM drill_scores WHERE score_id = $score_id;";
+                cmd.Parameters.AddWithValue("$score_id", scoreId.ToString("N"));
+
+                if (cmd.ExecuteScalar() is not string json || string.IsNullOrEmpty(json))
+                    return Array.Empty<double>();
+
+                try
+                {
+                    return JsonSerializer.Deserialize<List<double>>(json) ?? (IReadOnlyList<double>)Array.Empty<double>();
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[EzLocalProfile] Failed to parse kps list for {scoreId}: {ex.Message}", Ez2ConfigManager.LOGGER_NAME);
+                    return Array.Empty<double>();
+                }
             }
         }
 
@@ -953,14 +982,16 @@ namespace osu.Game.EzOsuGame.LocalProfile
                                       beatmap_hash, beatmap_id, beatmap_set_id, title, artist, difficulty_name,
                                       mapper_username, beatmap_status, star_rating, xxy_star_rating, map_performance_points,
                                       kps_avg, kps_max, kps_list_json, column_counts_json, hold_counts_json,
-                                      avg_abs_offset_ms, has_video, has_storyboard, date_ms)
+                                      avg_abs_offset_ms, has_video, has_storyboard, date_ms,
+                                      bpm, key_count, is_convert, rate, mod_acronyms_json)
                                   VALUES (
                                       $score_id, $score_hash, $username, $ruleset_id, $rank, $pp_resolved, $accuracy,
                                       $max_combo, $max_achievable_combo, $total_score, $mods_json, $total_keys,
                                       $beatmap_hash, $beatmap_id, $beatmap_set_id, $title, $artist, $difficulty_name,
                                       $mapper_username, $beatmap_status, $star_rating, $xxy_star_rating, $map_performance_points,
                                       $kps_avg, $kps_max, $kps_list_json, $column_counts_json, $hold_counts_json,
-                                      $avg_abs_offset_ms, $has_video, $has_storyboard, $date_ms);
+                                      $avg_abs_offset_ms, $has_video, $has_storyboard, $date_ms,
+                                      $bpm, $key_count, $is_convert, $rate, $mod_acronyms_json);
                                   """;
                 cmd.Parameters.AddWithValue("$score_id", row.ScoreId.ToString("N"));
                 cmd.Parameters.AddWithValue("$score_hash", row.ScoreHash);
@@ -994,6 +1025,11 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 cmd.Parameters.AddWithValue("$has_video", row.HasVideo ? 1 : 0);
                 cmd.Parameters.AddWithValue("$has_storyboard", row.HasStoryboard ? 1 : 0);
                 cmd.Parameters.AddWithValue("$date_ms", row.Date.ToUnixTimeMilliseconds());
+                cmd.Parameters.AddWithValue("$bpm", row.Bpm);
+                cmd.Parameters.AddWithValue("$key_count", row.KeyCount);
+                cmd.Parameters.AddWithValue("$is_convert", row.IsConvert ? 1 : 0);
+                cmd.Parameters.AddWithValue("$rate", row.Rate);
+                cmd.Parameters.AddWithValue("$mod_acronyms_json", row.ModAcronymsJson);
                 cmd.ExecuteNonQuery();
             }
         }
@@ -1096,8 +1132,9 @@ namespace osu.Game.EzOsuGame.LocalProfile
                          max_combo, max_achievable_combo, total_score, mods_json, total_keys,
                          beatmap_hash, beatmap_id, beatmap_set_id, title, artist, difficulty_name,
                          mapper_username, beatmap_status, star_rating, xxy_star_rating, map_performance_points,
-                         kps_avg, kps_max, kps_list_json, column_counts_json, hold_counts_json,
-                         avg_abs_offset_ms, has_video, has_storyboard, date_ms
+                         kps_avg, kps_max, '[]' AS kps_list_json, column_counts_json, hold_counts_json,
+                         avg_abs_offset_ms, has_video, has_storyboard, date_ms,
+                         bpm, key_count, is_convert, rate, mod_acronyms_json
                   FROM drill_scores
                   WHERE ruleset_id = $ruleset_id AND username = $username
                   ORDER BY pp_resolved DESC, date_ms DESC;
@@ -1107,8 +1144,9 @@ namespace osu.Game.EzOsuGame.LocalProfile
                          max_combo, max_achievable_combo, total_score, mods_json, total_keys,
                          beatmap_hash, beatmap_id, beatmap_set_id, title, artist, difficulty_name,
                          mapper_username, beatmap_status, star_rating, xxy_star_rating, map_performance_points,
-                         kps_avg, kps_max, kps_list_json, column_counts_json, hold_counts_json,
-                         avg_abs_offset_ms, has_video, has_storyboard, date_ms
+                         kps_avg, kps_max, '[]' AS kps_list_json, column_counts_json, hold_counts_json,
+                         avg_abs_offset_ms, has_video, has_storyboard, date_ms,
+                         bpm, key_count, is_convert, rate, mod_acronyms_json
                   FROM drill_scores
                   WHERE ruleset_id = $ruleset_id
                   ORDER BY pp_resolved DESC, date_ms DESC;
@@ -1154,10 +1192,84 @@ namespace osu.Game.EzOsuGame.LocalProfile
                     HasVideo = reader.GetInt32(29) != 0,
                     HasStoryboard = reader.GetInt32(30) != 0,
                     Date = DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(31)),
+                    Bpm = reader.FieldCount > 32 && !reader.IsDBNull(32) ? reader.GetDouble(32) : 0,
+                    KeyCount = reader.FieldCount > 33 && !reader.IsDBNull(33) ? reader.GetInt32(33) : 0,
+                    IsConvert = reader.FieldCount > 34 && !reader.IsDBNull(34) && reader.GetInt32(34) != 0,
+                    Rate = reader.FieldCount > 35 && !reader.IsDBNull(35) ? reader.GetDouble(35) : 1,
+                    ModAcronymsJson = reader.FieldCount > 36 && !reader.IsDBNull(36) ? reader.GetString(36) : "[]",
                 });
             }
 
             return list;
+        }
+
+        public EzLocalProfileInsights? TryLoadInsightsCache(string? usernameFilter)
+        {
+            string username = EzLocalProfileConstants.IsAllPlayersFilter(usernameFilter)
+                ? EzLocalProfileConstants.ALL_PLAYERS
+                : EzLocalProfileConstants.NormaliseUsername(usernameFilter);
+
+            lock (sync)
+            {
+                ensureInitialised();
+                using var connection = openConnection();
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "SELECT payload_json FROM insights_cache WHERE username = $username;";
+                cmd.Parameters.AddWithValue("$username", username);
+                string? json = cmd.ExecuteScalar() as string;
+                if (string.IsNullOrEmpty(json))
+                    return null;
+
+                try
+                {
+                    return JsonSerializer.Deserialize<EzLocalProfileInsights>(json);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log($"[EzLocalProfile] Failed to deserialize insights cache: {ex.Message}", Ez2ConfigManager.LOGGER_NAME);
+                    return null;
+                }
+            }
+        }
+
+        public void SaveInsightsCache(string? usernameFilter, EzLocalProfileInsights insights)
+        {
+            string username = EzLocalProfileConstants.IsAllPlayersFilter(usernameFilter)
+                ? EzLocalProfileConstants.ALL_PLAYERS
+                : EzLocalProfileConstants.NormaliseUsername(usernameFilter);
+
+            string json = JsonSerializer.Serialize(insights);
+
+            lock (sync)
+            {
+                ensureInitialised();
+                using var connection = openConnection();
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = """
+                                  INSERT INTO insights_cache (username, payload_json, computed_at_ms)
+                                  VALUES ($username, $payload_json, $computed_at_ms)
+                                  ON CONFLICT(username) DO UPDATE SET
+                                      payload_json = excluded.payload_json,
+                                      computed_at_ms = excluded.computed_at_ms;
+                                  """;
+                cmd.Parameters.AddWithValue("$username", username);
+                cmd.Parameters.AddWithValue("$payload_json", json);
+                cmd.Parameters.AddWithValue("$computed_at_ms", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        public void ClearInsightsCache()
+        {
+            lock (sync)
+            {
+                ensureInitialised();
+                using var connection = openConnection();
+                using var cmd = connection.CreateCommand();
+                // WHERE TRUE keeps the intentional full clear explicit (a bare DELETE FROM would be read as an oversight).
+                cmd.CommandText = "DELETE FROM insights_cache WHERE TRUE;";
+                cmd.ExecuteNonQuery();
+            }
         }
 
         public void Dispose()
@@ -1300,7 +1412,12 @@ namespace osu.Game.EzOsuGame.LocalProfile
                                       avg_abs_offset_ms REAL,
                                       has_video INTEGER NOT NULL,
                                       has_storyboard INTEGER NOT NULL,
-                                      date_ms INTEGER NOT NULL
+                                      date_ms INTEGER NOT NULL,
+                                      bpm REAL NOT NULL DEFAULT 0,
+                                      key_count INTEGER NOT NULL DEFAULT 0,
+                                      is_convert INTEGER NOT NULL DEFAULT 0,
+                                      rate REAL NOT NULL DEFAULT 1,
+                                      mod_acronyms_json TEXT NOT NULL DEFAULT '[]'
                                   );
                                   CREATE INDEX IF NOT EXISTS idx_drill_scores_ruleset_pp
                                       ON drill_scores(ruleset_id, pp_resolved DESC, date_ms DESC);
@@ -1344,6 +1461,23 @@ namespace osu.Game.EzOsuGame.LocalProfile
             ensureColumn(connection, "online_score_contributions", "duration_ms", "INTEGER NOT NULL DEFAULT 0");
             ensureColumn(connection, "dan_clear_evidence", "algorithm_version", "INTEGER NOT NULL DEFAULT 1");
             ensureColumn(connection, "axis_play_evidence", "algorithm_version", "INTEGER NOT NULL DEFAULT 1");
+            ensureColumn(connection, "drill_scores", "bpm", "REAL NOT NULL DEFAULT 0");
+            ensureColumn(connection, "drill_scores", "key_count", "INTEGER NOT NULL DEFAULT 0");
+            ensureColumn(connection, "drill_scores", "is_convert", "INTEGER NOT NULL DEFAULT 0");
+            ensureColumn(connection, "drill_scores", "rate", "REAL NOT NULL DEFAULT 1");
+            ensureColumn(connection, "drill_scores", "mod_acronyms_json", "TEXT NOT NULL DEFAULT '[]'");
+
+            using (var insightsTable = connection.CreateCommand())
+            {
+                insightsTable.CommandText = """
+                                            CREATE TABLE IF NOT EXISTS insights_cache (
+                                                username TEXT PRIMARY KEY NOT NULL,
+                                                payload_json TEXT NOT NULL,
+                                                computed_at_ms INTEGER NOT NULL
+                                            );
+                                            """;
+                insightsTable.ExecuteNonQuery();
+            }
 
             setMeta(connection, "schema_version", SCHEMA_VERSION.ToString(CultureInfo.InvariantCulture));
         }
@@ -1403,6 +1537,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                               DELETE FROM drill_scores WHERE TRUE;
                               DELETE FROM dan_clear_evidence WHERE TRUE;
                               DELETE FROM axis_play_evidence WHERE TRUE;
+                              DELETE FROM insights_cache WHERE TRUE;
                               """;
             cmd.ExecuteNonQuery();
         }

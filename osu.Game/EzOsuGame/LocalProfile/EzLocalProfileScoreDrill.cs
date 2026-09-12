@@ -12,18 +12,14 @@ using osu.Framework.Bindables;
 using osu.Framework.Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
-using osu.Framework.Input.Events;
 using osu.Framework.Threading;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
-using osu.Game.Overlays;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
-using osu.Game.Rulesets.UI;
-using osu.Game.Screens.Select;
 using osuTK;
 
 namespace osu.Game.EzOsuGame.LocalProfile
@@ -121,6 +117,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
         private readonly Bindable<EzLocalProfileDrillScoreRow?> currentScore;
         private readonly Bindable<string> searchQuery;
         private readonly IReadOnlyList<EzLocalProfileDrillScoreRow> allScores;
+        private readonly Func<Guid, IReadOnlyList<double>>? kpsLoader;
 
         private EzLocalProfileScoreSelector selector = null!;
         private OsuSpriteText noMatchesText = null!;
@@ -129,11 +126,13 @@ namespace osu.Game.EzOsuGame.LocalProfile
         public EzLocalProfileScoreDrillPanel(
             Bindable<EzLocalProfileDrillScoreRow?> currentScore,
             Bindable<string> searchQuery,
-            IReadOnlyList<EzLocalProfileDrillScoreRow> allScores)
+            IReadOnlyList<EzLocalProfileDrillScoreRow> allScores,
+            Func<Guid, IReadOnlyList<double>>? kpsLoader = null)
         {
             this.currentScore = currentScore;
             this.searchQuery = searchQuery;
             this.allScores = allScores;
+            this.kpsLoader = kpsLoader;
 
             RelativeSizeAxes = Axes.X;
             AutoSizeAxes = Axes.Y;
@@ -183,7 +182,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                             RelativeSizeAxes = Axes.X,
                             AutoSizeAxes = Axes.Y,
                             Margin = new MarginPadding { Left = 12 },
-                            Child = new EzLocalProfileScoreDetailColumn(currentScore, allScores),
+                            Child = new EzLocalProfileScoreDetailColumn(currentScore, allScores, kpsLoader),
                         },
                     },
                 },
@@ -232,7 +231,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
     public partial class EzLocalProfileScoreSelector : CompositeDrawable
     {
-        private const int entries_per_frame = 24;
+        private const int entries_per_frame = 8;
 
         public Bindable<EzLocalProfileDrillScoreRow?> Current { get; } = new Bindable<EzLocalProfileDrillScoreRow?>();
 
@@ -346,7 +345,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 if (task.IsFaulted)
                 {
                     foreach (var row in rows)
-                        listFlow.Add(new ScoreEntry(row, () => Current.Value = row, Array.Empty<Mod>()));
+                        listFlow.Add(new EzLocalProfileScoreNarrowCard(row, Array.Empty<Mod>(), () => Current.Value = row));
                     updateSelectionHighlight();
                     return;
                 }
@@ -369,7 +368,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 for (; index < end; index++)
                 {
                     var (row, mods) = prepared[index];
-                    listFlow.Add(new ScoreEntry(row, () => Current.Value = row, mods));
+                    listFlow.Add(new EzLocalProfileScoreNarrowCard(row, mods, () => Current.Value = row));
                 }
 
                 if (index < prepared.Count)
@@ -387,132 +386,8 @@ namespace osu.Game.EzOsuGame.LocalProfile
 
             foreach (var child in listFlow)
             {
-                if (child is ScoreEntry entry)
+                if (child is EzLocalProfileScoreNarrowCard entry)
                     entry.SetSelected(selectedId != null && entry.ScoreId == selectedId);
-            }
-        }
-
-        private partial class ScoreEntry : OsuClickableContainer
-        {
-            public Guid ScoreId => row.ScoreId;
-
-            private readonly EzLocalProfileDrillScoreRow row;
-            private readonly FillFlowContainer modsFlow;
-            private readonly OsuSpriteText ppText;
-            private readonly OsuSpriteText dateText;
-            private readonly TruncatingSpriteText titleText;
-
-            private EzLocalProfileHoverBox background = null!;
-
-            public ScoreEntry(EzLocalProfileDrillScoreRow row, Action onSelect, IReadOnlyList<Mod> mods)
-            {
-                this.row = row;
-                RelativeSizeAxes = Axes.X;
-                Height = BeatmapLeaderboardScore.HEIGHT;
-                Action = onSelect;
-                Masking = true;
-                CornerRadius = 6;
-
-                ppText = new OsuSpriteText
-                {
-                    Anchor = Anchor.CentreLeft,
-                    Origin = Anchor.CentreLeft,
-                    Text = row.FormatPpText(),
-                    Font = OsuFont.GetFont(size: 13, weight: FontWeight.Bold),
-                };
-                dateText = new OsuSpriteText
-                {
-                    Anchor = Anchor.CentreRight,
-                    Origin = Anchor.CentreRight,
-                    Text = row.Date.ToLocalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                    Font = OsuFont.GetFont(size: 10),
-                };
-                titleText = new TruncatingSpriteText
-                {
-                    RelativeSizeAxes = Axes.X,
-                    Text = row.Title,
-                    Font = OsuFont.GetFont(size: 11, weight: FontWeight.SemiBold),
-                };
-
-                Child = new FillFlowContainer
-                {
-                    RelativeSizeAxes = Axes.X,
-                    AutoSizeAxes = Axes.Y,
-                    Direction = FillDirection.Vertical,
-                    Padding = new MarginPadding { Horizontal = 8, Vertical = 6 },
-                    Spacing = new Vector2(0, 2),
-                    Children = new Drawable[]
-                    {
-                        new Container
-                        {
-                            RelativeSizeAxes = Axes.X,
-                            Height = 16,
-                            Children = new Drawable[]
-                            {
-                                ppText,
-                                dateText,
-                            }
-                        },
-                        titleText,
-                        modsFlow = new FillFlowContainer
-                        {
-                            AutoSizeAxes = Axes.Both,
-                            Direction = FillDirection.Horizontal,
-                            Spacing = new Vector2(-10, 0),
-                        },
-                    }
-                };
-
-                populateMods(mods);
-            }
-
-            public void SetSelected(bool value)
-            {
-                background.SetSelected(value);
-                background.Refresh(IsHovered);
-            }
-
-            [BackgroundDependencyLoader]
-            private void load(OverlayColourProvider colours, OsuColour osuColours)
-            {
-                background = new EzLocalProfileHoverBox { Depth = 1 };
-                background.Configure(colours);
-                AddInternal(background);
-
-                ppText.Colour = EzLocalProfileColours.Pp(osuColours);
-                titleText.Colour = EzLocalProfileColours.Plays(colours);
-                dateText.Colour = EzLocalProfileColours.Meta(colours);
-                dateText.Alpha = 0.85f;
-            }
-
-            protected override bool OnHover(HoverEvent e)
-            {
-                background.Refresh(true);
-                return base.OnHover(e);
-            }
-
-            protected override void OnHoverLost(HoverLostEvent e)
-            {
-                background.Refresh(false);
-                base.OnHoverLost(e);
-            }
-
-            private void populateMods(IReadOnlyList<Mod> mods)
-            {
-                modsFlow.Clear();
-
-                foreach (var mod in mods.AsOrdered())
-                {
-                    modsFlow.Add(new ModIcon(mod)
-                    {
-                        Anchor = Anchor.CentreLeft,
-                        Origin = Anchor.CentreLeft,
-                        Scale = new Vector2(0.3f),
-                        Height = ModIcon.MOD_ICON_SIZE.Y * 3 / 4f,
-                    });
-                }
-
-                modsFlow.Alpha = modsFlow.Count > 0 ? 1 : 0;
             }
         }
     }

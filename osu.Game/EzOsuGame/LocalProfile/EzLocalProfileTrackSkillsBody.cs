@@ -19,6 +19,7 @@ using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Overlays;
+using osu.Game.Rulesets;
 using osuTK;
 
 namespace osu.Game.EzOsuGame.LocalProfile
@@ -50,10 +51,12 @@ namespace osu.Game.EzOsuGame.LocalProfile
         [Resolved]
         private EzSkillProvider skillProvider { get; set; } = null!;
 
-        public EzLocalProfileTrackSkillsBody(
-            string username,
-            Bindable<EzLocalProfileDrillScoreRow?>? selectDrillScore = null,
-            IReadOnlyList<EzLocalProfileDrillScoreRow>? preloadedDrillScores = null)
+        [Resolved]
+        private RulesetStore rulesets { get; set; } = null!;
+
+        public EzLocalProfileTrackSkillsBody(string username,
+                                             Bindable<EzLocalProfileDrillScoreRow?>? selectDrillScore = null,
+                                             IReadOnlyList<EzLocalProfileDrillScoreRow>? preloadedDrillScores = null)
         {
             this.username = username;
             this.selectDrillScore = selectDrillScore;
@@ -100,26 +103,26 @@ namespace osu.Game.EzOsuGame.LocalProfile
                                     RelativeSizeAxes = Axes.X,
                                     AutoSizeAxes = Axes.Y,
                                 },
+                                danPanel = new EzHUDDanDualPanel
+                                {
+                                    RelativeSizeAxes = Axes.X,
+                                },
+                                emptyHint = new OsuSpriteText
+                                {
+                                    RelativeSizeAxes = Axes.X,
+                                    Font = OsuFont.GetFont(size: 14),
+                                    Alpha = 0,
+                                },
                             },
                         },
                         radarSlot = new Container
                         {
-                            Anchor = Anchor.CentreRight,
-                            Origin = Anchor.CentreRight,
+                            Anchor = Anchor.Centre,
+                            Origin = Anchor.Centre,
                             RelativeSizeAxes = Axes.Both,
                             Width = 0.58f,
                         },
                     },
-                },
-                emptyHint = new OsuSpriteText
-                {
-                    RelativeSizeAxes = Axes.X,
-                    Font = OsuFont.GetFont(size: 14),
-                    Alpha = 0,
-                },
-                danPanel = new EzHUDDanDualPanel
-                {
-                    RelativeSizeAxes = Axes.X,
                 },
                 danClearsPanel = new EzLocalProfileDanClearsPanel(
                     username,
@@ -168,7 +171,9 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 refreshSkillBarSelection();
                 refreshDetailPanel();
             }, false);
-            rebuild();
+
+            // Defer first build one frame so Track mount does not hitch the same frame as Insights/drill staging.
+            Scheduler.AddDelayed(rebuild, 0);
         }
 
         private void clearDetailSelection()
@@ -212,7 +217,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
             overviewContainer.Show();
             danPanel.Show();
             danClearsPanel.Show();
-            danClearsPanel.Refresh();
+            Scheduler.AddDelayed(() => danClearsPanel.Refresh(), 0);
 
             foreach (int key in keyCounts)
             {
@@ -273,8 +278,24 @@ namespace osu.Game.EzOsuGame.LocalProfile
             }
 
             double barMax = modeEntries.Select(static e => e.Value).DefaultIfEmpty(0).Max();
+            barMax = Math.Max(barMax, snapshot.Overall);
             if (barMax <= 0)
-                barMax = Math.Max(snapshot.Overall, 1);
+                barMax = 1;
+
+            if (snapshot.Overall >= EzPatternRatings.DISPLAY_MIN)
+            {
+                var overallMeta = EzMinaSkillAxis.Overall.Meta();
+                string overallSkillId = EzMinaSkillAxis.Overall.ToSsrSkillId();
+
+                skillBarsFlow.Add(new SkillBarRow(
+                    overallSkillId,
+                    overallMeta.DisplayName,
+                    snapshot.Overall,
+                    (float)(snapshot.Overall / barMax),
+                    Colour4.FromHex(overallMeta.AccentHex),
+                    selectedSkillId,
+                    () => toggleSkill(overallSkillId)));
+            }
 
             foreach (var entry in modeEntries)
             {
@@ -394,14 +415,22 @@ namespace osu.Game.EzOsuGame.LocalProfile
             foreach (var play in plays)
             {
                 var drill = findDrillRow(play.BeatmapHash);
-                string title = formatPlayTitle(drill);
+                string highlight = play.AxisValue.ToString("0.00", CultureInfo.InvariantCulture);
 
-                list.Add(new EzEvidenceScoreRow(
-                    title,
-                    EzEvidenceScoreRow.FormatAxisMeta(play.AxisValue, play.Accuracy, play.Rate, play.ScoredAt),
-                    drill != null && selectDrillScore != null
-                        ? () => selectDrillScore.Value = drill
-                        : null));
+                if (drill != null)
+                {
+                    list.Add(new EzLocalProfileScoreNarrowCard(
+                        drill,
+                        EzLocalProfileDrillMods.Resolve(drill, rulesets),
+                        selectDrillScore != null ? () => selectDrillScore.Value = drill : null,
+                        highlightValue: highlight));
+                }
+                else
+                {
+                    list.Add(new EzEvidenceScoreRow(
+                        formatPlayTitle(null),
+                        EzEvidenceScoreRow.FormatAxisMeta(play.AxisValue, play.Accuracy, play.Rate, play.ScoredAt)));
+                }
             }
 
             return new EzLocalProfileChartCard(

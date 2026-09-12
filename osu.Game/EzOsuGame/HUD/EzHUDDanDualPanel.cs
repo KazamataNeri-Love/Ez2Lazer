@@ -3,8 +3,11 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
+using osu.Framework.Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Layout;
@@ -12,14 +15,12 @@ using osu.Framework.Localisation;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.EzOsuGame.Localization;
+using osu.Game.EzOsuGame.Mods;
 using osu.Game.EzOsuGame.Skills;
-using osu.Game.EzOsuGame.Skills.Dan;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Overlays;
 using osu.Game.Rulesets.Mods;
-using osu.Game.Rulesets.Objects;
-using osu.Game.Rulesets.Objects.Types;
 using osu.Game.Skinning;
 using osuTK;
 
@@ -28,7 +29,7 @@ namespace osu.Game.EzOsuGame.HUD
     /// <summary>
     /// HUD RC|LN skills-dan dual panel (Skill-radar style Chart / Player / Both sources).
     /// Borrowed by EzAnalysis wedge and Local Profile Track with bindable settings.
-    /// Song-select hot path is Realm/MSD read-only — no sync playable / Mina / LeoBlack.
+    /// Chart side: Realm first, then always async live MSD/ChartDan for the selected map (xxySR rhythm; not written).
     /// </summary>
     public partial class EzHUDDanDualPanel : CompositeDrawable, ISerialisableDrawable
     {
@@ -36,9 +37,6 @@ namespace osu.Game.EzOsuGame.HUD
         /// Song-select wedge content is often ~450–550px; keep Auto on Horizontal RC|LN there.
         /// Vertical dual stacks both sides and clips under BeatmapDetailsArea height.
         /// </summary>
-        /// <summary>LN chart dan badge shows when hold (LN) object count exceeds this.</summary>
-        public const int LN_CHART_DAN_MIN_HOLD_OBJECTS = 100;
-
         private float wideThreshold => 420f;
 
         public static readonly Colour4 RC_ACCENT = Colour4.FromHex("#e0b04c");
@@ -73,6 +71,8 @@ namespace osu.Game.EzOsuGame.HUD
         private readonly LayoutValue sizeLayout = new LayoutValue(Invalidation.DrawSize);
 
         private bool refreshScheduled;
+        private CancellationTokenSource? liveChartCancellation;
+        private ModSettingChangeTracker? modSettingTracker;
 
         [Resolved]
         private EzSkillProvider? skillProvider { get; set; }
@@ -139,7 +139,28 @@ namespace osu.Game.EzOsuGame.HUD
             ShowClearCounts.BindValueChanged(_ => requestRefresh());
 
             beatmap?.BindValueChanged(_ => requestRefresh());
-            mods?.BindValueChanged(_ => requestRefresh());
+            mods?.BindValueChanged(m =>
+            {
+                modSettingTracker?.Dispose();
+                modSettingTracker = m.NewValue != null
+                    ? new ModSettingChangeTracker(m.NewValue) { SettingChanged = _ => requestRefresh() }
+                    : null;
+                requestRefresh();
+            }, true);
+        }
+
+        protected override void Dispose(bool isDisposing)
+        {
+            cancelLiveChart();
+            modSettingTracker?.Dispose();
+            base.Dispose(isDisposing);
+        }
+
+        private void cancelLiveChart()
+        {
+            liveChartCancellation?.Cancel();
+            liveChartCancellation?.Dispose();
+            liveChartCancellation = null;
         }
 
         /// <summary>
@@ -215,6 +236,7 @@ namespace osu.Game.EzOsuGame.HUD
 
         private void refresh()
         {
+            cancelLiveChart();
             applyLayoutMode();
 
             if (skillProvider == null)
@@ -234,21 +256,19 @@ namespace osu.Game.EzOsuGame.HUD
             IReadOnlyDictionary<string, string> chartSkillsetLabelsRc = new Dictionary<string, string>();
             IReadOnlyDictionary<string, string> chartSkillsetLabelsLn = new Dictionary<string, string>();
             EzPersistedChartDan? persistedChartDan = null;
+            IReadOnlyList<Mod> localMods = mods?.Value ?? Array.Empty<Mod>();
 
             if (wantChart && beatmap?.Value.BeatmapInfo != null)
             {
                 var info = beatmap.Value.BeatmapInfo;
-                // Realm first; miss → memory compute + session cache only (no Upsert).
+                // Instant: Realm / session / MSD memory (same role as xxy L1).
                 skillProvider.TryGetChartDanForUi(info, out persistedChartDan, allowMemoryCompute: true);
 
                 if (keys <= 0 && info.Difficulty.CircleSize > 0)
                     keys = (int)Math.Round(info.Difficulty.CircleSize);
 
-                if (keys <= 0
-                    && persistedChartDan is { KeyCount: > 0 })
-                {
+                if (keys <= 0 && persistedChartDan is { KeyCount: > 0 })
                     keys = persistedChartDan.KeyCount;
-                }
 
                 if (keys > 0 && persistedChartDan != null)
                 {
@@ -257,6 +277,127 @@ namespace osu.Game.EzOsuGame.HUD
                 }
             }
 
+            applyPanelContent(keys, user, hasUser, wantChart, wantPlayer, chartSkillsetLabelsRc, chartSkillsetLabelsLn, persistedChartDan);
+
+            // Live recompute (same rhythm as analysis-panel xxy): MSD + ChartDan from playable.
+            // - key/rate mods → full live ChartDan (Sunny via live xxy when available)
+            // - nomod → merge: keep Realm Sunny halves; only fill missing LN/RC
+            if (!wantChart || beatmap?.Value.BeatmapInfo == null || skillProvider == null)
+                return;
+
+            var beatmapInfo = beatmap.Value.BeatmapInfo;
+            var baselineChartDan = persistedChartDan;
+            bool modsAffect = EzModRate.AffectsChartSkills(localMods);
+            liveChartCancellation = new CancellationTokenSource();
+            CancellationToken token = liveChartCancellation.Token;
+            var provider = skillProvider;
+
+            Task.Factory.StartNew(() => provider.TryComputeLiveChartSkills(beatmapInfo, localMods), token,
+                    TaskCreationOptions.HideScheduler | TaskCreationOptions.RunContinuationsAsynchronously, TaskScheduler.Default)
+                .ContinueWith(task =>
+                {
+                    Schedule(() =>
+                    {
+                        if (token.IsCancellationRequested)
+                            return;
+
+                        if (task.IsCanceled || task.IsFaulted)
+                            return;
+
+                        var snap = task.GetResultSafely();
+                        if (snap == null)
+                            return;
+
+                        EzPersistedChartDan? displayDan = snap.ChartDan;
+
+                        if (modsAffect)
+                        {
+                            // Live Sunny from playable xxy; if xxy unavailable, labels stay empty (no MSD stellium).
+                            if (displayDan == null && snap.Msd.Count == 0 && snap.KeyCount <= 0)
+                                return;
+                        }
+                        else if (baselineChartDan != null && displayDan != null)
+                        {
+                            displayDan = EzPersistedChartDan.MergeNomodBaselineWithLive(baselineChartDan, displayDan);
+
+                            // Without live/persisted xxy, do not take MSD-heuristic LN into the overlay.
+                            if (snap.XxySr is null
+                                && !baselineChartDan.HasSide(EzDanSide.Ln)
+                                && snap.ChartDan!.HasSide(EzDanSide.Ln))
+                            {
+                                displayDan = new EzPersistedChartDan
+                                {
+                                    BeatmapHash = displayDan.BeatmapHash,
+                                    BeatmapId = displayDan.BeatmapId,
+                                    AlgorithmVersion = displayDan.AlgorithmVersion,
+                                    KeyCount = displayDan.KeyCount,
+                                    HoldRatio = displayDan.HoldRatio,
+                                    OverallMsd = displayDan.OverallMsd,
+                                    RcRawDan = displayDan.RcRawDan,
+                                    RcLabel = displayDan.RcLabel,
+                                    RcSkillsetLabels = displayDan.RcSkillsetLabels,
+                                    LnRawDan = -1,
+                                    LnLabel = string.Empty,
+                                    LnSkillsetLabels = new Dictionary<string, string>(),
+                                    ComputedAt = displayDan.ComputedAt,
+                                };
+                            }
+
+                            bool filledHalf = displayDan.HasSide(EzDanSide.Ln) && !baselineChartDan.HasSide(EzDanSide.Ln)
+                                              || displayDan.HasSide(EzDanSide.Rc) && !baselineChartDan.HasSide(EzDanSide.Rc);
+
+                            if (!filledHalf)
+                            {
+                                if (snap.Msd.Count == 0)
+                                    return;
+
+                                applyPanelContent(
+                                    KeyCount.Value > 0 ? KeyCount.Value : baselineChartDan.KeyCount,
+                                    TargetUsername.Value,
+                                    !string.IsNullOrWhiteSpace(TargetUsername.Value),
+                                    wantChart,
+                                    wantPlayer,
+                                    baselineChartDan.SkillsetLabelsFor(EzDanSide.Rc),
+                                    baselineChartDan.SkillsetLabelsFor(EzDanSide.Ln),
+                                    baselineChartDan,
+                                    snap.Msd);
+                                return;
+                            }
+                        }
+                        else if (displayDan == null)
+                        {
+                            return;
+                        }
+
+                        int liveKeys = displayDan is { KeyCount: > 0 }
+                            ? displayDan.KeyCount
+                            : (snap.KeyCount > 0 ? snap.KeyCount : KeyCount.Value);
+
+                        applyPanelContent(
+                            liveKeys,
+                            TargetUsername.Value,
+                            !string.IsNullOrWhiteSpace(TargetUsername.Value),
+                            wantChart,
+                            wantPlayer,
+                            displayDan?.SkillsetLabelsFor(EzDanSide.Rc) ?? new Dictionary<string, string>(),
+                            displayDan?.SkillsetLabelsFor(EzDanSide.Ln) ?? new Dictionary<string, string>(),
+                            displayDan,
+                            snap.Msd);
+                    });
+                }, token);
+        }
+
+        private void applyPanelContent(
+            int keys,
+            string? user,
+            bool hasUser,
+            bool wantChart,
+            bool wantPlayer,
+            IReadOnlyDictionary<string, string> chartSkillsetLabelsRc,
+            IReadOnlyDictionary<string, string> chartSkillsetLabelsLn,
+            EzPersistedChartDan? persistedChartDan,
+            IReadOnlyDictionary<string, double>? liveMsd = null)
+        {
             bool hasBeatmap = beatmap?.Value.BeatmapInfo != null;
             bool canShowChart = wantChart && hasBeatmap && keys > 0;
             bool canShowPlayer = wantPlayer && hasUser && keys > 0;
@@ -277,6 +418,7 @@ namespace osu.Game.EzOsuGame.HUD
 
             double? playerOverall = null;
             double? chartOverall = null;
+            double? lnRawDanRating = null;
 
             if (wantPlayer && hasUser && skillProvider != null)
             {
@@ -285,7 +427,7 @@ namespace osu.Game.EzOsuGame.HUD
                     playerOverall = overall;
             }
 
-            if (wantChart && beatmap?.Value.BeatmapInfo != null && skillProvider != null)
+            if (wantChart && skillProvider != null)
             {
                 if (persistedChartDan != null
                     && persistedChartDan.OverallMsd > 0
@@ -295,7 +437,11 @@ namespace osu.Game.EzOsuGame.HUD
                 }
                 else
                 {
-                    var msd = skillProvider.GetBeatmapMsd(beatmap.Value.BeatmapInfo.Hash);
+                    var msd = liveMsd
+                              ?? (beatmap?.Value.BeatmapInfo != null
+                                  ? skillProvider.GetBeatmapMsd(beatmap.Value.BeatmapInfo.Hash)
+                                  : null)
+                              ?? new Dictionary<string, double>();
 
                     if (msd.TryGetValue(EzMinaSkillAxis.Overall.ToMsdSkillId(), out double overall)
                         && overall > 0 && double.IsFinite(overall))
@@ -303,11 +449,13 @@ namespace osu.Game.EzOsuGame.HUD
                         chartOverall = overall;
                     }
                 }
+
+                if (persistedChartDan is { LnRawDan: >= 0 } && double.IsFinite(persistedChartDan.LnRawDan))
+                    lnRawDanRating = persistedChartDan.LnRawDan;
             }
 
-            // Overall Rating is RC-column only — LN column must not reuse the same Overall numbers.
             updateSide(rcList, EzDanSide.Rc, user, keys, chartSkillsetLabelsRc, wantChart, wantPlayer, showClearCounts, playerOverall, chartOverall, persistedChartDan);
-            updateSide(lnList, EzDanSide.Ln, user, keys, chartSkillsetLabelsLn, wantChart, wantPlayer, showClearCounts, null, null, persistedChartDan);
+            updateSide(lnList, EzDanSide.Ln, user, keys, chartSkillsetLabelsLn, wantChart, wantPlayer, showClearCounts, null, lnRawDanRating, persistedChartDan);
         }
 
         private void showEmpty(LocalisableString text)
@@ -346,73 +494,20 @@ namespace osu.Game.EzOsuGame.HUD
                 playerSkillsets = skillProvider.GetDanSkillsets(user, keys, side.ToId());
             }
 
-            if (wantChart && beatmap?.Value.BeatmapInfo != null && skillProvider != null)
-                chartLabel = resolveChartAggregateLabel(side, keys, persistedChartDan);
+            if (wantChart)
+                chartLabel = persistedChartDan?.LabelFor(side);
 
-            // Danskill name rows always render; chart LN dan badges only when hold count gate passes.
-            bool showChartDanBadges = side != EzDanSide.Ln || countHoldObjects() > LN_CHART_DAN_MIN_HOLD_OBJECTS;
-
+            // No secondary LN gate: ChartDan persist already applied holdCount/ratio; missing data stays empty.
             list.UpdateContent(
                 keys,
-                wantChart && showChartDanBadges ? chartLabel : null,
+                wantChart ? chartLabel : null,
                 wantPlayer ? playerLabel : null,
                 slots,
-                wantChart && showChartDanBadges ? chartSkillsetLabels : new Dictionary<string, string>(),
+                wantChart ? chartSkillsetLabels : new Dictionary<string, string>(),
                 wantPlayer ? playerSkillsets : new Dictionary<string, EzDanSkillsetVerdict>(),
                 showClearCounts,
                 wantPlayer ? playerOverallRating : null,
                 wantChart ? chartOverallRating : null);
-        }
-
-        /// <summary>
-        /// Chart RC|LN aggregate labels. Ez may show both sides (not hub-exclusive).
-        /// LN chart dan badge visibility is gated separately by hold object count.
-        /// </summary>
-        private string? resolveChartAggregateLabel(EzDanSide side, int keys, EzPersistedChartDan? persisted)
-        {
-            if (beatmap?.Value.BeatmapInfo == null || skillProvider == null)
-                return null;
-
-            string? fromRow = persisted?.LabelFor(side);
-            if (fromRow != null)
-                return fromRow;
-
-            if (persisted == null)
-                return null;
-
-            var info = beatmap.Value.BeatmapInfo;
-            double xxy = info.XxyStarRating;
-            int lookupKeys = keys > 0 ? keys : persisted.KeyCount;
-
-            if (lookupKeys > 0 && xxy >= 0 && double.IsFinite(xxy)
-                && EzSunnyDanIntervals.TryLookup(lookupKeys, side.ToId(), xxy, out var sunny)
-                && !string.IsNullOrEmpty(sunny.DisplayLabel))
-            {
-                return sunny.DisplayLabel;
-            }
-
-            return null;
-        }
-
-        /// <summary>Hold (LN) objects on the loaded working beatmap; 0 if unavailable.</summary>
-        private int countHoldObjects()
-        {
-            var loaded = beatmap?.Value?.Beatmap;
-            if (loaded?.HitObjects == null)
-                return 0;
-
-            int holds = 0;
-
-            foreach (HitObject obj in loaded.HitObjects)
-            {
-                if (obj is not IHasColumn)
-                    continue;
-
-                if (obj is IHasDuration duration && duration.Duration > 0)
-                    holds++;
-            }
-
-            return holds;
         }
     }
 }
