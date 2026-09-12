@@ -421,11 +421,10 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 }
             }
 
-            if (EzPatternRatings.TryParseSkillId(skillId, out string patternId))
+            if (EzPatternRatings.TryParseSkillId(skillId, out string patternId)
+                && EzPlayerPatternAxisExtensions.TryParse(patternId, out var patternAxis))
             {
-                var meta = EzPatternRatings.Meta.FirstOrDefault(m => m.Id == patternId);
-                if (!string.IsNullOrEmpty(meta.Id))
-                    return meta.DisplayName.ToString();
+                return patternAxis.Meta().DisplayName.ToString();
             }
 
             return EzMinaSkillAxisExtensions.TryParse(skillId, out var axis)
@@ -523,7 +522,9 @@ namespace osu.Game.EzOsuGame.LocalProfile
                     labelLayer,
                 };
 
-                chart.SetData(ratios);
+                // Yellow = chart (none on Local Profile); green = player skills.
+                chart.SetData(Enumerable.Repeat(0f, ratios.Count).ToList());
+                chart.SetSecondaryData(ratios);
             }
 
             /// <summary>
