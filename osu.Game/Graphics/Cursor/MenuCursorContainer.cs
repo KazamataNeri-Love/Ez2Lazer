@@ -14,6 +14,7 @@ using osu.Framework.Graphics.Textures;
 using osu.Framework.Input.Events;
 using osu.Framework.Utils;
 using osu.Game.Configuration;
+using osu.Game.EzOsuGame.Configuration;
 using osuTK;
 
 namespace osu.Game.Graphics.Cursor
@@ -51,6 +52,8 @@ namespace osu.Game.Graphics.Cursor
 
         private MouseInputDetector mouseInputDetector = null!;
 
+        private EzLegacyCursorTrail? skinCursorTrail;
+
         private bool visible;
 
         [BackgroundDependencyLoader]
@@ -64,6 +67,16 @@ namespace osu.Game.Graphics.Cursor
             tapSample = audio.Samples.Get(@"UI/cursor-tap");
 
             Add(mouseInputDetector = new MouseInputDetector());
+
+            // the trail needs to live in a stationary full-screen space (rather than following the cursor drawable),
+            // so it is added here and drawn under the cursor. Visibility is driven by the cursor itself.
+            Add(skinCursorTrail = new EzLegacyCursorTrail
+            {
+                Depth = -1,
+                Alpha = 0,
+            });
+
+            activeCursor.SkinTrail = skinCursorTrail;
         }
 
         [Resolved]
@@ -177,11 +190,19 @@ namespace osu.Game.Graphics.Cursor
             if (State.Value == Visibility.Visible)
             {
                 // only trigger animation for main mouse buttons
-                activeCursor.Scale = new Vector2(1);
-                activeCursor.ScaleTo(0.90f, 800, Easing.OutQuint);
+                if (activeCursor.UsingSkinCursor)
+                {
+                    // skin cursors handle their own pressed state (matching gameplay).
+                    activeCursor.Expand();
+                }
+                else
+                {
+                    activeCursor.Scale = new Vector2(1);
+                    activeCursor.ScaleTo(0.90f, 800, Easing.OutQuint);
 
-                activeCursor.AdditiveLayer.Alpha = 0;
-                activeCursor.AdditiveLayer.FadeInFromZero(800, Easing.OutQuint);
+                    activeCursor.AdditiveLayer.Alpha = 0;
+                    activeCursor.AdditiveLayer.FadeInFromZero(800, Easing.OutQuint);
+                }
 
                 if (cursorRotate.Value && dragRotationState != DragRotationState.Rotating)
                 {
@@ -200,8 +221,13 @@ namespace osu.Game.Graphics.Cursor
         {
             if (!e.HasAnyButtonPressed)
             {
-                activeCursor.AdditiveLayer.FadeOutFromOne(500, Easing.OutQuint);
-                activeCursor.ScaleTo(1, 500, Easing.OutElastic);
+                if (activeCursor.UsingSkinCursor)
+                    activeCursor.Contract();
+                else
+                {
+                    activeCursor.AdditiveLayer.FadeOutFromOne(500, Easing.OutQuint);
+                    activeCursor.ScaleTo(1, 500, Easing.OutElastic);
+                }
 
                 if (dragRotationState != DragRotationState.NotDragging)
                 {
@@ -250,10 +276,19 @@ namespace osu.Game.Graphics.Cursor
         public partial class Cursor : Container
         {
             private Container cursorContainer = null!;
+            private Container defaultCursorContainer = null!;
+            private Container skinCursorContainer = null!;
+            private EzSkinCursor skinCursor = null!;
             private Bindable<float> cursorScale = null!;
+            private Bindable<bool> useSkinCursor = null!;
             private const float base_scale = 0.15f;
 
             public Sprite AdditiveLayer = null!;
+
+            /// <summary>
+            /// The skin cursor trail, if one has been attached by the enclosing <see cref="MenuCursorContainer"/>.
+            /// </summary>
+            public EzLegacyCursorTrail? SkinTrail;
 
             public Cursor()
             {
@@ -261,7 +296,7 @@ namespace osu.Game.Graphics.Cursor
             }
 
             [BackgroundDependencyLoader]
-            private void load(OsuConfigManager config, TextureStore textures, OsuColour colour)
+            private void load(OsuConfigManager config, Ez2ConfigManager ezConfig, TextureStore textures, OsuColour colour)
             {
                 Children = new Drawable[]
                 {
@@ -270,24 +305,83 @@ namespace osu.Game.Graphics.Cursor
                         AutoSizeAxes = Axes.Both,
                         Children = new Drawable[]
                         {
-                            new Sprite
+                            defaultCursorContainer = new Container
                             {
-                                Texture = textures.Get(@"Cursor/menu-cursor"),
+                                AutoSizeAxes = Axes.Both,
+                                Children = new Drawable[]
+                                {
+                                    new Sprite
+                                    {
+                                        Texture = textures.Get(@"Cursor/menu-cursor"),
+                                    },
+                                    AdditiveLayer = new Sprite
+                                    {
+                                        Blending = BlendingParameters.Additive,
+                                        Colour = colour.Pink,
+                                        Alpha = 0,
+                                        Texture = textures.Get(@"Cursor/menu-cursor-additive"),
+                                    },
+                                }
                             },
-                            AdditiveLayer = new Sprite
+                            skinCursorContainer = new Container
                             {
-                                Blending = BlendingParameters.Additive,
-                                Colour = colour.Pink,
+                                // kept present at all times (via AlwaysPresent) so the skin lookup stays up to date,
+                                // visibility is handled below with Alpha instead.
+                                AlwaysPresent = true,
                                 Alpha = 0,
-                                Texture = textures.Get(@"Cursor/menu-cursor-additive"),
+                                Child = skinCursor = new EzSkinCursor
+                                {
+                                    // gameplay/preview cursors are centred on the pointer, so mirror that here.
+                                    Origin = Anchor.Centre,
+                                },
                             },
                         }
                     }
                 };
 
+                // whether the current skin can provide a cursor is only known once the skin cursor has loaded, hence the callback.
+                skinCursor.OnSkinChanged += updateCursorStyle;
+
                 cursorScale = config.GetBindable<float>(OsuSetting.MenuCursorSize);
-                cursorScale.BindValueChanged(scale => cursorContainer.Scale = new Vector2(scale.NewValue * base_scale), true);
+                cursorScale.BindValueChanged(scale =>
+                {
+                    defaultCursorContainer.Scale = new Vector2(scale.NewValue * base_scale);
+                    // EzSkinCursor already presents itself at gameplay size, so no additional base scale is applied here.
+                    skinCursorContainer.Scale = new Vector2(scale.NewValue);
+                }, true);
+
+                useSkinCursor = ezConfig.GetBindable<bool>(Ez2Setting.UseSkinCursor);
+                useSkinCursor.BindValueChanged(_ => updateCursorStyle(), true);
             }
+
+            private void updateCursorStyle()
+            {
+                if (useSkinCursor == null)
+                    return;
+
+                bool showSkinCursor = useSkinCursor.Value && skinCursor.HasSkinCursor;
+
+                defaultCursorContainer.Alpha = showSkinCursor ? 0 : 1;
+                skinCursorContainer.Alpha = showSkinCursor ? 1 : 0;
+
+                if (SkinTrail != null)
+                    SkinTrail.Alpha = showSkinCursor && SkinTrail.HasTrail ? 1 : 0;
+            }
+
+            /// <summary>
+            /// Whether the skin cursor is currently being displayed instead of the default menu cursor.
+            /// </summary>
+            public bool UsingSkinCursor => useSkinCursor?.Value == true && skinCursor?.HasSkinCursor == true;
+
+            /// <summary>
+            /// Expands the skin cursor, mirroring the gameplay cursor's click feedback.
+            /// </summary>
+            public void Expand() => skinCursor.Expand();
+
+            /// <summary>
+            /// Contracts the skin cursor, mirroring the gameplay cursor's click feedback.
+            /// </summary>
+            public void Contract() => skinCursor.Contract();
         }
 
         private partial class MouseInputDetector : Component

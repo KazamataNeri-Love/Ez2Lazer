@@ -99,6 +99,7 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.MenuLogoPath, @"Menu/logo");
             SetDefault(Ez2Setting.MenuLogoText, "(´・ω・｀),120");
             SetDefault(Ez2Setting.MenuLogoVisualisationStyle, EzLogoVisualisationStyle.RadialBars);
+            SetDefault(Ez2Setting.UseSkinCursor, false);
             SetDefault(Ez2Setting.NotificationBehaviour, EzNotificationBehaviour.Normal);
             SetDefault(Ez2Setting.ScreenshotAction, EzScreenshotAction.SaveAndCopy);
             SetDefault(Ez2Setting.HitObjectLifetimeUsesOwnTime, !DebugUtils.IsNUnitRunning);
@@ -911,6 +912,12 @@ namespace osu.Game.EzOsuGame.Configuration
         /// 主菜单/选歌 logo 外圈音频可视化样式。
         /// </summary>
         MenuLogoVisualisationStyle,
+
+        /// <summary>
+        /// 开启后全局（主菜单、选歌等）使用皮肤自带的 cursor/cursormiddle 光标，而不是默认的 lazer 菜单光标。
+        /// </summary>
+        UseSkinCursor,
+
         NotificationBehaviour,
         ScreenshotAction,
         ManiaSkipEmptyEdgeColumns,
