@@ -53,6 +53,7 @@ namespace osu.Game.Graphics.Cursor
         private MouseInputDetector mouseInputDetector = null!;
 
         private EzLegacyCursorTrail? skinCursorTrail;
+        private Container? skinCursorTrailContainer;
 
         private bool visible;
 
@@ -68,15 +69,23 @@ namespace osu.Game.Graphics.Cursor
 
             Add(mouseInputDetector = new MouseInputDetector());
 
-            // the trail needs to live in a stationary full-screen space (rather than following the cursor drawable),
-            // so it is added here and drawn under the cursor. Visibility is driven by the cursor itself.
-            Add(skinCursorTrail = new EzLegacyCursorTrail
+            // the trail needs a stationary full-screen space (it must not follow the cursor drawable), and must be
+            // drawn *behind* the cursor art (lower Depth is drawn in front in osu.Framework, so it uses a higher
+            // depth than the cursor).
+            // it lives in its own container so that its visibility can mirror the cursor's, otherwise it would keep
+            // drawing over the playfield / preview cursors while the menu cursor is hidden.
+            Add(skinCursorTrailContainer = new Container
             {
-                Depth = -1,
+                RelativeSizeAxes = Axes.Both,
+                Depth = 1,
                 Alpha = 0,
+                Child = skinCursorTrail = new EzLegacyCursorTrail(),
             });
 
             activeCursor.SkinTrail = skinCursorTrail;
+
+            // the container is created after the visibility state may already have been evaluated, so sync it.
+            skinCursorTrailContainer.Alpha = getCursorVisibility() ? 1 : 0;
         }
 
         [Resolved]
@@ -244,6 +253,11 @@ namespace osu.Game.Graphics.Cursor
 
         protected override void PopIn()
         {
+            // prevent the trail from connecting to a stale position from before the cursor was hidden.
+            skinCursorTrail?.ResetTrail();
+
+            skinCursorTrailContainer?.FadeTo(1, 250, Easing.OutQuint);
+
             activeCursor.FadeTo(1, 250, Easing.OutQuint);
             activeCursor.ScaleTo(1, 400, Easing.OutQuint);
 
@@ -253,6 +267,10 @@ namespace osu.Game.Graphics.Cursor
 
         protected override void PopOut()
         {
+            skinCursorTrail?.ResetTrail();
+
+            skinCursorTrailContainer?.FadeTo(0, 250, Easing.OutQuint);
+
             activeCursor.FadeTo(0, 250, Easing.OutQuint);
             activeCursor.ScaleTo(0.6f, 250, Easing.In);
 

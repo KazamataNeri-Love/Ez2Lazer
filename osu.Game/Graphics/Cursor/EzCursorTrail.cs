@@ -4,6 +4,7 @@
 #nullable disable
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using osu.Framework.Allocation;
@@ -173,8 +174,23 @@ namespace osu.Game.Graphics.Cursor
         /// </summary>
         protected virtual bool InterpolateMovements => true;
 
+        /// <summary>
+        /// Whether fed positions are reduced to "relevant" nodes (see <see cref="InputResampler"/>).
+        /// </summary>
+        /// <remarks>
+        /// [Ez] disabling this makes the trail follow every position it is fed, which is used when the trail is
+        /// driven from the update loop rather than from raw mouse input.
+        /// </remarks>
+        protected virtual bool ReduceInputPositions => true;
+
         protected virtual float IntervalMultiplier => 1.0f;
         protected virtual bool AvoidDrawingNearCursor => false;
+
+        /// <summary>
+        /// The distance between trail pieces.
+        /// </summary>
+        /// <remarks>[Ez] extracted from <see cref="AddTrail"/> so that implementations can adjust the spacing.</remarks>
+        protected virtual float PieceInterval => Texture.DisplayWidth * CursorScale.X / 2.5f * IntervalMultiplier;
 
         private Vector2? lastPosition;
         private readonly InputResampler resampler = new InputResampler();
@@ -196,11 +212,14 @@ namespace osu.Game.Graphics.Cursor
                 if (!lastPosition.HasValue)
                 {
                     lastPosition = position;
-                    resampler.AddPosition(lastPosition.Value);
+
+                    if (ReduceInputPositions)
+                        resampler.AddPosition(lastPosition.Value);
+
                     return;
                 }
 
-                foreach (Vector2 pos2 in resampler.AddPosition(position))
+                foreach (Vector2 pos2 in ReduceInputPositions ? resampler.AddPosition(position) : singlePosition(position))
                 {
                     Trace.Assert(lastPosition.HasValue);
 
@@ -209,7 +228,7 @@ namespace osu.Game.Graphics.Cursor
                     float distance = diff.Length;
                     Vector2 direction = diff / distance;
 
-                    float interval = Texture.DisplayWidth * CursorScale.X / 2.5f * IntervalMultiplier;
+                    float interval = PieceInterval;
                     float stopAt = distance - (AvoidDrawingNearCursor ? interval : 0);
 
                     for (float d = interval; d < stopAt; d += interval)
@@ -225,6 +244,25 @@ namespace osu.Game.Graphics.Cursor
                 addPart(lastPosition.Value);
             }
         }
+
+        /// <summary>
+        /// [Ez] Wraps a single position in a reusable list, for the <see cref="ReduceInputPositions"/>-disabled path.
+        /// </summary>
+        private List<Vector2> singlePosition(Vector2 position)
+        {
+            singlePositionBuffer.Clear();
+            singlePositionBuffer.Add(position);
+            return singlePositionBuffer;
+        }
+
+        private readonly List<Vector2> singlePositionBuffer = new List<Vector2>(1);
+
+        /// <summary>
+        /// [Ez] Forgets the last tracked position, so that the next trail piece is not connected to a stale one.
+        /// Call this whenever the trail is shown again after having been hidden (which would otherwise draw a
+        /// streak from wherever the pointer previously was).
+        /// </summary>
+        public virtual void ResetTrail() => lastPosition = null;
 
         private void addPart(Vector2 localSpacePosition)
         {

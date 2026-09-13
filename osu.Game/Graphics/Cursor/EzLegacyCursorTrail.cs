@@ -6,6 +6,7 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Textures;
+using osu.Framework.Input;
 using osu.Framework.Input.Events;
 using osu.Framework.Threading;
 using osu.Game.Configuration;
@@ -25,8 +26,6 @@ namespace osu.Game.Graphics.Cursor
     /// </remarks>
     public partial class EzLegacyCursorTrail : EzCursorTrail
     {
-        private const double disjoint_trail_time_separation = 1000 / 60.0;
-
         /// <summary>
         /// Whether the trail is drawn as disjoint stamps (skins which do not provide a cursor middle piece).
         /// </summary>
@@ -40,11 +39,9 @@ namespace osu.Game.Graphics.Cursor
         private ISkinSource skinSource = null!;
         private TextureStore textures = null!;
         private Bindable<float> cursorSize = null!;
+        private InputManager? inputManager;
 
         private ScheduledDelegate? pendingSkinRefresh;
-
-        private double lastTrailTime;
-        private Vector2? currentPosition;
 
         [BackgroundDependencyLoader]
         private void load(OsuConfigManager config, ISkinSource skinSource, TextureStore textures)
@@ -99,44 +96,75 @@ namespace osu.Game.Graphics.Cursor
             // see class remarks: keep the trail's size consistent with the cursor art (which is also scaled by this factor).
             Scale = Vector2.One / LegacySkin.STABLE_MAGIC_SCALE_FACTOR;
 
-            lastTrailTime = 0;
-            currentPosition = null;
+            ResetTrail();
         }
 
-        protected override double FadeDuration => DisjointTrail ? 150 : 500;
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
 
-        protected override float FadeExponent => 1;
+            inputManager = GetContainingInputManager();
+        }
 
-        protected override bool InterpolateMovements => !DisjointTrail;
-
-        protected override float IntervalMultiplier => 1 / Math.Max(cursorSize.Value, 1);
-
-        protected override bool AvoidDrawingNearCursor => !DisjointTrail;
+        /// <remarks>
+        /// [Ez] the trail follows every position it is fed (see <see cref="Update"/>) rather than being reduced
+        /// to "relevant" input nodes, as its feed rate is already the display frame rate.
+        /// </remarks>
+        protected override bool ReduceInputPositions => false;
 
         protected override void Update()
         {
             base.Update();
 
-            if (!DisjointTrail || !currentPosition.HasValue)
+            if (inputManager == null || !inputManager.CurrentState.Mouse.IsPositionValid)
                 return;
 
-            if (Time.Current - lastTrailTime >= disjoint_trail_time_separation)
-            {
-                lastTrailTime = Time.Current;
-                AddTrail(currentPosition.Value);
-            }
+            // [Ez] pieces are generated from the update loop rather than from mouse move events, so the trail's path
+            // follows the frame rate rather than input event delivery.
+            AddTrail(inputManager.CurrentState.Mouse.Position);
         }
 
-        protected override bool OnMouseMove(MouseMoveEvent e)
-        {
-            if (!DisjointTrail)
-                return base.OnMouseMove(e);
+        /// <summary>
+        /// [Ez] the trail is fed from <see cref="Update"/> rather than from mouse move events.
+        /// </summary>
+        protected override bool OnMouseMove(MouseMoveEvent e) => false;
 
-            currentPosition = e.ScreenSpaceMousePosition;
+        protected override double FadeDuration => DisjointTrail ? 150 : 500;
 
-            // intentionally block the base call as we're adding the trails ourselves.
-            return false;
-        }
+        protected override float FadeExponent => 1;
+
+        /// <remarks>
+        /// [Ez] unlike gameplay, menu trails are always interpolated: pieces are spaced along the pointer path by
+        /// distance instead of being stamped at a fixed rate. gameplay's disjoint mode stamps every 1000/60ms, which
+        /// at higher pointer speeds leaves visible gaps between stamps; interpolating removes that speed dependency.
+        /// </remarks>
+        protected override bool InterpolateMovements => true;
+
+        /// <summary>
+        /// [Ez] Multiplier applied to the trail piece density relative to gameplay (4 = four times as many pieces).
+        /// </summary>
+        /// <remarks>
+        /// Gameplay places pieces every <c>trailTextureWidth / 2.5</c> pixels (≈30px for a typical trail texture),
+        /// which reads as a chain of discrete stamps with visible gaps between them. Menus space pieces four times
+        /// as tightly so the trail reads as a continuous streak, independent of pointer speed and frame rate.
+        /// </remarks>
+        private const float piece_rate_multiplier = 4;
+
+        protected override float IntervalMultiplier => 1f / (piece_rate_multiplier * Math.Max(cursorSize.Value, 1));
+
+        /// <summary>
+        /// [Ez] Upper bound on the distance between trail pieces, in pixels.
+        /// </summary>
+        /// <remarks>
+        /// Pointer speeds vary wildly between frames, so spacing that scales purely with the trail texture can still
+        /// leave gaps for skins whose cursor trail art is small or mostly transparent. Capping the spacing in pixels
+        /// guarantees the trail reads as a continuous streak regardless of skin.
+        /// </remarks>
+        private const float maximum_piece_spacing = 6;
+
+        protected override float PieceInterval => Math.Min(base.PieceInterval, maximum_piece_spacing);
+
+        protected override bool AvoidDrawingNearCursor => !DisjointTrail;
 
         protected override void Dispose(bool isDisposing)
         {
