@@ -23,12 +23,16 @@ namespace osu.Game.EzOsuGame.LocalProfile
         private const float list_max_height = 180;
 
         private readonly Dictionary<string, BindableBool> selections = new Dictionary<string, BindableBool>(StringComparer.Ordinal);
-        private readonly BindableBool replaceMode = new BindableBool();
+        private readonly BindableBool clearRebuild = new BindableBool();
+
+        /// <summary>True while at least one player is checked; drives the delete button's enabled state.</summary>
+        private readonly BindableBool hasSelection = new BindableBool();
 
         public EzLocalProfileImportDialog(
             IReadOnlyList<EzLocalProfileUsernameCount> usernameCounts,
             IReadOnlyCollection<string> previouslyIncluded,
-            Action<IReadOnlyList<string>, bool> onConfirm)
+            Action<IReadOnlyList<string>, bool> onConfirm,
+            Action<IReadOnlyList<string>>? onDeleteRequested = null)
         {
             HeaderText = EzSettingsProfile.LOCAL_PROFILE_IMPORT_HEADER;
             BodyText = EzSettingsProfile.LOCAL_PROFILE_IMPORT_BODY;
@@ -51,12 +55,16 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 var bindable = new BindableBool(selected);
                 selections[entry.Username] = bindable;
 
+                bindable.ValueChanged += _ => updateHasSelection();
+
                 flow.Add(new OsuCheckbox
                 {
                     LabelText = $"{entry.Username}  ({entry.ScoreCount})",
                     Current = { BindTarget = bindable },
                 });
             }
+
+            updateHasSelection();
 
             float listHeight = Math.Clamp(
                 usernameCounts.Count * row_height + Math.Max(0, usernameCounts.Count - 1) * 4,
@@ -86,8 +94,8 @@ namespace osu.Game.EzOsuGame.LocalProfile
                     },
                     new OsuCheckbox
                     {
-                        LabelText = EzSettingsProfile.LOCAL_PROFILE_IMPORT_REPLACE,
-                        Current = { BindTarget = replaceMode },
+                        LabelText = EzSettingsProfile.LOCAL_PROFILE_IMPORT_CLEAR_REBUILD,
+                        Current = { BindTarget = clearRebuild },
                     },
                 }
             };
@@ -100,7 +108,19 @@ namespace osu.Game.EzOsuGame.LocalProfile
                     Action = () =>
                     {
                         var chosen = selections.Where(kv => kv.Value.Value).Select(kv => kv.Key).ToList();
-                        onConfirm(chosen, replaceMode.Value);
+                        onConfirm(chosen, clearRebuild.Value);
+                    }
+                },
+                new PopupDialogDangerousButton
+                {
+                    Text = EzSettingsProfile.LOCAL_PROFILE_IMPORT_DELETE,
+                    Enabled = { BindTarget = hasSelection },
+                    Action = () =>
+                    {
+                        var chosen = selections.Where(kv => kv.Value.Value).Select(kv => kv.Key).ToList();
+
+                        if (chosen.Count > 0)
+                            onDeleteRequested?.Invoke(chosen);
                     }
                 },
                 new PopupDialogCancelButton
@@ -109,5 +129,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 }
             };
         }
+
+        private void updateHasSelection() => hasSelection.Value = selections.Values.Any(b => b.Value);
     }
 }

@@ -368,6 +368,66 @@ namespace osu.Game.EzOsuGame.Localization
             "Marks all beatmaps' Tag / XxySR / PP as uncomputed, then runs a full backfill."
             + "\nMay take a long time for large libraries; watch the progress notification in the top-right corner.");
 
+        public static readonly EzLocalizationManager.EzLocalisableString SKILL_DATA_STATUS =
+            new EzLocalizationManager.EzLocalisableString("技能数据状态", "Skill data status");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SKILL_DATA_STATUS_REFRESH =
+            new EzLocalizationManager.EzLocalisableString("刷新技能数据状态", "Refresh skill data status");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SKILL_DATA_STATUS_REFRESH_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "重新统计谱面技能链（MSD → CSI → Dan）当前版本的覆盖情况并刷新状态标记。"
+            + "\n打开设置页时会自动统计一次；补算完成后可用此按钮再查。大库可能耗时数秒。"
+            + "\n就绪 = 已是当前版本；不可评分 = 该谱面确定算不出，已结算不再重试；"
+            + "过期 = 旧版本留下的行（改过算法后会出现）；缺失 = 还没算过。"
+            + "\n健康 = 过期 + 缺失；三项独立统计，上游换版会使其下游整体变为过期。"
+            + "\n玩家技能 = 玩家链（成绩 → SSR/Dan），没有组合版本号：一局结算后其技能行会被标为过期，"
+            + "由手动「计算本地成绩」（及图表链回折）刷新；这里显示还有多少玩家待刷新。"
+            + "\n蓝色 = 已对齐；橙色 = 仍有待补算；红色 = 统计失败。",
+            "Re-measures chart-skill-chain coverage (MSD -> CSI -> Dan) at the current revision and refreshes the status marker."
+            + "\nIt is also measured automatically when the settings panel opens; use this button only to re-check after a backfill. May take a few seconds on a large library."
+            + "\nready = already at the current revision; unrateable = deterministically unratable and settled (no longer retried);"
+            + " stale = a row left by an older revision (appears after an algorithm change); missing = never computed."
+            + "\nPending = stale + missing. The three facets are counted independently; bumping an upstream one turns its downstream facets stale."
+            + "\nPlayer skills = the player chain (plays -> SSR/Dan), which has no composed revision: a settled play flags the player's"
+            + " rows and the manual compute / chart-chain follow-up refreshes them. This shows how many players are still waiting."
+            + "\nBlue = in sync; orange = work still pending; red = measurement failed.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SKILL_DATA_STATUS_MEASURING =
+            new EzLocalizationManager.EzLocalisableString("正在统计…", "Measuring...");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SKILL_DATA_STATUS_FAILED =
+            new EzLocalizationManager.EzLocalisableString("统计失败，详见日志。", "Measurement failed - see the logs.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SKILL_DATA_STATUS_RUNNING =
+            new EzLocalizationManager.EzLocalisableString("（补算进行中）", " (backfill running)");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SKILL_DATA_STATUS_CHARTS =
+            new EzLocalizationManager.EzLocalisableString("谱面", "charts");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SKILL_DATA_STATUS_READY =
+            new EzLocalizationManager.EzLocalisableString("就绪", "ready");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SKILL_DATA_STATUS_UNRATEABLE =
+            new EzLocalizationManager.EzLocalisableString("不可评分", "unrateable");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SKILL_DATA_STATUS_STALE =
+            new EzLocalizationManager.EzLocalisableString("过期", "stale");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SKILL_DATA_STATUS_MISSING =
+            new EzLocalizationManager.EzLocalisableString("缺失", "missing");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SKILL_DATA_STATUS_PENDING =
+            new EzLocalizationManager.EzLocalisableString("待补算", "pending");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SKILL_DATA_STATUS_ALL_CURRENT =
+            new EzLocalizationManager.EzLocalisableString("无待补算", "nothing pending");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SKILL_DATA_STATUS_PLAYERS =
+            new EzLocalizationManager.EzLocalisableString("玩家技能", "player skills");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SKILL_DATA_STATUS_PLAYERS_ALL_CURRENT =
+            new EzLocalizationManager.EzLocalisableString("已对齐", "in sync");
+
         #region 机制类
 
         public static readonly EzLocalizationManager.EzLocalisableString EZ_GAME_SETTINGS_HEADER = new EzLocalizationManager.EzLocalisableString("Ez Mania 设置", "Ez Mania Settings");
@@ -653,6 +713,32 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly EzLocalizationManager.EzLocalisableString EXTERNAL_RULESET_INVALID_ONLINE_ID = new EzLocalizationManager.EzLocalisableString(
             "OnlineID 必须为 -1 或 ≥4（不能使用 0~3）。",
             "OnlineID must be -1 or ≥4 (0~3 are reserved).");
+
+        #endregion
+
+        #region Ez 技能
+
+        public static readonly EzLocalizationManager.EzLocalisableString EZ_SKILL_SECTION_HEADER =
+            new EzLocalizationManager.EzLocalisableString("Ez 技能", "Ez Skill");
+
+        public static readonly LocalisableString SKILL_LN_CHART_MIN_HOLD_OBJECTS = new EzLocalizationManager.EzLocalisableString(
+            "LN 谱面最小 Hold 数",
+            "LN chart min hold objects");
+
+        public static readonly LocalisableString SKILL_LN_CHART_MIN_HOLD_OBJECTS_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "ChartDan「LN 半」的绝对门槛：hold 物件数大于此值时，即使 hold 占比未达比例线也认定为 LN。"
+            + "\n与比例线 LnPrimaryMinRatioFor 是「或」关系：hold 数 > 本阈值，或 hold 占比 ≥ 比例线"
+            + "（4K 及其它键数 = 45%，7K = 37.5%）。"
+            + "\n降低 → 更多 hold 多但占比低的谱面获得 LN 半；提高 → 更依赖比例线，低占比谱面退回 RC。"
+            + "\n影响：Ez ChartDan / DualPanel、选歌面板与 HUD 雷达的 LN 标签，以及 Realm 中持久化的 ChartDan LN half。"
+            + "\n已落盘的 ChartDan / CSI 不会自动追溯更新，需重算（数据重建 → Realm 谱面技能链）后生效。",
+            "Absolute gate for the ChartDan LN half: when hold objects exceed this value the chart counts as LN "
+            + "even if its hold ratio is below the ratio line."
+            + "\nOR relationship with the ratio line LnPrimaryMinRatioFor: hold count > this threshold, OR hold ratio >= the ratio line "
+            + "(45% for 4K and other key counts, 37.5% for 7K)."
+            + "\nLower = more hold-heavy but low-ratio charts get an LN half; higher = the ratio line dominates and low-ratio charts fall back to RC."
+            + "\nAffects: Ez ChartDan / DualPanel, song-select and HUD radar LN labels, and the persisted ChartDan LN half in Realm."
+            + "\nAlready-persisted ChartDan / CSI is not retroactively updated; rebuild (Data rebuild -> Realm chart skill chain) to apply.");
 
         #endregion
     }

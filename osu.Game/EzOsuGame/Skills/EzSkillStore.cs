@@ -4,7 +4,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using osu.Game.Beatmaps;
 using osu.Game.Database;
+using osu.Game.EzOsuGame.Analysis;
+using Realms;
 
 namespace osu.Game.EzOsuGame.Skills
 {
@@ -273,6 +276,28 @@ namespace osu.Game.EzOsuGame.Skills
             });
         }
 
+        /// <summary>
+        /// Charts whose MSD settled as unrateable at the current revision. The chain derives no ChartDan from
+        /// them (see <c>BackgroundDataStoreProcessor.populateMissingChartDan</c>), so a play waiting on a ChartDan
+        /// row for one of these is settled rather than missing - reporting it would re-queue the chain forever.
+        /// </summary>
+        /// <remarks>
+        /// Scans the MSD table, so callers should treat the result as a per-pass value and only ask for it when a
+        /// ChartDan row is otherwise missing (the steady state has none).
+        /// </remarks>
+        public HashSet<string> GetUnrateableChartDanHashes()
+        {
+            int version = EzManiaSkillAlgorithm.VERSION;
+
+            return realmAccess.Run(r => r.All<EzBeatmapSkillValue>()
+                                         .Where(v => v.SystemId == EzSkillSystems.BEATMAP_MSD
+                                                     && v.AlgorithmVersion == version
+                                                     && v.SkillId == EzSkillSystems.MsdUnrateableSkillId)
+                                         .AsEnumerable()
+                                         .Select(v => v.BeatmapHash)
+                                         .ToHashSet(StringComparer.Ordinal));
+        }
+
         public IReadOnlyDictionary<string, double> GetPlayerSkills(string username, int keyCount, string systemId, int? algorithmVersion = null)
         {
             int version = algorithmVersion ?? EzManiaSkillAlgorithm.VERSION;
@@ -350,49 +375,95 @@ namespace osu.Game.EzOsuGame.Skills
             DateTimeOffset at = computedAt ?? DateTimeOffset.UtcNow;
             int version = EzManiaSkillAlgorithm.VERSION;
 
+            realmAccess.Write(r => addPlayerSsr(r, username, keyCount, vector, analyzedPlays, provisional, stale, at, version, appendHistory));
+        }
+
+        /// <summary>
+        /// Write one player×keymode's SSR values, history samples and pattern ratings in a single transaction.
+        /// </summary>
+        /// <remarks>
+        /// The individual writers each open their own Realm transaction, and a per-player skill refresh touches
+        /// several keymodes; grouping them here keeps the write traffic proportional to the player, not to
+        /// (keymodes × tables).
+        /// </remarks>
+        public void WritePlayerSkillBundle(
+            string username,
+            int keyCount,
+            EzSkillsetVector ssr,
+            int analyzedPlays,
+            bool provisional,
+            IReadOnlyList<(DateTimeOffset RecordedAt, EzSkillsetVector Vector)> historySamples,
+            IReadOnlyList<EzPatternRating> patternRatings)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(username);
+            ArgumentNullException.ThrowIfNull(historySamples);
+            ArgumentNullException.ThrowIfNull(patternRatings);
+
+            DateTimeOffset at = DateTimeOffset.UtcNow;
+            int version = EzManiaSkillAlgorithm.VERSION;
+
             realmAccess.Write(r =>
             {
-                var existing = r.All<EzPlayerSkillValue>()
-                                .Where(v => v.Username == username
-                                            && v.KeyCount == keyCount
-                                            && v.SystemId == EzSkillSystems.PLAYER_SSR)
-                                .ToList();
+                // SSR values without the per-axis history points: the curve is replaced below from the sampled
+                // chronological series, so the UtcNow stamping an append would do is exactly what we must not keep.
+                addPlayerSsr(r, username, keyCount, ssr, analyzedPlays, provisional, stale: false, at, version, appendHistory: false);
+                replacePlayerSkillHistory(r, username, keyCount, historySamples, version);
+                writePlayerPatternRatings(r, username, keyCount, patternRatings, provisional, stale: false, at, version);
+            });
+        }
 
-                foreach (var row in existing)
-                    r.Remove(row);
+        private static void addPlayerSsr(
+            Realm r,
+            string username,
+            int keyCount,
+            EzSkillsetVector vector,
+            int analyzedPlays,
+            bool provisional,
+            bool stale,
+            DateTimeOffset at,
+            int version,
+            bool appendHistory)
+        {
+            var existing = r.All<EzPlayerSkillValue>()
+                            .Where(v => v.Username == username
+                                        && v.KeyCount == keyCount
+                                        && v.SystemId == EzSkillSystems.PLAYER_SSR)
+                            .ToList();
 
-                foreach (var (axis, value) in vector.Enumerate())
+            foreach (var row in existing)
+                r.Remove(row);
+
+            foreach (var (axis, value) in vector.Enumerate())
+            {
+                string skillId = axis.ToSsrSkillId();
+
+                r.Add(new EzPlayerSkillValue
                 {
-                    string skillId = axis.ToSsrSkillId();
+                    Username = username,
+                    KeyCount = keyCount,
+                    SystemId = EzSkillSystems.PLAYER_SSR,
+                    SkillId = skillId,
+                    Value = value,
+                    AnalyzedPlays = analyzedPlays,
+                    Provisional = provisional,
+                    Stale = stale,
+                    AlgorithmVersion = version,
+                    ComputedAt = at,
+                });
 
-                    r.Add(new EzPlayerSkillValue
+                if (appendHistory && value > 0)
+                {
+                    r.Add(new EzPlayerSkillHistoryPoint
                     {
                         Username = username,
                         KeyCount = keyCount,
-                        SystemId = EzSkillSystems.PLAYER_SSR,
                         SkillId = skillId,
                         Value = value,
-                        AnalyzedPlays = analyzedPlays,
-                        Provisional = provisional,
-                        Stale = stale,
+                        RecordedAt = at,
                         AlgorithmVersion = version,
-                        ComputedAt = at,
                     });
-
-                    if (appendHistory && value > 0)
-                    {
-                        r.Add(new EzPlayerSkillHistoryPoint
-                        {
-                            Username = username,
-                            KeyCount = keyCount,
-                            SkillId = skillId,
-                            Value = value,
-                            RecordedAt = at,
-                            AlgorithmVersion = version,
-                        });
-                    }
                 }
-            });
+            }
         }
 
         public IReadOnlyList<EzPatternRating> GetPlayerPatternRatings(string username, int keyCount, int? algorithmVersion = null)
@@ -440,37 +511,47 @@ namespace osu.Game.EzOsuGame.Skills
             DateTimeOffset at = computedAt ?? DateTimeOffset.UtcNow;
             int version = EzManiaSkillAlgorithm.VERSION;
 
-            realmAccess.Write(r =>
+            realmAccess.Write(r => writePlayerPatternRatings(r, username, keyCount, ratings, provisional, stale, at, version));
+        }
+
+        private static void writePlayerPatternRatings(
+            Realm r,
+            string username,
+            int keyCount,
+            IReadOnlyList<EzPatternRating> ratings,
+            bool provisional,
+            bool stale,
+            DateTimeOffset at,
+            int version)
+        {
+            var existing = r.All<EzPlayerSkillValue>()
+                            .Where(v => v.Username == username
+                                        && v.KeyCount == keyCount
+                                        && v.SystemId == EzSkillSystems.PLAYER_PATTERN)
+                            .ToList();
+
+            foreach (var row in existing)
+                r.Remove(row);
+
+            foreach (var rating in ratings)
             {
-                var existing = r.All<EzPlayerSkillValue>()
-                                .Where(v => v.Username == username
-                                            && v.KeyCount == keyCount
-                                            && v.SystemId == EzSkillSystems.PLAYER_PATTERN)
-                                .ToList();
+                if (string.IsNullOrWhiteSpace(rating.Id) || !(rating.Rating > 0))
+                    continue;
 
-                foreach (var row in existing)
-                    r.Remove(row);
-
-                foreach (var rating in ratings)
+                r.Add(new EzPlayerSkillValue
                 {
-                    if (string.IsNullOrWhiteSpace(rating.Id) || !(rating.Rating > 0))
-                        continue;
-
-                    r.Add(new EzPlayerSkillValue
-                    {
-                        Username = username,
-                        KeyCount = keyCount,
-                        SystemId = EzSkillSystems.PLAYER_PATTERN,
-                        SkillId = EzPatternRatings.ToSkillId(rating.Id),
-                        Value = rating.Rating,
-                        AnalyzedPlays = rating.Plays,
-                        Provisional = provisional,
-                        Stale = stale,
-                        AlgorithmVersion = version,
-                        ComputedAt = at,
-                    });
-                }
-            });
+                    Username = username,
+                    KeyCount = keyCount,
+                    SystemId = EzSkillSystems.PLAYER_PATTERN,
+                    SkillId = EzPatternRatings.ToSkillId(rating.Id),
+                    Value = rating.Rating,
+                    AnalyzedPlays = rating.Plays,
+                    Provisional = provisional,
+                    Stale = stale,
+                    AlgorithmVersion = version,
+                    ComputedAt = at,
+                });
+            }
         }
 
         /// <summary>
@@ -487,34 +568,41 @@ namespace osu.Game.EzOsuGame.Skills
 
             int version = EzManiaSkillAlgorithm.VERSION;
 
-            realmAccess.Write(r =>
+            realmAccess.Write(r => replacePlayerSkillHistory(r, username, keyCount, samples, version));
+        }
+
+        private static void replacePlayerSkillHistory(
+            Realm r,
+            string username,
+            int keyCount,
+            IReadOnlyList<(DateTimeOffset RecordedAt, EzSkillsetVector Vector)> samples,
+            int version)
+        {
+            var existing = r.All<EzPlayerSkillHistoryPoint>()
+                            .Where(v => v.Username == username && v.KeyCount == keyCount)
+                            .ToList();
+
+            foreach (var row in existing)
+                r.Remove(row);
+
+            foreach (var (recordedAt, vector) in samples)
             {
-                var existing = r.All<EzPlayerSkillHistoryPoint>()
-                                .Where(v => v.Username == username && v.KeyCount == keyCount)
-                                .ToList();
-
-                foreach (var row in existing)
-                    r.Remove(row);
-
-                foreach (var (recordedAt, vector) in samples)
+                foreach (var (axis, value) in vector.Enumerate())
                 {
-                    foreach (var (axis, value) in vector.Enumerate())
-                    {
-                        if (value <= 0 || !double.IsFinite(value))
-                            continue;
+                    if (value <= 0 || !double.IsFinite(value))
+                        continue;
 
-                        r.Add(new EzPlayerSkillHistoryPoint
-                        {
-                            Username = username,
-                            KeyCount = keyCount,
-                            SkillId = axis.ToSsrSkillId(),
-                            Value = value,
-                            RecordedAt = recordedAt,
-                            AlgorithmVersion = version,
-                        });
-                    }
+                    r.Add(new EzPlayerSkillHistoryPoint
+                    {
+                        Username = username,
+                        KeyCount = keyCount,
+                        SkillId = axis.ToSsrSkillId(),
+                        Value = value,
+                        RecordedAt = recordedAt,
+                        AlgorithmVersion = version,
+                    });
                 }
-            });
+            }
         }
 
         public IReadOnlyList<EzPlayerSkillHistoryPoint> GetPlayerSkillHistory(
@@ -593,6 +681,8 @@ namespace osu.Game.EzOsuGame.Skills
 
         /// <summary>
         /// Typed Realm ChartSkillInfo (EZ≥9). Miss → callers recompute; no SQLite JSON fallback.
+        /// Filtered on <see cref="EzAnalysisRevision.ChartSkillInfo"/>, so a bump of the CSI version
+        /// or of an upstream facet (MSD) reads as a miss.
         /// </summary>
         public bool TryGetChartSkillInfo(string beatmapHash, out EzChartSkillInfo? info)
         {
@@ -601,13 +691,14 @@ namespace osu.Game.EzOsuGame.Skills
             if (string.IsNullOrEmpty(beatmapHash))
                 return false;
 
+            int revision = EzAnalysisRevision.ChartSkillInfo;
             EzChartSkillInfo? fromRealm = null;
 
             realmAccess.Run(r =>
             {
                 var row = r.All<EzBeatmapChartSkillInfo>()
                            .FirstOrDefault(v => v.BeatmapHash == beatmapHash
-                                                && v.InfoVersion == EzChartSkillInfo.VERSION);
+                                                && v.InfoVersion == revision);
                 if (row != null)
                     fromRealm = chartSkillInfoToDto(row);
             });
@@ -643,7 +734,7 @@ namespace osu.Game.EzOsuGame.Skills
                 {
                     BeatmapHash = beatmapHash,
                     BeatmapId = beatmapId,
-                    InfoVersion = EzChartSkillInfo.VERSION,
+                    InfoVersion = EzAnalysisRevision.ChartSkillInfo,
                     ComputedAt = at,
                     PatternTagsJoined = joinPatterns(info.Patterns),
                     JackDemand = info.JackDemand,
@@ -670,19 +761,75 @@ namespace osu.Game.EzOsuGame.Skills
         }
 
         /// <summary>
-        /// Hashes with a current-version ChartSkillInfo row that is not an Unavailable stub.
-        /// Stubs (KeyCount &lt; 0) stay miss so BDSP can retry when the chart becomes loadable.
+        /// Hashes with a current-revision ChartSkillInfo row that is not an Unavailable stub.
         /// </summary>
         public HashSet<string> GetPersistedChartSkillInfoHashes()
         {
+            int revision = EzAnalysisRevision.ChartSkillInfo;
+
             return realmAccess.Run(r =>
             {
                 return r.All<EzBeatmapChartSkillInfo>()
-                        .Where(v => v.InfoVersion == EzChartSkillInfo.VERSION && v.KeyCount >= 0)
+                        .Where(v => v.InfoVersion == revision && v.KeyCount >= 0)
                         .AsEnumerable()
                         .Select(v => v.BeatmapHash)
                         .Where(static h => !string.IsNullOrEmpty(h))
                         .ToHashSet(StringComparer.Ordinal);
+            });
+        }
+
+        /// <summary>
+        /// Hashes that BDSP should not reprocess for CSI: a complete row or a settled
+        /// <c>KeyCount &lt; 0</c> stub (deterministically unrateable, e.g. unsupported keymode /
+        /// no loadable playable). Mirrors <see cref="GetSettledBeatmapMsdHashes"/>.
+        /// </summary>
+        public HashSet<string> GetSettledChartSkillInfoHashes()
+        {
+            int revision = EzAnalysisRevision.ChartSkillInfo;
+
+            return realmAccess.Run(r =>
+            {
+                return r.All<EzBeatmapChartSkillInfo>()
+                        .Where(v => v.InfoVersion == revision)
+                        .AsEnumerable()
+                        .Select(v => v.BeatmapHash)
+                        .Where(static h => !string.IsNullOrEmpty(h))
+                        .ToHashSet(StringComparer.Ordinal);
+            });
+        }
+
+        /// <summary>
+        /// Records a deterministic CSI miss (<c>KeyCount = -1</c>) so BDSP stops retrying a chart
+        /// that cannot be analysed (unsupported keymode, no loadable playable, empty object list).
+        /// Not a valid CSI cache: <see cref="TryGetChartSkillInfo"/> returns it and callers must treat
+        /// <see cref="EzChartSkillInfo.IsUnavailable"/> as a miss. Transient failures (exceptions) must
+        /// NOT call this — those stay unstamped so the next run retries.
+        /// </summary>
+        public void WriteChartSkillInfoUnavailable(string beatmapHash, Guid beatmapId = default, DateTimeOffset? computedAt = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(beatmapHash);
+
+            DateTimeOffset at = computedAt ?? DateTimeOffset.UtcNow;
+            int revision = EzAnalysisRevision.ChartSkillInfo;
+
+            realmAccess.Write(r =>
+            {
+                var existing = r.All<EzBeatmapChartSkillInfo>()
+                                .Where(v => v.BeatmapHash == beatmapHash)
+                                .ToList();
+
+                foreach (var row in existing)
+                    r.Remove(row);
+
+                r.Add(new EzBeatmapChartSkillInfo
+                {
+                    BeatmapHash = beatmapHash,
+                    BeatmapId = beatmapId,
+                    InfoVersion = revision,
+                    ComputedAt = at,
+                    DanEligible = false,
+                    KeyCount = -1,
+                });
             });
         }
 
@@ -698,7 +845,8 @@ namespace osu.Game.EzOsuGame.Skills
         }
 
         /// <summary>
-        /// Typed Realm ChartDan (EZ≥10). Version mismatch → miss so BDSP can recompute.
+        /// Typed Realm ChartDan (EZ≥10). Filtered on <see cref="EzAnalysisRevision.ChartDan"/>, so a bump
+        /// of the dan algorithm, CSI, or MSD reads as a miss and BDSP recomputes it.
         /// </summary>
         public bool TryGetChartDan(string beatmapHash, out EzPersistedChartDan? chartDan)
         {
@@ -707,13 +855,14 @@ namespace osu.Game.EzOsuGame.Skills
             if (string.IsNullOrEmpty(beatmapHash))
                 return false;
 
+            int revision = EzAnalysisRevision.ChartDan;
             EzPersistedChartDan? fromRealm = null;
 
             realmAccess.Run(r =>
             {
                 var row = r.All<EzBeatmapChartDan>()
                            .FirstOrDefault(v => v.BeatmapHash == beatmapHash
-                                                && v.AlgorithmVersion == EzDanAlgorithm.VERSION);
+                                                && v.AlgorithmVersion == revision);
                 if (row != null)
                     fromRealm = chartDanToDto(row);
             });
@@ -731,7 +880,10 @@ namespace osu.Game.EzOsuGame.Skills
             ArgumentException.ThrowIfNullOrWhiteSpace(chartDan.BeatmapHash);
 
             DateTimeOffset at = chartDan.ComputedAt == default ? DateTimeOffset.UtcNow : chartDan.ComputedAt;
-            int version = chartDan.AlgorithmVersion != 0 ? chartDan.AlgorithmVersion : EzDanAlgorithm.VERSION;
+
+            // Stamped with the facet revision (not chartDan.AlgorithmVersion, which stays the pure
+            // dan algorithm version on the DTO) so a later MSD/CSI bump retires this row.
+            int version = EzAnalysisRevision.ChartDan;
 
             realmAccess.Write(r =>
             {
@@ -761,13 +913,15 @@ namespace osu.Game.EzOsuGame.Skills
             });
         }
 
-        /// <summary>Hashes with a current-algorithm ChartDan row.</summary>
+        /// <summary>Hashes with a current-revision ChartDan row (current dan algorithm + CSI + MSD).</summary>
         public HashSet<string> GetPersistedChartDanHashes()
         {
+            int revision = EzAnalysisRevision.ChartDan;
+
             return realmAccess.Run(r =>
             {
                 return r.All<EzBeatmapChartDan>()
-                        .Where(v => v.AlgorithmVersion == EzDanAlgorithm.VERSION)
+                        .Where(v => v.AlgorithmVersion == revision)
                         .AsEnumerable()
                         .Select(v => v.BeatmapHash)
                         .Where(static h => !string.IsNullOrEmpty(h))
@@ -787,6 +941,79 @@ namespace osu.Game.EzOsuGame.Skills
         }
 
         /// <summary>
+        /// Snapshot of the chart skill chain's completeness, counted over every mania chart in Realm.
+        /// <para>
+        /// Reads all three facet tables in one run, so call it off the UI thread; it is meant for an
+        /// explicit status refresh, not a hot path. Results come straight from the persisted
+        /// <see cref="EzAnalysisRevision"/> stamps, which is also exactly what the backfill filters on,
+        /// so "Pending &gt; 0" and "the next backfill has work" cannot disagree.
+        /// </para>
+        /// </summary>
+        public EzSkillDataStatus GetSkillDataStatus(DateTimeOffset? measuredAt = null)
+        {
+            int msdRevision = EzAnalysisRevision.Msd;
+            int csiRevision = EzAnalysisRevision.ChartSkillInfo;
+            int danRevision = EzAnalysisRevision.ChartDan;
+
+            return realmAccess.Run(r =>
+            {
+                var chartHashes = new HashSet<string>(StringComparer.Ordinal);
+
+                foreach (var b in r.All<BeatmapInfo>())
+                {
+                    if (b.BeatmapSet == null || b.Ruleset.OnlineID != 3 || string.IsNullOrEmpty(b.Hash))
+                        continue;
+
+                    // The chain drops keymodes its engine cannot rate at candidate time, so those charts are not
+                    // pending work and must not be counted as missing - otherwise "all current" is unreachable.
+                    if (!EzChartChainCoverage.IsRateableKeyCount((int)Math.Round(b.Difficulty.CircleSize)))
+                        continue;
+
+                    chartHashes.Add(b.Hash);
+                }
+
+                var msdByHash = r.All<EzBeatmapSkillValue>()
+                                 .Where(v => v.SystemId == EzSkillSystems.BEATMAP_MSD)
+                                 .AsEnumerable()
+                                 .GroupBy(v => v.BeatmapHash, StringComparer.Ordinal);
+
+                var csiByHash = r.All<EzBeatmapChartSkillInfo>()
+                                 .AsEnumerable()
+                                 .GroupBy(v => v.BeatmapHash, StringComparer.Ordinal);
+
+                var danByHash = r.All<EzBeatmapChartDan>()
+                                 .AsEnumerable()
+                                 .GroupBy(v => v.BeatmapHash, StringComparer.Ordinal);
+
+                // No MSD means no ChartDan, so a chart whose MSD settled as unrateable is settled for Dan too.
+                // Counting it as missing would leave the Dan facet permanently pending, because the chain skips
+                // those on purpose (see BackgroundDataStoreProcessor.populateMissingChartDan).
+                var unrateableDanHashes = new HashSet<string>(StringComparer.Ordinal);
+
+                foreach (var group in msdByHash)
+                {
+                    if (!group.Any(v => v.AlgorithmVersion == msdRevision))
+                        continue;
+
+                    var skills = group.ToDictionary(v => v.SkillId, v => v.Value, StringComparer.Ordinal);
+
+                    if (EzBeatmapMsdComputer.IsUnrateableMsd(skills))
+                        unrateableDanHashes.Add(group.Key);
+                }
+
+                return new EzSkillDataStatus
+                {
+                    TotalCharts = chartHashes.Count,
+                    Msd = EzSkillDataStatusCounting.Count(chartHashes, msdByHash, msdRevision, static v => v.AlgorithmVersion, EzSkillDataStatusCounting.IsMsdStub),
+                    ChartSkillInfo = EzSkillDataStatusCounting.Count(chartHashes, csiByHash, csiRevision, static v => v.InfoVersion, EzSkillDataStatusCounting.IsChartSkillInfoStub),
+                    // ChartDan has no settled-miss row form: a row exists only when a dan was resolved.
+                    ChartDan = EzSkillDataStatusCounting.Count(chartHashes, danByHash, danRevision, static v => v.AlgorithmVersion, static _ => false, unrateableDanHashes),
+                    MeasuredAt = measuredAt ?? DateTimeOffset.UtcNow,
+                };
+            });
+        }
+
+        /// <summary>
         /// Batch-read typed ChartSkillInfo rows for many hashes in one Realm run.
         /// Missing / wrong-version hashes are omitted.
         /// </summary>
@@ -801,12 +1028,14 @@ namespace osu.Game.EzOsuGame.Skills
             if (hashSet.Count == 0)
                 return new Dictionary<string, EzChartSkillInfo>(StringComparer.Ordinal);
 
+            int revision = EzAnalysisRevision.ChartSkillInfo;
+
             return realmAccess.Run(r =>
             {
                 var result = new Dictionary<string, EzChartSkillInfo>(hashSet.Count, StringComparer.Ordinal);
 
                 var rows = r.All<EzBeatmapChartSkillInfo>()
-                            .Where(v => v.InfoVersion == EzChartSkillInfo.VERSION)
+                            .Where(v => v.InfoVersion == revision)
                             .AsEnumerable()
                             .Where(v => hashSet.Contains(v.BeatmapHash));
 
@@ -982,6 +1211,95 @@ namespace osu.Game.EzOsuGame.Skills
             });
         }
 
+        /// <summary>
+        /// Drop every Realm-side player skill row for <paramref name="username"/> — SSR / pattern values,
+        /// skill history, side Dan estimates and Dan skillset tiles, across all keymodes and versions.
+        /// Used to clear the archive-wide <c>All</c> sentinel when the players it summarised change (an exclusion,
+        /// or a re-derivation from a now-empty included set). The SQLite counterpart is
+        /// <c>EzLocalProfileStore</c>, which is not touched here.
+        /// </summary>
+        /// <returns>Total number of rows removed.</returns>
+        public int DeletePlayerSkillData(string username)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(username);
+
+            int removed = 0;
+
+            realmAccess.Write(r =>
+            {
+                foreach (var row in r.All<EzPlayerSkillValue>().Where(v => v.Username == username).ToList())
+                {
+                    r.Remove(row);
+                    removed++;
+                }
+
+                foreach (var row in r.All<EzPlayerSkillHistoryPoint>().Where(v => v.Username == username).ToList())
+                {
+                    r.Remove(row);
+                    removed++;
+                }
+
+                foreach (var row in r.All<EzDanEstimate>().Where(v => v.Username == username).ToList())
+                {
+                    r.Remove(row);
+                    removed++;
+                }
+
+                foreach (var row in r.All<EzPlayerDanSkillsetValue>().Where(v => v.Username == username).ToList())
+                {
+                    r.Remove(row);
+                    removed++;
+                }
+            });
+
+            return removed;
+        }
+
+        /// <summary>
+        /// Flag every stored <see cref="EzPlayerSkillValue"/> row for one player (SSR / pattern) as stale without
+        /// changing any value. Used when a newly settled play has been folded into the SQLite slice but the player's
+        /// Realm-side skill rows have not been recomputed yet: the UI keeps showing the old numbers and marks them
+        /// stale, and the startup warmup refreshes them.
+        /// </summary>
+        /// <remarks>
+        /// Dan rows (<see cref="EzDanEstimate"/> / <see cref="EzPlayerDanSkillsetValue"/>) carry no stale flag, so
+        /// they can only be corrected by an actual recompute.
+        /// </remarks>
+        /// <returns>Number of rows newly flagged.</returns>
+        public int MarkPlayerSkillStale(string username)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(username);
+
+            int flagged = 0;
+
+            realmAccess.Write(r =>
+            {
+                foreach (var row in r.All<EzPlayerSkillValue>().Where(v => v.Username == username && !v.Stale).ToList())
+                {
+                    row.Stale = true;
+                    flagged++;
+                }
+            });
+
+            return flagged;
+        }
+
+        /// <summary>
+        /// Players with at least one skill row flagged stale, i.e. their SQLite slice has moved on since the
+        /// Realm-side skills were written. This is what the startup reconcile looks at to decide whose skills need
+        /// refreshing (a play folded in after the last successful skill pass).
+        /// </summary>
+        public IReadOnlyList<string> GetStalePlayerSkillUsernames()
+        {
+            return realmAccess.Run(r => r.All<EzPlayerSkillValue>()
+                                        .Where(v => v.Stale)
+                                        .AsEnumerable()
+                                        .Select(v => v.Username)
+                                        .Where(n => !string.IsNullOrEmpty(n))
+                                        .Distinct(StringComparer.Ordinal)
+                                        .ToList());
+        }
+
         /// <summary>Legacy row writer; prefer <see cref="WriteDanSkillsetVerdicts"/>.</summary>
         public void WriteDanSkillsetValues(string username, int keyCount, string side, IEnumerable<EzPlayerDanSkillsetValue> values)
         {
@@ -1068,7 +1386,9 @@ namespace osu.Game.EzOsuGame.Skills
             {
                 BeatmapHash = row.BeatmapHash,
                 BeatmapId = row.BeatmapId,
-                AlgorithmVersion = row.AlgorithmVersion,
+                // DTO keeps the pure dan algorithm version; the column holds the composed facet
+                // revision, which is a persistence detail that must not leak to consumers.
+                AlgorithmVersion = EzDanAlgorithm.VERSION,
                 KeyCount = row.KeyCount,
                 HoldRatio = row.HoldRatio,
                 OverallMsd = row.OverallMsd,

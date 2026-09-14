@@ -16,13 +16,13 @@ namespace osu.Game.EzOsuGame.Localization
             new EzLocalizationManager.EzLocalisableString("选择要导入的玩家名", "Select player names to import");
 
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_IMPORT_BODY = new EzLocalizationManager.EzLocalisableString(
-            "勾选要【重新分析】的玩家名：只覆盖这些名称对应的统计切片，其它已计算名称不受影响。打开「替换模式」会删除未勾选名称的旧切片。",
-            "Check names to re-analyse: only those players’ stat slices are overwritten; other computed names stay. Enable replace mode to drop unchecked names’ old slices.");
+            "默认只补算未分析的成绩：中断后再点会接着算，已算过的成绩和技能不再重算。勾选「清空重建」会先清掉所选玩家的旧统计与缓存再整段重算，并删除未勾选玩家的旧统计。",
+            "By default only un-analysed scores are backfilled: a cancelled run resumes where it stopped, and already-analysed scores/skills are not redone. Enable “Clear & rebuild” to wipe the checked players’ stats/caches and recompute from scratch, and delete unchecked players’ old stats.");
 
-        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_IMPORT_REPLACE =
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_IMPORT_CLEAR_REBUILD =
             new EzLocalizationManager.EzLocalisableString(
-                "替换模式：删除未勾选名称的旧统计（不保留）",
-                "Replace mode: delete old stats for unchecked names");
+                "清空重建：清掉所选玩家旧统计并整段重算，同时删除未勾选玩家的旧统计",
+                "Clear & rebuild: wipe checked players’ stats and recompute, delete unchecked players’ stats");
 
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_IMPORT_CONFIRM =
             new EzLocalizationManager.EzLocalisableString("开始分析", "Analyse");
@@ -30,8 +30,37 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_IMPORT_CANCEL =
             new EzLocalizationManager.EzLocalisableString("取消", "Cancel");
 
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_IMPORT_DELETE =
+            new EzLocalizationManager.EzLocalisableString("从All分析中排除所选玩家", "Exclude checked players from All analysis");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DELETE_CONFIRM_HEADER =
+            new EzLocalizationManager.EzLocalisableString("从All分析中排除玩家", "Exclude players from All analysis");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DELETE_CONFIRM_BODY =
+            new EzLocalizationManager.EzLocalisableString(
+                "以下玩家将不再计入「All」聚合与其它统计：\n{0}\n\n数据不会删除，只是不再参与统计；重新勾选并分析即可恢复。",
+                "These players will stop counting towards “All” and the other archive stats:\n{0}\n\nNothing is deleted — their data simply stops contributing. Re-checking and analysing them restores it.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DELETE_CONFIRM =
+            new EzLocalizationManager.EzLocalisableString("排除", "Exclude");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DELETE_DONE =
+            new EzLocalizationManager.EzLocalisableString("已从分析中排除：{0}", "Excluded from analysis: {0}");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DELETE_NONE =
+            new EzLocalizationManager.EzLocalisableString("所选玩家本来就不在分析中。", "The selected players were not part of the analysis.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DELETE_FAILED =
+            new EzLocalizationManager.EzLocalisableString("排除玩家失败。", "Failed to exclude the players.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_DELETE_BUSY =
+            new EzLocalizationManager.EzLocalisableString("正在排除玩家…", "Excluding players…");
+
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_COMPUTE_STARTED =
             new EzLocalizationManager.EzLocalisableString("正在计算成绩分析…", "Computing score analysis…");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_ALIGN =
+            new EzLocalizationManager.EzLocalisableString("成绩分析对账：有新增或过期的数据…", "Score analysis reconcile: new or outdated data…");
 
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_COMPUTE_PROGRESS =
             new EzLocalizationManager.EzLocalisableString("正在分析成绩… {0}/{1}", "Analysing scores… {0}/{1}");

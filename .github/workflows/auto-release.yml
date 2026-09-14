@@ -217,12 +217,15 @@ jobs:
       matrix:
         platform: ${{ fromJson(github.event.inputs.platform_index == '' && '["windows","linux","macos"]' || github.event.inputs.platform_index == '1' && '["windows"]' || github.event.inputs.platform_index == '2' && '["linux"]' || github.event.inputs.platform_index == '3' && '["macos"]') }}
         arch: ${{ fromJson(github.event.inputs.arch_index == '' && '["x64","arm64"]' || github.event.inputs.arch_index == '1' && '["x64"]' || github.event.inputs.arch_index == '2' && '["arm64"]') }}
-    runs-on: ${{ matrix.platform == 'windows' && matrix.arch == 'arm64' && 'windows-11-arm' || matrix.platform == 'windows' && 'windows-latest' || matrix.platform == 'linux' && matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || matrix.platform == 'linux' && 'ubuntu-latest' || matrix.platform == 'macos' && matrix.arch == 'arm64' && 'macos-26' || 'macos-26-intel' }}
+    # macos 两种架构都在 macos-26(arm64) runner 上构建：publish 为框架依赖（--self-contained false），
+    # 唯一原生件是由 RID 决定的预编译 apphost，支持交叉发布；下方有 lipo 架构断言兜底。
+    runs-on: ${{ matrix.platform == 'windows' && matrix.arch == 'arm64' && 'windows-11-arm' || matrix.platform == 'windows' && 'windows-latest' || matrix.platform == 'linux' && matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || matrix.platform == 'linux' && 'ubuntu-latest' || 'macos-26' }}
     steps:
+      # 版本号来自 ReleaseVersion 属性（见 publish.py），构建过程不读 git 历史，浅检出即可。
       - name: Checkout main repo into osu/
         uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           path: osu
 
       - name: Checkout osu-resources (resources) as sibling
@@ -230,16 +233,8 @@ jobs:
         with:
           repository: SK-la/osu-resources
           path: osu-resources
-          fetch-depth: 0
+          fetch-depth: 1
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Validate osu-resources checkout
-        shell: pwsh
-        run: |
-          if (-not (Test-Path 'osu-resources\.git')) {
-            Write-Error 'osu-resources checkout missing'
-            exit 1
-          }
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v5
@@ -266,19 +261,10 @@ jobs:
           path: osu/.vpk-tools
           key: vpk-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ hashFiles('osu/publish.py') }}
 
-      - name: Dotnet restore (desktop project)
-        working-directory: osu
-        shell: pwsh
-        run: |
-          dotnet --info
-          dotnet restore ./osu.Desktop/osu.Desktop.csproj /p:Configuration=Release
-
-      - name: Dotnet build (desktop project)
-        working-directory: osu
-        shell: pwsh
-        run: |
-          dotnet build ./osu.Desktop/osu.Desktop.csproj -c Release -p:GenerateFullPaths=true --no-restore --verbosity minimal
-
+      # publish.py 内部的 dotnet publish 会自行 restore + 编译；且它带 -r <rid>，
+      # 中间目录为 bin|obj/Release/<tfm>/<rid>/（AppendRuntimeIdentifierToOutputPath=true），
+      # 与去 RID 构建的目录不同，产物无法复用。因此这里不再单独 restore/build，
+      # 避免每个 job 重复一次完整编译。
       - name: Run publish script (release only)
         working-directory: osu
         shell: pwsh
@@ -330,6 +316,32 @@ jobs:
             $publishArgs += @('--no-velopack')
           }
           python @publishArgs
+
+      # macos 两种架构同在 arm64 runner 上构建，这里断言产物自带的 apphost 架构正确，
+      # 防止交叉发布出现「架构标签与二进制不符」而无人察觉。
+      - name: Assert apphost architecture (macos)
+        if: matrix.platform == 'macos'
+        working-directory: osu
+        shell: pwsh
+        run: |
+          $dir = 'artifacts/Ez2Lazer_release_macos_${{ matrix.arch }}'
+          $exe = $null
+          foreach ($candidate in @('Ez2osu!', 'osu.Desktop')) {
+            $candidatePath = Join-Path $dir $candidate
+            if (Test-Path $candidatePath) { $exe = $candidatePath; break }
+          }
+          if (-not $exe) {
+            Write-Error "apphost not found under $dir"
+            exit 1
+          }
+
+          $expected = if ('${{ matrix.arch }}' -eq 'x64') { 'x86_64' } else { 'arm64' }
+          $archs = (& lipo -archs $exe).Trim()
+          Write-Output "apphost '$exe' architectures: $archs (expected to contain '$expected')"
+          if ($archs -notmatch $expected) {
+            Write-Error "apphost architecture mismatch: expected '$expected', got '$archs'"
+            exit 1
+          }
 
       # 与安装包共用同一份 osu.Game.dll，保证 NuGet 哈希可与 Release zip 校验一致
       - name: Pack ez2lazer.Game NuGet (linux x64 only)
@@ -454,11 +466,15 @@ jobs:
       - name: Checkout main repo into osu/
         uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           path: osu
 
+      # 通过 gh api 建 tag，避免把 GITHUB_TOKEN 拼进 remote URL。
+      # matching-refs 对不存在的 tag 也返回 200/空数组，可安全地按精确 ref 比对。
       - name: Check remote tag existence and create if missing
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $tag = '${{ needs.prepare.outputs.release_tag }}'
           if ([string]::IsNullOrWhiteSpace($tag)) {
@@ -466,19 +482,24 @@ jobs:
             exit 1
           }
 
-          $remote = 'https://github.com/${{ github.repository }}.git'
-          $authRemote = 'https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git'
-          $found = git ls-remote --tags $authRemote refs/tags/$tag | Select-String -Pattern $tag
-          if ($found) {
+          $repo = '${{ github.repository }}'
+          $ref = "refs/tags/$tag"
+
+          $existingRefs = & gh api "repos/$repo/git/matching-refs/tags/$tag" --jq '.[].ref'
+          if (@($existingRefs) -contains $ref) {
             Write-Output "Tag $tag exists remotely"
             exit 0
           }
 
-          git -C osu config user.name 'github-actions[bot]'
-          git -C osu config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          $commit = git -C osu rev-parse HEAD
-          git -C osu tag $tag $commit
-          git -C osu push $authRemote refs/tags/$tag
+          $commit = (& git -C osu rev-parse HEAD).Trim()
+          if ([string]::IsNullOrWhiteSpace($commit)) {
+            Write-Error 'could not resolve HEAD commit'
+            exit 1
+          }
+
+          # 轻量 tag，等价于 git tag <tag> <commit> 后 push
+          & gh api --method POST "repos/$repo/git/refs" -f "ref=$ref" -f "sha=$commit" | Out-Null
+          Write-Output "Created tag $tag -> $commit"
 
       - name: Download built assets
         uses: actions/download-artifact@v7

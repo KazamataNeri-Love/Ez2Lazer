@@ -12,6 +12,13 @@ namespace osu.Game.EzOsuGame.LocalProfile
     /// </summary>
     public sealed class EzLocalProfilePartitionPayload
     {
+        /// <summary>
+        /// Analysis content version (<see cref="EzLocalProfileStore.CONTENT_VERSION"/>) this slice was computed with.
+        /// A slice from an older version is stale and cannot be reused as an incremental cache.
+        /// Missing/0 means pre-versioning data.
+        /// </summary>
+        public int ContentVersion { get; set; }
+
         public List<PartitionRulesetStats> RulesetStats { get; set; } = new List<PartitionRulesetStats>();
         public List<PartitionManiaKeyStats> ManiaKeyStats { get; set; } = new List<PartitionManiaKeyStats>();
         public List<PartitionManiaColumnStats> ManiaColumnStats { get; set; } = new List<PartitionManiaColumnStats>();
@@ -19,11 +26,21 @@ namespace osu.Game.EzOsuGame.LocalProfile
         public List<PartitionStarPlayCount> StarPlayCounts { get; set; } = new List<PartitionStarPlayCount>();
         public List<PartitionXxyPlayCount> XxyPlayCounts { get; set; } = new List<PartitionXxyPlayCount>();
         public List<PartitionStdAttrAffinity> StdAttrAffinities { get; set; } = new List<PartitionStdAttrAffinity>();
+
+        /// <summary>
+        /// Legacy drill detail. No longer written — drill rows live in the <c>drill_scores</c> table (shaped like the
+        /// chart-side <c>chart_dan</c> store) so a partition stays a small, fixed-size slice and a single new score
+        /// costs O(1) instead of re-serialising every play. Still populated when reading a pre-v3 payload; callers
+        /// must treat it as read-only history, not as the "already analysed" ledger.
+        /// </summary>
         public List<EzLocalProfileDrillScoreRow> DrillScores { get; set; } = new List<EzLocalProfileDrillScoreRow>();
 
         public static EzLocalProfilePartitionPayload FromAggregation(EzLocalProfileAggregationResult result)
         {
-            var payload = new EzLocalProfilePartitionPayload();
+            var payload = new EzLocalProfilePartitionPayload
+            {
+                ContentVersion = EzLocalProfileStore.CONTENT_VERSION,
+            };
 
             foreach (var (rulesetId, stats) in result.RulesetStats)
             {
@@ -89,16 +106,16 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 });
             }
 
-            payload.DrillScores.AddRange(result.DrillScores);
-
+            // Drill detail is deliberately not copied: it belongs to the drill_scores table, not to the slice.
             return payload;
         }
 
+        /// <summary>
+        /// Merge this slice into an aggregation buffer. Deliberately stats-only: drill detail is read from
+        /// <c>drill_scores</c>, so a slice loaded from disk never re-introduces its legacy drill rows.
+        /// </summary>
         public void MergeInto(EzLocalProfileAggregationResult target)
-        {
-            MergeStatsInto(target);
-            target.DrillScores.AddRange(DrillScores);
-        }
+            => MergeStatsInto(target);
 
         /// <summary>
         /// Merge aggregate counters only (no drill rows). Used when rebuilding All without holding every partition's drills in memory.
