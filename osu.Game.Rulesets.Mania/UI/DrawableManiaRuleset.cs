@@ -21,12 +21,16 @@ using osu.Game.Input.Bindings;
 using osu.Game.Input.Handlers;
 using osu.Game.EzOsuGame;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Mods;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Rulesets.Mania.Scoring;
 using osu.Game.Replays;
 using osu.Game.Rulesets.Mania.Beatmaps;
 using osu.Game.Rulesets.Mania.Configuration;
 using osu.Game.Rulesets.Mania.EzMania;
+#if DEBUG
+using osu.Game.Rulesets.Mania.EzMania.Diagnostics;
+#endif
 using osu.Game.Rulesets.Mania.EzMania.ReplayJudge;
 using osu.Game.Rulesets.Mania.Objects;
 using osu.Game.Rulesets.Mania.Objects.EzCurrentHitObject;
@@ -113,6 +117,26 @@ namespace osu.Game.Rulesets.Mania.UI
         /// </summary>
         public ManiaJudgementRound? JudgementRound { get; private set; }
 
+        /// <summary>
+        /// 进局时确认的主 BPM 拍长（ms）。由 <see cref="EzBeatmapSpeedTracker.ResolveBeatLength"/> 在 loading 时计算一次，之后不再更新。
+        /// </summary>
+        public double MainBeatLength { get; private set; }
+
+        /// <summary>
+        /// 进局时确认的投皮档位。UI 0-8，除 32 得到节拍；0 关闭投皮额外负担。局内不跟随设置变更。
+        /// </summary>
+        public double HoldTailMaskLevel { get; private set; }
+
+        /// <summary>
+        /// 进局时确认的动态投皮开关。局内不跟随设置变更；开启后 LN 投皮按 tracker 当前拍长调整。
+        /// </summary>
+        public bool DynamicHoldTailMask { get; private set; }
+
+        /// <summary>
+        /// 仅在 <see cref="DynamicHoldTailMask"/> 开启时提供当前拍长。LN 侧只读 <see cref="EzBeatmapSpeedTracker.BeatLength"/>.Value，不 BindValueChanged。
+        /// </summary>
+        public EzBeatmapSpeedTracker? HoldTailSpeedTracker { get; private set; }
+
         private readonly Bindable<EzManiaScrollingStyle> scrollingStyle = new Bindable<EzManiaScrollingStyle>();
         private readonly BindableDouble configBaseMs = new BindableDouble();
         private readonly BindableDouble configTimePerSpeed = new BindableDouble();
@@ -190,6 +214,17 @@ namespace osu.Game.Rulesets.Mania.UI
 
             ezConfig.BindWith(Ez2Setting.ManiaBarLinesBool, barLinesBindable);
             ezConfig.BindWith(Ez2Setting.ManiaHitMode, hitModeBindable);
+
+            // 进局快照：不 Bindable。档位（含 0）和动态开关局内都不跟随设置变更。
+            HoldTailMaskLevel = ezConfig.Get<double>(Ez2Setting.ManiaHoldTailMaskGradientHeight);
+            DynamicHoldTailMask = ezConfig.Get<bool>(Ez2Setting.ManiaHoldTailMaskDynamicEnable);
+            MainBeatLength = EzBeatmapSpeedTracker.ResolveBeatLength(Beatmap, null, Beatmap.BeatmapInfo.BPM);
+
+            if (!(MainBeatLength > 0))
+                MainBeatLength = 500;
+
+            if (ManiaHoldTailMask.IsEnabled(HoldTailMaskLevel) && DynamicHoldTailMask)
+                FrameStableComponents.Add(HoldTailSpeedTracker = new EzBeatmapSpeedTracker());
         }
 
         protected override void LoadComplete()
@@ -253,6 +288,11 @@ namespace osu.Game.Rulesets.Mania.UI
             {
                 Logger.Log($"[DrawableManiaRuleset] Preload textures failed: {ex.Message}", LoggingTarget.Runtime, LogLevel.Error);
             }
+
+#if DEBUG
+            // TRACE-JUDGE 每局归零，使 Dispose 时的读数是本局累计。
+            ManiaJudgeHotPathTrace.Clear();
+#endif
         }
 
         private ManiaTouchInputArea? touchInputArea;
@@ -441,6 +481,12 @@ namespace osu.Game.Rulesets.Mania.UI
 
             if (currentSkin.IsNotNull())
                 currentSkin.SourceChanged -= onSkinChange;
+
+#if DEBUG
+            // TRACE-JUDGE 读数出口：诊断开关打开时，一局结束把热路径计数打到运行日志。
+            if (ManiaJudgeHotPathTrace.Enabled)
+                Logger.Log($"[ManiaJudgeHotPathTrace] {ManiaJudgeHotPathTrace.FormatSummary()}", LoggingTarget.Runtime, LogLevel.Important);
+#endif
         }
     }
 }

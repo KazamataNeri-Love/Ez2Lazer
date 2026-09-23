@@ -8,6 +8,10 @@ using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
 using osu.Game.Localisation.Mania;
+#if DEBUG
+using osu.Game.Rulesets.Mania.EzMania.Diagnostics;
+using osu.Game.Rulesets.Mania.Objects.Drawables;
+#endif
 using osu.Game.Rulesets.Mania.UI;
 using osu.Game.Rulesets.UI;
 
@@ -30,14 +34,36 @@ namespace osu.Game.Rulesets.Mania
         /// <summary>
         /// COLUMN-INPUT：列级 <see cref="Column.OnPressed"/> 优先于列内 drawable，避免每键 N 路冒泡。
         /// </summary>
+        /// <remarks>
+        /// 基类每次读 <c>base.KeyBindingInputQueue</c> 都会清空并重建整棵 mania 子树的输入队列，因此这里：
+        /// 一次枚举内只读基类一次（不能逐项 <c>yield</c>，那会读两遍、重建两次），按帧缓存重建结果，
+        /// 并返回可复用列表本身 —— 调用方 <c>AddRange</c> 走 <c>ICollection</c> 快路径拷贝，而不是逐项枚举迭代器。
+        /// 输入事件在本帧子树更新开始前一次性派发完毕，note 的生成 / 回收只发生在其后的 Update。
+        /// </remarks>
         private partial class ManiaKeyBindingContainer : RulesetKeyBindingContainer
         {
             private readonly ManiaInputManager maniaInputManager;
+
+            /// <summary>本帧物化结果：<see cref="Column"/> 在前，其余保持基类顺序。</summary>
+            private readonly List<Drawable> columnFirstQueue = new List<Drawable>();
+
+            /// <summary>物化时的暂存区（非列项），只在本类内部使用。</summary>
+            private readonly List<Drawable> nonColumnQueue = new List<Drawable>();
+
+            private bool inputQueueCached;
 
             public ManiaKeyBindingContainer(ManiaInputManager maniaInputManager, RulesetInfo ruleset, int variant, SimultaneousBindingMode unique)
                 : base(ruleset, variant, unique)
             {
                 this.maniaInputManager = maniaInputManager;
+            }
+
+            protected override void Update()
+            {
+                // 下一帧重新物化：note 的生成/回收都发生在本容器的 Update 之后，此处失效不会让快照落后于树结构。
+                inputQueueCached = false;
+
+                base.Update();
             }
 
             protected override bool Handle(UIEvent e)
@@ -57,30 +83,43 @@ namespace osu.Game.Rulesets.Mania
             {
                 get
                 {
-                    bool hasColumn = false;
+                    if (inputQueueCached)
+                    {
+#if DEBUG
+                        ManiaJudgeHotPathTrace.RecordInputQueueReuse(columnFirstQueue.Count);
+#endif
+                        return columnFirstQueue;
+                    }
 
+                    columnFirstQueue.Clear();
+                    nonColumnQueue.Clear();
+
+#if DEBUG
+                    int holdEnds = 0;
+#endif
+
+                    // 只读一次基类队列：读两次就是两次整棵子树重建。
                     foreach (var drawable in base.KeyBindingInputQueue)
                     {
                         if (drawable is Column)
-                        {
-                            hasColumn = true;
-                            yield return drawable;
-                        }
+                            columnFirstQueue.Add(drawable);
+                        else
+                            nonColumnQueue.Add(drawable);
+
+#if DEBUG
+                        if (drawable is DrawableHoldNoteHead or DrawableHoldNoteTail)
+                            holdEnds++;
+#endif
                     }
 
-                    if (!hasColumn)
-                    {
-                        foreach (var drawable in base.KeyBindingInputQueue)
-                            yield return drawable;
+                    columnFirstQueue.AddRange(nonColumnQueue);
 
-                        yield break;
-                    }
+                    inputQueueCached = true;
+#if DEBUG
+                    ManiaJudgeHotPathTrace.RecordInputQueueRebuild(columnFirstQueue.Count, holdEnds);
+#endif
 
-                    foreach (var drawable in base.KeyBindingInputQueue)
-                    {
-                        if (!(drawable is Column))
-                            yield return drawable;
-                    }
+                    return columnFirstQueue;
                 }
             }
         }

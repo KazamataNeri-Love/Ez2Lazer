@@ -67,9 +67,13 @@ namespace osu.Game.Rulesets.UI
             if (nextObject == null)
                 return;
 
-            var samples = nextObject.Samples
-                                    .Cast<ISampleInfo>()
-                                    .ToArray();
+            // [Ez] 手动填充而不是 Cast().ToArray()：同为一次数组分配，但不产生 Cast 迭代器与 builder 缓冲。
+            // 数组仍每次新建，因为 GameplayState.ApplySamples 会保留引用并靠引用不等触发绑定变更。
+            var source = nextObject.Samples;
+            var samples = new ISampleInfo[source.Count];
+
+            for (int i = 0; i < samples.Length; i++)
+                samples[i] = source[i];
 
             PlaySamples(samples);
         }
@@ -101,6 +105,30 @@ namespace osu.Game.Rulesets.UI
                 mostValidObject = null;
         }
 
+        /// <summary>
+        /// 下一颗未判定物件还太远、或本容器已无未判定物件时，退回取样的对象。
+        /// </summary>
+        /// <param name="nextUnjudged">下一颗未判定物件；已无未判定物件时为 <c>null</c>。</param>
+        /// <param name="referenceTime">当前参考时间（与物件开始时间同一时间轴）。</param>
+        /// <remarks>
+        /// 上游语义：还有未判定物件（只是太远）时沿用当前取样对象，没有则退回本容器第一项；已无未判定物件时退回最后一项。
+        /// </remarks>
+        protected virtual HitObjectLifetimeEntry? FindFallbackEntry(HitObjectLifetimeEntry? nextUnjudged, double referenceTime)
+        {
+            if (nextUnjudged == null)
+                return findLastEntry();
+
+            return mostValidObject ?? findFirstEntry();
+        }
+
+        /// <summary>
+        /// 取「下一个最该发声的物件」。
+        /// </summary>
+        /// <remarks>
+        /// [Ez] 与上游语义等价的零分配实现：上游用 LINQ（<c>Where</c>/<c>MinBy</c>/<c>OrderBy</c>/<c>SkipWhile</c>）
+        /// 与递归迭代器，每次按键都会产生多次迭代器 / 排序缓冲分配，且对 LN 会枚举并按结束时间排序全部 tick。
+        /// 这里改为单遍最小扫描 + 显式栈的先序深度优先，取舍规则（并列时取先枚举到的）保持不变。
+        /// </remarks>
         protected HitObject? GetMostValidObject()
         {
             if (mostValidObject == null || isAlreadyHit(mostValidObject))
@@ -109,24 +137,18 @@ namespace osu.Game.Rulesets.UI
                 // If required, we can make this lookup more efficient by adding support to get next-future-entry in LifetimeEntryManager.
                 var candidate =
                     // Use alive entries first as an optimisation.
-                    hitObjectContainer.AliveEntries.Keys.Where(e => !isAlreadyHit(e)).MinBy(e => e.HitObject.StartTime)
-                    ?? hitObjectContainer.Entries.Where(e => !isAlreadyHit(e)).MinBy(e => e.HitObject.StartTime);
+                    findEarliestNonJudged(hitObjectContainer.AliveEntries.Keys)
+                    ?? findEarliestNonJudged(hitObjectContainer.Entries);
 
-                // In the case there are no non-judged objects, the last hit object should be used instead.
-                if (candidate == null)
+                if (candidate != null && isCloseEnoughToCurrentTime(candidate.HitObject))
                 {
-                    mostValidObject = hitObjectContainer.Entries.LastOrDefault();
+                    mostValidObject = candidate;
                 }
                 else
                 {
-                    if (isCloseEnoughToCurrentTime(candidate.HitObject))
-                    {
-                        mostValidObject = candidate;
-                    }
-                    else
-                    {
-                        mostValidObject ??= hitObjectContainer.Entries.FirstOrDefault();
-                    }
+                    // Either there is no non-judged object left, or the next one is still too far away;
+                    // let the ruleset pick what to sample instead.
+                    mostValidObject = FindFallbackEntry(candidate, getReferenceTime());
                 }
             }
 
@@ -139,7 +161,7 @@ namespace osu.Game.Rulesets.UI
 
             // Else we want the earliest valid nested.
             // In cases of nested objects, they will always have earlier sample data than their parent object.
-            return getAllNested(mostValidObject.HitObject).OrderBy(h => h.GetEndTime()).SkipWhile(h => h.GetEndTime() <= getReferenceTime()).FirstOrDefault() ?? mostValidObject.HitObject;
+            return getEarliestNestedAfter(mostValidObject.HitObject) ?? mostValidObject.HitObject;
         }
 
         private bool isAlreadyHit(HitObjectLifetimeEntry h) => h.AllJudged;
@@ -147,15 +169,123 @@ namespace osu.Game.Rulesets.UI
 
         private double getReferenceTime() => gameplayClock?.CurrentTime ?? Clock.CurrentTime;
 
-        private IEnumerable<HitObject> getAllNested(HitObject hitObject)
+        /// <summary>
+        /// 取 <paramref name="entries"/> 中尚未判定、且开始时间最早的一项。
+        /// </summary>
+        private HitObjectLifetimeEntry? findEarliestNonJudged(IEnumerable<HitObjectLifetimeEntry> entries)
         {
-            foreach (var h in hitObject.NestedHitObjects)
-            {
-                yield return h;
+            HitObjectLifetimeEntry? earliest = null;
+            double earliestStartTime = double.MaxValue;
 
-                foreach (var n in getAllNested(h))
-                    yield return n;
+            foreach (var entry in entries)
+            {
+                if (isAlreadyHit(entry))
+                    continue;
+
+                double startTime = entry.HitObject.StartTime;
+
+                if (startTime < earliestStartTime)
+                {
+                    earliestStartTime = startTime;
+                    earliest = entry;
+                }
             }
+
+            return earliest;
+        }
+
+        private HitObjectLifetimeEntry? findFirstEntry()
+        {
+            foreach (var entry in hitObjectContainer.Entries)
+                return entry;
+
+            return null;
+        }
+
+        private HitObjectLifetimeEntry? findLastEntry()
+        {
+            HitObjectLifetimeEntry? last = null;
+
+            foreach (var entry in hitObjectContainer.Entries)
+                last = entry;
+
+            return last;
+        }
+
+        /// <summary>
+        /// 取本容器中「最近一颗已经过线的物件」：开始时间不晚于 <paramref name="time"/> 的最晚一项；
+        /// 尚无物件过线（按键早于本列第一颗）时取开始时间最早的一颗。
+        /// </summary>
+        /// <remarks>
+        /// <paramref name="time"/> 是时钟时间，与物件的开始时间是同一时间轴。
+        /// </remarks>
+        protected HitObjectLifetimeEntry? FindLatestPassedEntry(double time)
+        {
+            HitObjectLifetimeEntry? latestPassed = null;
+            HitObjectLifetimeEntry? earliest = null;
+            double latestPassedStartTime = double.MinValue;
+            double earliestStartTime = double.MaxValue;
+
+            foreach (var entry in hitObjectContainer.Entries)
+            {
+                double startTime = entry.HitObject.StartTime;
+
+                if (startTime <= time)
+                {
+                    if (startTime > latestPassedStartTime)
+                    {
+                        latestPassedStartTime = startTime;
+                        latestPassed = entry;
+                    }
+                }
+                else if (startTime < earliestStartTime)
+                {
+                    earliestStartTime = startTime;
+                    earliest = entry;
+                }
+            }
+
+            return latestPassed ?? earliest;
+        }
+
+        private readonly Stack<HitObject> nestedSearchStack = new Stack<HitObject>();
+
+        /// <summary>
+        /// 取 <paramref name="hitObject"/> 的后代中，结束时间晚于参考时间且最早的一个。
+        /// </summary>
+        private HitObject? getEarliestNestedAfter(HitObject hitObject)
+        {
+            double referenceTime = getReferenceTime();
+            HitObject? earliest = null;
+            double earliestEndTime = double.MaxValue;
+
+            var stack = nestedSearchStack;
+            stack.Clear();
+            stack.Push(hitObject);
+
+            while (stack.Count > 0)
+            {
+                var current = stack.Pop();
+
+                if (!ReferenceEquals(current, hitObject))
+                {
+                    double endTime = current.GetEndTime();
+
+                    if (endTime > referenceTime && endTime < earliestEndTime)
+                    {
+                        earliestEndTime = endTime;
+                        earliest = current;
+                    }
+                }
+
+                var nested = current.NestedHitObjects;
+
+                // 逆序入栈以保持与递归枚举一致的先序顺序（OrderBy 的稳定性依赖该顺序）。
+                for (int i = nested.Count - 1; i >= 0; i--)
+                    stack.Push(nested[i]);
+            }
+
+            return earliest;
         }
 
         protected SkinnableSound GetNextSample()

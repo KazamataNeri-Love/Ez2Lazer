@@ -14,6 +14,9 @@ using osu.Framework.Input.Events;
 using osu.Game.Audio;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.Rulesets.Judgements;
+#if DEBUG
+using osu.Game.Rulesets.Mania.EzMania.Diagnostics;
+#endif
 using osu.Game.Rulesets.Mania.EzMania.ReplayJudge;
 using osu.Game.Rulesets.Mania.Judgements;
 using osu.Game.Rulesets.Mania.Skinning.Default;
@@ -242,7 +245,12 @@ namespace osu.Game.Rulesets.Mania.Objects.Drawables
             base.Update();
 
             ManiaEzDrawableJudgement.TryO2HoldUpdate(this);
-            judgePendingHoldTicks();
+#if DEBUG
+            ManiaJudgeHotPathTrace.RecordHoldUpdate();
+
+            if (!ManiaHoldAblation.DisableHoldTickScan)
+#endif
+                judgePendingHoldTicks();
 
             if (Head.Judged && !Head.IsHit)
                 missingStartTime.Value ??= Head.Result.TimeAbsolute;
@@ -298,13 +306,22 @@ namespace osu.Game.Rulesets.Mania.Objects.Drawables
             // Empty HitWindows 的 tick 不会进列级 auto-miss 队列，必须由父 Hold 到点结算（含非 EZ2AC 的 Ignore）。
             var nested = NestedHitObjects;
 
+#if DEBUG
+            ManiaJudgeHotPathTrace.RecordHoldTickScan(nested.Count);
+#endif
+
             for (int i = 0; i < nested.Count; i++)
             {
                 if (nested[i] is not DrawableHoldNoteTick tick || tick.AllJudged || tick.HitObject == null)
                     continue;
 
                 if (Time.Current >= tick.HitObject.StartTime)
+                {
+#if DEBUG
+                    ManiaJudgeHotPathTrace.RecordHoldTickUpdate();
+#endif
                     tick.UpdateTickResult();
+                }
             }
         }
 
@@ -492,7 +509,10 @@ namespace osu.Game.Rulesets.Mania.Objects.Drawables
         {
             // Note: base.LoadSamples() isn't called since the slider plays the tail's hitsounds for the time being.
 
-            slidingSample.Samples = HitObject.CreateSlidingSamples().Cast<ISampleInfo>().ToArray();
+            // 按住期间的滑动音只在 PlaySlidingSamples 的谱面（osu! 转换谱）会播；Mania / BMS 的 LN 不播，
+            // 装载了就只是让每条 LN 首次出现时多要一次 sliderslide / sliderwhistle。
+            if (HitObject.PlaySlidingSamples)
+                slidingSample.Samples = HitObject.CreateSlidingSamples().Cast<ISampleInfo>().ToArray();
         }
 
         public override void StopAllSamples()

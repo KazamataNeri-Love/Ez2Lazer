@@ -145,7 +145,7 @@ namespace osu.Game.Rulesets.Objects.Drawables
 
         protected override bool RequiresChildrenUpdate => true;
 
-        public override bool IsPresent => base.IsPresent || (State.Value == ArmedState.Idle && Clock.IsNotNull() && Clock.CurrentTime >= LifetimeStart);
+        public override bool IsPresent => base.IsPresent || State.Value == ArmedState.Idle && Clock.IsNotNull() && Clock.CurrentTime >= LifetimeStart;
 
         private readonly Bindable<ArmedState> state = new Bindable<ArmedState>();
 
@@ -172,7 +172,6 @@ namespace osu.Game.Rulesets.Objects.Drawables
 
         private bool autoPlayPlusSampleTriggered;
         private bool autoPlayPlusSamplePlayed;
-
         private bool autoplayPlusEnabled;
         private bool ownerLifetime;
         private double ezOffset;
