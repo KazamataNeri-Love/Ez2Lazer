@@ -193,6 +193,14 @@ namespace osu.Game.Rulesets.Mania.UI
 
             TimeRange.Value = TargetTimeRange = ComputeScrollTime(configScrollSpeed.Value, configBaseMs.Value, configTimePerSpeed.Value);
 
+            // 判定线位置先绑定并立即算一次：下面 scrollingStyle 的立即回调会调用 updateTimeRange()，
+            // 而它依赖已缓存的 hitPosition。
+            ezConfig.BindWith(Ez2Setting.HitPosition, hitPositonBindable);
+            hitPositonBindable.BindValueChanged(_ => skinChanged(), true);
+
+            ezConfig.BindWith(Ez2Setting.HitPositionGlobalEnable, globalHitPosition);
+            globalHitPosition.BindValueChanged(_ => skinChanged(), true);
+
             Config.BindWith(ManiaRulesetSetting.ScrollStyle, scrollingStyle);
             scrollingStyle.BindValueChanged(style =>
             {
@@ -205,12 +213,6 @@ namespace osu.Game.Rulesets.Mania.UI
 
             Config.BindWith(ManiaRulesetSetting.TouchOverlay, touchOverlay);
             touchOverlay.BindValueChanged(_ => updateMobileLayout(), true);
-
-            ezConfig.BindWith(Ez2Setting.HitPosition, hitPositonBindable);
-            hitPositonBindable.BindValueChanged(_ => skinChanged(), true);
-
-            ezConfig.BindWith(Ez2Setting.HitPositionGlobalEnable, globalHitPosition);
-            globalHitPosition.BindValueChanged(_ => skinChanged(), true);
 
             ezConfig.BindWith(Ez2Setting.ManiaBarLinesBool, barLinesBindable);
             ezConfig.BindWith(Ez2Setting.ManiaHitMode, hitModeBindable);
@@ -236,8 +238,9 @@ namespace osu.Game.Rulesets.Mania.UI
             JudgementRound = ManiaJudgementRound.Create(
                 ezConfig.ResolveEnvironment(ReplayRunPurpose.ForLive, ReplayScore?.ScoreInfo, ignoreOffset: ReplayScore != null),
                 Beatmap);
-            ManiaWindowBaker.AlignForLive(Beatmap, JudgementRound.Environment);
-            ManiaEnvironmentJudgements.ApplyToBeatmap(Beatmap, JudgementRound.Environment.ManiaHitMode);
+            // 本局实例的 hitmode 绑定。仿真一律在 ManiaSimulationBeatmapProvider 产出的独立副本上绑定
+            // （见 ManiaReplaySessionService），所以这里不再需要「本局实例」登记。
+            ManiaBeatmapBinding.BindForLive(Beatmap, JudgementRound.Environment);
 
             hitModeBindable.BindValueChanged(h =>
             {
@@ -388,6 +391,19 @@ namespace osu.Game.Rulesets.Mania.UI
 
         private void skinChanged()
         {
+            updateHitPosition();
+            pendingSkinChange = null;
+        }
+
+        /// <summary>
+        /// 重算并缓存判定线位置。只在皮肤或相关设置变化时调用。
+        /// </summary>
+        /// <remarks>
+        /// <see cref="updateTimeRange"/> 每帧都会被 <see cref="Update"/> 调到，而皮肤配置查询（<c>GetConfig</c>）
+        /// 需要构造 lookup 并走一遍皮肤配置链，放在每帧里纯属白烧。这里把结果缓存下来供其直接使用。
+        /// </remarks>
+        private void updateHitPosition()
+        {
             if (globalHitPosition.Value)
                 hitPosition = (float)hitPositonBindable.Value;
             else
@@ -396,15 +412,13 @@ namespace osu.Game.Rulesets.Mania.UI
                                   new ManiaSkinConfigurationLookup(LegacyManiaSkinConfigurationLookups.HitPosition))?.Value
                               ?? (float)hitPositonBindable.Value;
             }
-
-            pendingSkinChange = null;
         }
 
         private void updateTimeRange()
         {
             const float length_to_default_hit_position = 768 - LegacyManiaSkinConfiguration.DEFAULT_HIT_POSITION;
 
-            skinChanged();
+            // hitPosition 由 skinChanged() 缓存在字段里，这里只做算术。
             float lengthToHitPosition = 768 - hitPosition;
 
             // This scaling factor preserves the scroll speed as the scroll length varies from changes to the hit position.
