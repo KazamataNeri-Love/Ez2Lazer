@@ -354,6 +354,8 @@ namespace osu.Game.Screens.Play
 
             HealthProcessor = gameplayMods.OfType<IApplicableHealthProcessor>().FirstOrDefault()?.CreateHealthProcessor(playableBeatmap.HitObjects[0].StartTime);
             HealthProcessor ??= ruleset.CreateHealthProcessor(playableBeatmap.HitObjects[0].StartTime);
+            // [Ez] 与 ScoreProcessor 同源：冻结当前全局游玩环境（血量模式等）；必须先于 ApplyBeatmap。
+            HealthProcessor.ApplyEzGameplayEnvironment();
             HealthProcessor.ApplyBeatmap(playableBeatmap);
 
             dependencies.CacheAs(HealthProcessor);
@@ -1131,7 +1133,9 @@ namespace osu.Game.Screens.Play
             if (!ScoreProcessor.HasCompleted.Value)
             {
                 ezForceResultsImport = true;
-                EzOsuGame.Diagnostics.EzTimingTrace.Record("ForceResults.BypassHasCompleted", "HasCompleted still false after force completion");
+                EzOsuGame.Diagnostics.EzTimingTrace.Record(
+                    "ForceResults.BypassHasCompleted",
+                    $"judged={ScoreProcessor.JudgedHits}/{ScoreProcessor.MaximumJudgements} hasCompleted={ScoreProcessor.HasCompleted.Value}");
             }
 
             if (forceFailGrade)
@@ -1148,7 +1152,7 @@ namespace osu.Game.Screens.Play
 
             EzOsuGame.Diagnostics.EzTimingTrace.Record(
                 "ForceResults.End",
-                $"hasCompleted={ScoreProcessor.HasCompleted.Value} hasPassed={GameplayState.HasPassed} rank={ScoreProcessor.Rank.Value}");
+                $"judged={ScoreProcessor.JudgedHits}/{ScoreProcessor.MaximumJudgements} hasCompleted={ScoreProcessor.HasCompleted.Value} hasPassed={GameplayState.HasPassed} bypass={ezForceResultsImport} rank={ScoreProcessor.Rank.Value}");
         }
 
         /// <summary>
