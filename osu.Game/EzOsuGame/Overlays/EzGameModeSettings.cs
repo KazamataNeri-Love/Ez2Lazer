@@ -8,6 +8,7 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Localisation;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Localization;
+using osu.Game.EzOsuGame.Scoring.Bonus;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Settings;
@@ -28,6 +29,7 @@ namespace osu.Game.EzOsuGame.Overlays
         private Bindable<double> aAcc = null!;
 
         private Bindable<EzEnumHitMode> maniaHitModeBindable = null!;
+        private Bindable<EzEnumOsuJudgementTrack> osuJudgementTrackBindable = null!;
         private Bindable<EzEnumHealthMode> maniaHealthModeBindable = null!;
         private Bindable<bool> bmsPoorHitResultEnable = null!;
         private Bindable<EzEnumJudgePrecedence> judgePrecedenceBindable = null!;
@@ -40,6 +42,7 @@ namespace osu.Game.EzOsuGame.Overlays
             sAcc = ezConfig.GetBindable<double>(Ez2Setting.AccuracyCutoffS);
             aAcc = ezConfig.GetBindable<double>(Ez2Setting.AccuracyCutoffA);
             maniaHitModeBindable = ezConfig.GetBindable<EzEnumHitMode>(Ez2Setting.ManiaHitMode);
+            osuJudgementTrackBindable = ezConfig.GetBindable<EzEnumOsuJudgementTrack>(Ez2Setting.OsuJudgementTrack);
             maniaHealthModeBindable = ezConfig.GetBindable<EzEnumHealthMode>(Ez2Setting.ManiaHealthMode);
             bmsPoorHitResultEnable = ezConfig.GetBindable<bool>(Ez2Setting.BmsPoorHitResultEnable);
             judgePrecedenceBindable = ezConfig.GetBindable<EzEnumJudgePrecedence>(Ez2Setting.JudgePrecedence);
@@ -88,6 +91,15 @@ namespace osu.Game.EzOsuGame.Overlays
                 {
                     Keywords = new[] { "ez", "mania" }
                 },
+                new SettingsItemV2(new FormEnumDropdown<EzEnumOsuJudgementTrack>
+                {
+                    Caption = EzSettingsStrings.OSU_JUDGEMENT_TRACK,
+                    HintText = EzSettingsStrings.OSU_JUDGEMENT_TRACK_TOOLTIP,
+                    Current = osuJudgementTrackBindable,
+                })
+                {
+                    Keywords = new[] { "ez", "osu", "classic", "judgement" }
+                },
                 new SettingsItemV2(new FormEnumDropdown<EzEnumHealthMode>
                 {
                     Caption = EzSettingsStrings.HEALTH_MODE,
@@ -114,6 +126,27 @@ namespace osu.Game.EzOsuGame.Overlays
                 })
                 {
                     Keywords = new[] { "ez", "mania", "bms", "judge" }
+                },
+                new SettingsItemV2(new FormEnumDropdown<EzScoreBonusTendency>
+                {
+                    Caption = EzSettingsStrings.SCORE_BONUS_TENDENCY,
+                    HintText = EzSettingsStrings.SCORE_BONUS_TENDENCY_TOOLTIP,
+                    Current = ezConfig.GetBindable<EzScoreBonusTendency>(Ez2Setting.ScoreBonusTendency),
+                })
+                {
+                    Keywords = new[] { "ez", "mania", "bonus", "miss", "附加分" }
+                },
+                new SettingsItemV2(new FormSliderBar<double>
+                {
+                    Caption = EzSettingsStrings.SCORE_BONUS_CROSS,
+                    HintText = EzSettingsStrings.SCORE_BONUS_CROSS_TOOLTIP,
+                    RelativeSizeAxes = Axes.X,
+                    Current = ezConfig.GetBindable<double>(Ez2Setting.ScoreBonusCrossMs),
+                    KeyboardStep = 1,
+                    LabelFormat = v => $"{v:N0} ms",
+                })
+                {
+                    Keywords = new[] { "ez", "bonus", "boundary", "分界", "44" }
                 },
                 new SettingsItemV2(new FormSliderBar<double>
                 {
@@ -166,6 +199,7 @@ namespace osu.Game.EzOsuGame.Overlays
             }, true);
 
             maniaHitModeBindable.BindValueChanged(_ => Schedule(updateScoreSubmitWarning));
+            osuJudgementTrackBindable.BindValueChanged(_ => Schedule(updateScoreSubmitWarning));
 
             aAcc.BindValueChanged(_ => Schedule(updateScoreSubmitWarning));
             sAcc.BindValueChanged(_ => Schedule(updateScoreSubmitWarning));
@@ -177,6 +211,7 @@ namespace osu.Game.EzOsuGame.Overlays
         private void updateScoreSubmitWarning()
         {
             scoreSubmitWarning.Value = (!maniaHitModeBindable.IsDefault ||
+                                        !osuJudgementTrackBindable.IsDefault ||
                                         !maniaHealthModeBindable.IsDefault ||
                                         !judgePrecedenceBindable.IsDefault ||
                                         !aAcc.IsDefault ||
