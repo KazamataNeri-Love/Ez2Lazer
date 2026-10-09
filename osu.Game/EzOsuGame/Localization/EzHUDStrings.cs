@@ -92,6 +92,28 @@ namespace osu.Game.EzOsuGame.Localization
             "背景虚化的模糊强度。设为 0 等效于关闭虚化。",
             "Blur strength for the backdrop effect. A value of 0 is equivalent to disabling blur.");
 
+        public static readonly LocalisableString BOX_ELEMENT_COLOUR_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "背景框颜色，含 alpha 透明度；降低 alpha 可透出下方内容（开启虚化时为虚化结果）。",
+            "Box colour including alpha. Lower alpha lets content behind show through (the blurred backdrop when blur is on).");
+
+        public static readonly LocalisableString BOX_ELEMENT_SHADOW_LABEL = new EzLocalizationManager.EzLocalisableString("阴影", "Shadow");
+
+        public static readonly LocalisableString BOX_ELEMENT_SHADOW_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "在背景框外侧绘制一圈阴影（跟随圆角）。关闭时「阴影范围」不生效。",
+            "Draws an outer shadow around the box, following the corner radius. Shadow range has no effect while disabled.");
+
+        public static readonly LocalisableString BOX_ELEMENT_SHADOW_RANGE_LABEL = new EzLocalizationManager.EzLocalisableString("阴影范围", "Shadow Range");
+
+        public static readonly LocalisableString BOX_ELEMENT_SHADOW_RANGE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "阴影向外扩散的范围。设为 0 等效于关闭阴影；范围越大开销不变，但更容易被父容器裁切。",
+            "How far the shadow spreads outwards. A value of 0 is equivalent to disabling the shadow; larger values cost no extra work but are more likely to be clipped by parents.");
+
+        public static readonly LocalisableString BOX_ELEMENT_SHADOW_USE_BOX_COLOUR_LABEL = new EzLocalizationManager.EzLocalisableString("阴影跟随框颜色", "Shadow Follows Box Colour");
+
+        public static readonly LocalisableString BOX_ELEMENT_SHADOW_USE_BOX_COLOUR_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "开启后阴影使用背景框颜色（含 alpha）；关闭时为默认黑色半透明。",
+            "When enabled, the shadow uses the box colour including alpha; when disabled, a default semi-transparent black is used.");
+
         // EzHUDAccuracyCounter
         public static readonly LocalisableString FILL_DIRECTION_LABEL = new EzLocalizationManager.EzLocalisableString("排列方向", "Fill Direction");
         public static readonly LocalisableString FILL_DIRECTION_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("选择组件的排列方向", "Select the arrangement direction of components.");
@@ -301,6 +323,12 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly LocalisableString DAN_PANEL_DUAL_LAYOUT_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
             "Auto：按宽度切换；Horizontal：左右分列；Vertical：上下堆叠。",
             "Auto by width; Horizontal side-by-side; Vertical stacked.");
+
+        public static readonly LocalisableString DAN_PANEL_DISPLAY_TYPE = new EzLocalizationManager.EzLocalisableString("显示类型", "Display Type");
+
+        public static readonly LocalisableString DAN_PANEL_DISPLAY_TYPE_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "RC+LN：双赛道全显示；仅 RC：只显示 RC；仅 LN：只显示 LN（此时该赛道独占整行）。",
+            "RC+LN: show both tracks; RC only; LN only (the remaining track takes the full width).");
 
         public static readonly LocalisableString DAN_PANEL_RATING = new EzLocalizationManager.EzLocalisableString("Rating", "Rating");
 

@@ -126,7 +126,7 @@ namespace osu.Game.Rulesets.BMS.Beatmaps
                         destinationSet.Files.Remove(previousUsage);
                 }
 
-                string relativeChartPath = registerExternalChartFile(realmFileStore, realm, destinationSet, chartPath, contentRoot);
+                string relativeChartPath = registerExternalFile(realmFileStore, realm, destinationSet, chartPath, contentRoot);
                 RealmNamedFileUsage chartFileUsage = destinationSet.GetFile(relativeChartPath)
                                                      ?? throw new InvalidOperationException($"Failed to register external BMS chart '{chartPath}'.");
 
@@ -147,8 +147,13 @@ namespace osu.Game.Rulesets.BMS.Beatmaps
                 destinationBeatmap.Status = BeatmapOnlineStatus.LocallyModified;
                 destinationBeatmap.BeatmapSet = destinationSet;
                 applyVirtualBeatmapToRealm(destinationBeatmap, targetBeatmap);
+
+                registerExternalSetFile(realmFileStore, realm, destinationSet, contentRoot, targetBeatmap.Metadata.AudioFile);
                 updatedBeatmaps++;
             }
+
+            // Once per set: the stage image is folder-level, not per chart.
+            registerExternalSetFile(realmFileStore, realm, destinationSet, contentRoot, syncSet.Song.StageFilePath);
 
             HashSet<Guid> deletedBeatmapIds = changes.Where(change => change.Kind == BmsRealmSyncChangeKind.Delete)
                                                     .Select(change => change.BeatmapId)
@@ -344,9 +349,9 @@ namespace osu.Game.Rulesets.BMS.Beatmaps
 
         private static bool floatEquals(double a, double b) => Math.Abs(a - b) < 0.01;
 
-        private static string registerExternalChartFile(RealmFileStore realmFileStore, Realm realm, BeatmapSetInfo set, string chartPath, string contentRoot)
+        private static string registerExternalFile(RealmFileStore realmFileStore, Realm realm, BeatmapSetInfo set, string filePath, string contentRoot)
         {
-            string relativeFilename = ComputeRelativeChartFilename(chartPath, contentRoot);
+            string relativeFilename = ComputeRelativeChartFilename(filePath, contentRoot);
 
             if (string.IsNullOrEmpty(relativeFilename))
                 return string.Empty;
@@ -354,10 +359,33 @@ namespace osu.Game.Rulesets.BMS.Beatmaps
             if (set.GetFile(relativeFilename) != null)
                 return relativeFilename;
 
-            string syntheticHash = BmsPathKeys.ComputeRealmFileHash(chartPath);
+            string syntheticHash = BmsPathKeys.ComputeRealmFileHash(filePath);
             RealmFile file = realmFileStore.RegisterExternalHash(syntheticHash, realm);
             set.Files.Add(new RealmNamedFileUsage(file, relativeFilename));
             return relativeFilename;
+        }
+
+        /// <summary>
+        /// Registers a file the chart or its folder references, resolved relative to the content root.
+        /// </summary>
+        /// <remarks>
+        /// osu! decides whether the audio or the background changed by comparing
+        /// <c>BeatmapSet.GetFile(Metadata.AudioFile)?.File.Hash</c> and
+        /// <c>BeatmapSet.GetFile(Metadata.BackgroundFile)?.File.Hash</c> (<see cref="BeatmapInfo.AudioEquals"/> /
+        /// <see cref="BeatmapInfo.BackgroundEquals"/>). An unregistered file makes those comparisons report
+        /// "equal" for every chart in the library, so <c>SongSelect</c> would keep the first track and the first
+        /// background it loaded instead of switching them per chart. Registering the files (content itself stays on
+        /// disk, like the chart files) gives each one a distinct path-derived hash and restores the comparisons.
+        /// </remarks>
+        private static void registerExternalSetFile(RealmFileStore realmFileStore, Realm realm, BeatmapSetInfo set, string contentRoot, string? relativeFilename)
+        {
+            if (string.IsNullOrWhiteSpace(relativeFilename))
+                return;
+
+            string fullPath = Path.Combine(contentRoot, relativeFilename.Replace('/', Path.DirectorySeparatorChar));
+
+            if (File.Exists(fullPath))
+                registerExternalFile(realmFileStore, realm, set, fullPath, contentRoot);
         }
 
         private static void removeSet(Realm realm, BeatmapSetInfo set)

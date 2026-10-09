@@ -8,6 +8,7 @@ using osu.Framework.Input;
 using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
+using osu.Game.EzOsuGame.Localization;
 using osu.Game.Localisation;
 
 namespace osu.Game.Input.Bindings
@@ -97,6 +98,9 @@ namespace osu.Game.Input.Bindings
             new KeyBinding(InputKey.ExtraMouseButton1, GlobalAction.Back),
 
             new KeyBinding(new[] { InputKey.Alt, InputKey.Home }, GlobalAction.Home),
+
+            // [Ez] 循环切换规则集：最后一个回到第一个（与工具栏 Ctrl+数字直选同一份规则集列表）。
+            new KeyBinding(new[] { InputKey.Control, InputKey.Tab }, GlobalAction.SelectNextRuleset),
 
             new KeyBinding(InputKey.None, GlobalAction.ToggleFPSDisplay),
             new KeyBinding(new[] { InputKey.Control, InputKey.T }, GlobalAction.ToggleToolbar),
@@ -635,6 +639,16 @@ namespace osu.Game.Input.Bindings
 
         [LocalisableDescription(typeof(GlobalActionKeyBindingStrings), nameof(GlobalActionKeyBindingStrings.TakeAndUploadScreenshot))]
         TakeAndUploadScreeshot,
+
+        /// <summary>
+        /// [Ez] 循环切换到下一个规则集（到最后一个后回到第一个）。
+        /// </summary>
+        /// <remarks>
+        /// 新动作必须追加在枚举末尾：<see cref="GlobalAction"/> 的整数值会持久化到 Realm 键位绑定，
+        /// 在中间插入会让既有玩家的绑定错位。
+        /// </remarks>
+        [LocalisableDescription(typeof(EzSettingsStrings), nameof(EzSettingsStrings.CYCLE_RULESET))]
+        SelectNextRuleset,
     }
 
     public enum GlobalActionCategory

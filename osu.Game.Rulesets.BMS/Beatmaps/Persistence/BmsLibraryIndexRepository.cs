@@ -17,7 +17,7 @@ namespace osu.Game.Rulesets.BMS.Beatmaps.Persistence
         /// are re-parsed on the next scan instead of being skipped as "unchanged", which is the only way already
         /// imported metadata can be corrected.
         /// </summary>
-        public const int CHART_PARSE_VERSION = 3;
+        public const int CHART_PARSE_VERSION = 4;
 
         private const string table_meta = "meta";
         private const string table_roots = "roots";

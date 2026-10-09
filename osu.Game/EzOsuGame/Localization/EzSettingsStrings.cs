@@ -37,6 +37,10 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly EzLocalizationManager.EzLocalisableString EZ_UI_SETTINGS_HEADER = new EzLocalizationManager.EzLocalisableString("Ez UI", "Ez UI");
 
+        public static readonly EzLocalizationManager.EzLocalisableString EZ_CUSTOM_SECTION_HEADER = new EzLocalizationManager.EzLocalisableString("自定义", "Custom");
+
+        public static readonly EzLocalizationManager.EzLocalisableString EZ_CUSTOM_SETTINGS_HEADER = new EzLocalizationManager.EzLocalisableString("光标与预览", "Cursor & preview");
+
         public static readonly EzLocalizationManager.EzLocalisableString EZ_GAMEPLAY_SETTINGS_HEADER = new EzLocalizationManager.EzLocalisableString("Ez Gameplay", "Ez Gameplay");
 
         public static readonly EzLocalizationManager.EzLocalisableString FRAME_LIMITER_BASE =
@@ -602,6 +606,10 @@ namespace osu.Game.EzOsuGame.Localization
             + "\n会读取你当前规则集与变体（如 mania 几 K）的实际键位设置。",
             "When enabled, pressing gameplay keys for the current mode also triggers skip during skippable periods."
             + "\nUses your current ruleset/variant key bindings (for example, mania key count bindings).");
+
+        public static readonly LocalisableString CYCLE_RULESET = new EzLocalizationManager.EzLocalisableString(
+            "切换规则集（循环）",
+            "Cycle ruleset");
 
         public static readonly LocalisableString PREVIEW_FROM_START = new EzLocalizationManager.EzLocalisableString(
             "启用音频预览从头播放音乐",

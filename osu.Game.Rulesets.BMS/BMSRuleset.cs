@@ -73,6 +73,11 @@ namespace osu.Game.Rulesets.BMS
         private static void attachBmsRuntimeComponents(DrawableRuleset drawableRuleset, IBeatmap beatmap)
         {
             drawableRuleset.Overlays.Add(new BmsRuntimeAudioRegistrar());
+
+            // Hit object keysounds play through the skin pipeline, but BMS background (BGM / auto-play
+            // lane) events have no hit object carrying them: they need an explicit dispatcher on every
+            // play path, not only on the BMS-owned one (BMSPlayerLoader -> BmsPlayer).
+            drawableRuleset.Overlays.Add(new BmsBackgroundSoundDriver());
         }
 
         public override ScoreProcessor CreateScoreProcessor() => new BMSScoreProcessor();

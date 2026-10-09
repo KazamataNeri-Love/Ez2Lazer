@@ -53,6 +53,16 @@ namespace osu.Game.EzOsuGame.HUD
         [SettingSource(typeof(EzHUDStrings), nameof(EzHUDStrings.DAN_PANEL_DUAL_LAYOUT), nameof(EzHUDStrings.DAN_PANEL_DUAL_LAYOUT_TOOLTIP))]
         public Bindable<EzDanPanelDualLayout> DualLayout { get; } = new Bindable<EzDanPanelDualLayout>(EzDanPanelDualLayout.Auto);
 
+        /// <summary>Which track(s) to show: RC+LN / RC only / LN only.</summary>
+        [SettingSource(typeof(EzHUDStrings), nameof(EzHUDStrings.DAN_PANEL_DISPLAY_TYPE), nameof(EzHUDStrings.DAN_PANEL_DISPLAY_TYPE_TOOLTIP))]
+        public Bindable<EzDanPanelDisplayType> DisplayType { get; } = new Bindable<EzDanPanelDisplayType>(EzDanPanelDisplayType.RcLn);
+
+        /// <summary>Whether the RC track is currently shown.</summary>
+        private bool showsRc => DisplayType.Value is EzDanPanelDisplayType.RcLn or EzDanPanelDisplayType.RcOnly;
+
+        /// <summary>Whether the LN track is currently shown.</summary>
+        private bool showsLn => DisplayType.Value is EzDanPanelDisplayType.RcLn or EzDanPanelDisplayType.LnOnly;
+
         /// <summary>
         /// When true, skillset chips show clear counts (Local Profile only). HUD keeps this false —
         /// clear lists are a separate profile component, not DualPanel.
@@ -163,6 +173,7 @@ namespace osu.Game.EzOsuGame.HUD
             KeyCount.BindValueChanged(_ => requestRefresh());
             DataSource.BindValueChanged(_ => requestRefresh());
             DualLayout.BindValueChanged(_ => applyLayoutMode(), true);
+            DisplayType.BindValueChanged(_ => requestRefresh());
             ShowClearCounts.BindValueChanged(_ => requestRefresh());
 
             beatmap?.BindValueChanged(_ => requestRefresh());
@@ -227,13 +238,29 @@ namespace osu.Game.EzOsuGame.HUD
 
         private void applyLayoutMode()
         {
+            bool showRc = showsRc;
+            bool showLn = showsLn;
+
+            // Hidden sides must leave the flow entirely: FillFlowContainer skips !IsPresent children,
+            // so the visible track takes the full width and no gap spacing is reserved for the other.
+            if (showRc)
+                rcList.Show();
+            else
+                rcList.Hide();
+
+            if (showLn)
+                lnList.Show();
+            else
+                lnList.Hide();
+
             // RC|LN groups may sit side-by-side or stack; skill rows stay a vertical 3-column grid.
-            bool wide = DualLayout.Value switch
+            // With a single track selected there is no counterpart to arrange against, so keep it full width.
+            bool wide = showRc && showLn && (DualLayout.Value switch
             {
                 EzDanPanelDualLayout.Horizontal => true,
                 EzDanPanelDualLayout.Vertical => false,
                 _ => DrawWidth >= wideThreshold,
-            };
+            });
 
             if (wide)
             {
@@ -543,8 +570,13 @@ namespace osu.Game.EzOsuGame.HUD
                     lnRawDanRating = persistedChartDan.LnRawDan;
             }
 
-            updateSide(rcList, EzDanSide.Rc, user, keys, chartSkillsetLabelsRc, wantChart, wantPlayer, showClearCounts, playerOverall, chartOverall, persistedChartDan);
-            updateSide(lnList, EzDanSide.Ln, user, keys, chartSkillsetLabelsLn, wantChart, wantPlayer, showClearCounts, null, lnRawDanRating, persistedChartDan);
+            // Only the visible track(s) are refreshed; a hidden track is rebuilt when it is shown again
+            // (DisplayType change routes through refresh()).
+            if (showsRc)
+                updateSide(rcList, EzDanSide.Rc, user, keys, chartSkillsetLabelsRc, wantChart, wantPlayer, showClearCounts, playerOverall, chartOverall, persistedChartDan);
+
+            if (showsLn)
+                updateSide(lnList, EzDanSide.Ln, user, keys, chartSkillsetLabelsLn, wantChart, wantPlayer, showClearCounts, null, lnRawDanRating, persistedChartDan);
         }
 
         private void showEmpty(LocalisableString text)

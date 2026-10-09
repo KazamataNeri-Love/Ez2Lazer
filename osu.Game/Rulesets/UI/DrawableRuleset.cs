@@ -471,7 +471,12 @@ namespace osu.Game.Rulesets.UI
         /// <summary>
         /// A layer anchored to the full screen, rendered below the playfield and all other content.
         /// </summary>
-        public abstract Container BackgroundLayer { get; }
+        /// <remarks>
+        /// Deliberately not abstract: test fixtures derive from this class and only supply the members they
+        /// actually exercise, so requiring every one of them to implement an unused layer would break the
+        /// test project for no benefit.
+        /// </remarks>
+        public virtual Container BackgroundLayer { get; } = new Container { RelativeSizeAxes = Axes.Both, Depth = float.MaxValue };
 
         /// <summary>
         /// Components to be run potentially multiple times in line with frame-stable gameplay.

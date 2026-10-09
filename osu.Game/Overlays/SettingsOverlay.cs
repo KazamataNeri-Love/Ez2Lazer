@@ -114,7 +114,8 @@ namespace osu.Game.Overlays
                 new GraphicsSection(),
                 new OnlineSection(),
                 new MaintenanceSection(),
-                new DebugSection()
+                new DebugSection(),
+                new EzCustomSection()
             });
 
             var today = DateTimeOffset.Now;

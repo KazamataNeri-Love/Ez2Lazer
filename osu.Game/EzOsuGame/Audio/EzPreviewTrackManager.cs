@@ -17,6 +17,7 @@ using osu.Game.EzOsuGame.Beatmaps;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.Rulesets.Edit.Checks.Components;
 using osu.Game.Rulesets.Objects;
+using osu.Game.Rulesets.Objects.Legacy;
 using osu.Game.Storyboards;
 
 namespace osu.Game.EzOsuGame.Audio
@@ -98,7 +99,7 @@ namespace osu.Game.EzOsuGame.Audio
             playback.ResetPlaybackProgress();
 
             var playableBeatmap = EzPlayableBeatmapCache.GetShared(beatmap, beatmap.BeatmapInfo.Ruleset);
-            previewHitSoundsEnabled = fastCheckShouldPreviewHitSounds(beatmap, hitsound_threshold);
+            previewHitSoundsEnabled = fastCheckShouldPreviewHitSounds(beatmap, hitsound_threshold) || hasUnregisteredKeysoundSamples(beatmap, playableBeatmap);
             previewStoryboardEnabled = hasStoryboardSamples(beatmap.Storyboard);
 
             if (!previewHitSoundsEnabled && !previewStoryboardEnabled)
@@ -135,6 +136,50 @@ namespace osu.Game.EzOsuGame.Audio
         /// </summary>
         private static bool fastCheckShouldPreviewHitSounds(IWorkingBeatmap beatmap, int threshold)
             => countBeatmapHitsoundFiles(beatmap) >= threshold;
+
+        /// <summary>
+        /// 检测「谱面包未登记、但 note 直接按文件名引用」的音效（外部托管库，即 BMS 的 key-sound）。
+        /// 这类谱面的音频就是 note 音效本身，没有可预览的主音频轨；而它们引用的文件不在
+        /// <see cref="BeatmapSetInfo.Files"/> 里，所以 <see cref="countBeatmapHitsoundFiles"/> 永远数不出来。
+        /// 标准选歌入口正是这种情况，必须靠本方法才能启用预览。
+        /// </summary>
+        private static bool hasUnregisteredKeysoundSamples(IWorkingBeatmap beatmap, IBeatmap playableBeatmap)
+        {
+            // 只针对外部托管库：普通 osu! 谱面的自定义 hitsound 已登记在谱面包里，走上面的数量判断即可。
+            if (beatmap.BeatmapInfo.BeatmapSet is not BeatmapSetInfo { IsExternallyHosted: true })
+                return false;
+
+            foreach (HitObject hitObject in playableBeatmap.HitObjects)
+            {
+                if (hasFileBackedSample(hitObject))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool hasFileBackedSample(HitObject hitObject)
+        {
+            foreach (HitSampleInfo sample in hitObject.Samples)
+            {
+                if (sample is ConvertHitObjectParser.FileHitSampleInfo)
+                    return true;
+            }
+
+            foreach (HitSampleInfo sample in hitObject.AuxiliarySamples)
+            {
+                if (sample is ConvertHitObjectParser.FileHitSampleInfo)
+                    return true;
+            }
+
+            foreach (HitObject nested in hitObject.NestedHitObjects)
+            {
+                if (hasFileBackedSample(nested))
+                    return true;
+            }
+
+            return false;
+        }
 
         private static int countBeatmapHitsoundFiles(IWorkingBeatmap beatmap)
         {

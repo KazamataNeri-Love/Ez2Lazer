@@ -1,6 +1,7 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System;
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
@@ -11,6 +12,7 @@ using osu.Framework.Input.Handlers.Tablet;
 using osu.Framework.Layout;
 using osu.Framework.Platform;
 using osu.Framework.Screens;
+using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.Rulesets;
@@ -133,6 +135,9 @@ namespace osu.Game.Graphics.Containers
         [Resolved]
         private IBindable<RulesetInfo> ruleset { get; set; } = null!;
 
+        [Resolved(canBeNull: true)]
+        private IBindable<WorkingBeatmap>? beatmap { get; set; }
+
         [BackgroundDependencyLoader]
         private void load(GameHost host, OsuConfigManager config, ISafeArea safeArea, Ez2ConfigManager ezConfig)
         {
@@ -216,10 +221,19 @@ namespace osu.Game.Graphics.Containers
             {
                 if (targetMode == ScalingMode.Gameplay)
                 {
-                    if ((scalingGameMode.Value == ScalingGameMode.Standard && ruleset.Value.OnlineID == 0) ||
-                        (scalingGameMode.Value == ScalingGameMode.Taiko && ruleset.Value.OnlineID == 1) ||
-                        (scalingGameMode.Value == ScalingGameMode.Catch && ruleset.Value.OnlineID == 2) ||
-                        (scalingGameMode.Value == ScalingGameMode.Mania && ruleset.Value.OnlineID == 3))
+                    // In "gameplay only" mode the scaling applies to whichever mode the user selected.
+                    // BMS is a custom ruleset and shares no OnlineID with the built-in modes, so it has its own case.
+                    bool appliesToCurrentMode = scalingGameMode.Value switch
+                    {
+                        ScalingGameMode.Standard => ruleset.Value.OnlineID == 0,
+                        ScalingGameMode.Taiko => ruleset.Value.OnlineID == 1,
+                        ScalingGameMode.Catch => ruleset.Value.OnlineID == 2,
+                        ScalingGameMode.Mania => ruleset.Value.OnlineID == 3,
+                        ScalingGameMode.Bms => isBmsRuleset && !isBmsDoublePlayChart,
+                        _ => false,
+                    };
+
+                    if (appliesToCurrentMode)
                     {
                         sizableContainer.RelativePositionAxes = Axes.Both;
 
@@ -262,6 +276,32 @@ namespace osu.Game.Graphics.Containers
             {
                 tabletHandler.OutputAreaSize.Value = scalingMode.Value == ScalingMode.Everything ? new Vector2(sizeX.Value, sizeY.Value) : Vector2.One;
                 tabletHandler.OutputAreaOffset.Value = scalingMode.Value == ScalingMode.Everything ? new Vector2(posX.Value, posY.Value) : new Vector2(0.5f);
+            }
+        }
+
+        /// <summary>
+        /// Matched by short name because BMS is a custom ruleset and has no well-known <see cref="RulesetInfo.OnlineID"/>.
+        /// Both of its entry routes (<c>bms</c> and the native variant) share this name.
+        /// </summary>
+        private bool isBmsRuleset => string.Equals(ruleset.Value.ShortName, "bms", StringComparison.Ordinal);
+
+        /// <summary>
+        /// Double-play BMS charts already manage their own stage gap
+        /// (<c>BMSRulesetSetting.DpStageSpacing</c>), so scaling them on top of that setting would fight it.
+        /// </summary>
+        /// <remarks>
+        /// Mirrors the test used where that gap is applied (<c>BMSPlayfield.updateColumnLayout</c>), so the two
+        /// stay in agreement. Lane count arrives as <see cref="IBeatmapDifficultyInfo.CircleSize"/>, which BMS
+        /// stores as its total key count.
+        /// </remarks>
+        private bool isBmsDoublePlayChart
+        {
+            get
+            {
+                float circleSize = beatmap?.Value?.Beatmap?.Difficulty.CircleSize ?? 0;
+                int totalColumns = (int)MathF.Round(circleSize);
+
+                return totalColumns is 10 or 14 or 16 or 18;
             }
         }
 

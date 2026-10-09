@@ -236,7 +236,12 @@ namespace osu.Game.Rulesets.BMS.Beatmaps
                     ArtistUnicode = string.IsNullOrWhiteSpace(chart.Artist) ? song.Artist : chart.Artist,
                     Source = "BMS",
                     Tags = buildTags(chart),
-                    AudioFile = string.Empty,
+
+                    // The chart's background music. Needed so the standard song select has a real track to play
+                    // (WorkingBeatmap.Track falls back to a silent virtual track when this is empty). Gameplay does
+                    // not use it: BMS audio is dispatched from the chart's own background/auto-play channels, and
+                    // BmsBackgroundSoundDriver mutes the track while that dispatch is active.
+                    AudioFile = chart.AudioFile ?? string.Empty,
                     BackgroundFile = song.StageFilePath ?? string.Empty,
                     PreviewTime = chart.PreviewTime,
                 };
@@ -618,7 +623,7 @@ namespace osu.Game.Rulesets.BMS.Beatmaps
                     Artist = chart.Artist,
                     Genre = chart.Genre,
                     BannerPath = findImageFile(chart.FolderPath, "banner", "bn"),
-                    StageFilePath = findImageFile(chart.FolderPath, "stagefile", "stage", "bg"),
+                    StageFilePath = chart.DeclaredStageFilePath ?? findImageFile(chart.FolderPath, "stagefile", "stage", "bg"),
                     LastModified = Directory.GetLastWriteTime(chart.FolderPath),
                 };
 
@@ -836,6 +841,42 @@ namespace osu.Game.Rulesets.BMS.Beatmaps
             return null;
         }
 
+        /// <summary>
+        /// Resolves an image filename declared by the chart itself, accepting either a bare filename or a
+        /// subfolder-relative path. Returns <see langword="null"/> when nothing usable is declared, so the
+        /// caller can fall back to <see cref="findImageFile"/>.
+        /// </summary>
+        private static string? resolveDeclaredImageFile(string folderPath, string? declaredFile)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath) || string.IsNullOrWhiteSpace(declaredFile))
+                return null;
+
+            string trimmed = declaredFile.Trim().Trim('"').Replace('\\', '/');
+
+            if (!isImageFile(trimmed))
+                return null;
+
+            if (File.Exists(Path.Combine(folderPath, trimmed)))
+                return trimmed;
+
+            string fileName = Path.GetFileName(trimmed);
+
+            if (!string.IsNullOrEmpty(fileName) && File.Exists(Path.Combine(folderPath, fileName)))
+                return fileName;
+
+            return null;
+        }
+
+        private static bool isImageFile(string path)
+        {
+            string extension = Path.GetExtension(path);
+
+            return extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
+                   || extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+                   || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
+                   || extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase);
+        }
+
         private BMSChartCache? parseBmsFileForCache(string filePath, CancellationToken token)
         {
             var fileInfo = new FileInfo(filePath);
@@ -878,6 +919,7 @@ namespace osu.Game.Rulesets.BMS.Beatmaps
             int maxMeasure = 0;
             string? previewAudioFile = null;
             string? explicitPreviewFile = null;
+            string? declaredStageFile = null;
             int previewMeasure = int.MaxValue;
             double previewPosition = double.MaxValue;
             double baseBpm = 130;
@@ -961,6 +1003,10 @@ namespace osu.Game.Rulesets.BMS.Beatmaps
                 }
                 else if (upperLine.StartsWith("#PREVIEW ", StringComparison.Ordinal))
                     explicitPreviewFile = line.Substring(9).Trim();
+                else if (upperLine.StartsWith("#STAGEFILE ", StringComparison.Ordinal))
+                    declaredStageFile = line.Substring(11).Trim();
+                else if (upperLine.StartsWith("#BACKBMP ", StringComparison.Ordinal))
+                    declaredStageFile ??= line.Substring(9).Trim();
                 else if (upperLine.StartsWith("#SCROLL", StringComparison.Ordinal))
                     hasScrollChanges = true;
                 else if (line.Length > 6 && line[6] == ':')
@@ -1028,6 +1074,9 @@ namespace osu.Game.Rulesets.BMS.Beatmaps
                 cache.PreviewTime = (int)Math.Max(0, (previewMeasure * 4 + previewPosition * 4) * 60000.0 / baseBpm);
 
             cache.KeyCount = Math.Max(1, determineKeyCount(noteChannels));
+
+            // Mirror the decoder's precedence: #STAGEFILE wins, #BACKBMP only fills in when nothing was declared.
+            cache.DeclaredStageFilePath = resolveDeclaredImageFile(cache.FolderPath, declaredStageFile);
             return cache;
         }
     }

@@ -154,6 +154,113 @@ namespace osu.Game.Rulesets.BMS.Tests
             }
         }
 
+        [Test]
+        public async Task TestScanHonoursDeclaredStageFile()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), $"bms-manager-stage-{Guid.NewGuid():N}");
+            string storagePath = Path.Combine(tempDir, "storage");
+            string root = Path.Combine(tempDir, "library");
+            Directory.CreateDirectory(storagePath);
+            Directory.CreateDirectory(root);
+
+            try
+            {
+                string folderPath = Path.Combine(root, "song-a");
+                Directory.CreateDirectory(folderPath);
+
+                // The stage image has a name unrelated to "stage"/"bg", so a wildcard guess cannot find it.
+                File.WriteAllBytes(Path.Combine(folderPath, "100.jpg"), new byte[] { 1 });
+                string chartPath = Path.Combine(folderPath, "a.bms");
+                File.WriteAllText(chartPath, """
+                                             #TITLE Declared
+                                             #ARTIST Test
+                                             #STAGEFILE 100.jpg
+                                             #BPM 120
+                                             #PLAYLEVEL 1
+                                             #00111:0100
+                                             """);
+
+                var manager = new BMSBeatmapManager(storagePath);
+
+                await manager.ScanLibraryAsync(new[] { root }).ConfigureAwait(false);
+
+                BmsRealmSyncChange change = manager.GetPendingRealmSyncChanges(10).Single();
+                Assert.That(manager.TryGetRealmSyncSet(change.SetId, out BmsRealmSyncSet syncSet), Is.True);
+
+                var targetSet = manager.BuildRealmSyncTarget(syncSet, new BMSRuleset().RulesetInfo);
+
+                Assert.That(targetSet.Beatmaps.Single().Metadata.BackgroundFile, Is.EqualTo("100.jpg"),
+                    "the chart's own #STAGEFILE must reach the externally hosted set, which has no other way to resolve a background");
+            }
+            finally
+            {
+                try
+                {
+                    SqliteConnection.ClearAllPools();
+                }
+                catch
+                {
+                    // Best effort.
+                }
+
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, true);
+            }
+        }
+
+        [Test]
+        public async Task TestScanFallsBackToWildcardWhenDeclaredStageFileIsMissing()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), $"bms-manager-stage-missing-{Guid.NewGuid():N}");
+            string storagePath = Path.Combine(tempDir, "storage");
+            string root = Path.Combine(tempDir, "library");
+            Directory.CreateDirectory(storagePath);
+            Directory.CreateDirectory(root);
+
+            try
+            {
+                string folderPath = Path.Combine(root, "song-a");
+                Directory.CreateDirectory(folderPath);
+
+                File.WriteAllBytes(Path.Combine(folderPath, "bg.png"), new byte[] { 1 });
+                string chartPath = Path.Combine(folderPath, "a.bms");
+                File.WriteAllText(chartPath, """
+                                             #TITLE Missing
+                                             #ARTIST Test
+                                             #STAGEFILE not-here.jpg
+                                             #BPM 120
+                                             #PLAYLEVEL 1
+                                             #00111:0100
+                                             """);
+
+                var manager = new BMSBeatmapManager(storagePath);
+
+                await manager.ScanLibraryAsync(new[] { root }).ConfigureAwait(false);
+
+                BmsRealmSyncChange change = manager.GetPendingRealmSyncChanges(10).Single();
+                Assert.That(manager.TryGetRealmSyncSet(change.SetId, out BmsRealmSyncSet syncSet), Is.True);
+
+                var targetSet = manager.BuildRealmSyncTarget(syncSet, new BMSRuleset().RulesetInfo);
+
+                Assert.That(targetSet.Beatmaps.Single().Metadata.BackgroundFile, Is.EqualTo("bg.png"),
+                    "a declared file that does not exist must not shadow the folder wildcard fallback");
+            }
+            finally
+            {
+                try
+                {
+                    SqliteConnection.ClearAllPools();
+                }
+                catch
+                {
+                    // Best effort.
+                }
+
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, true);
+            }
+        }
+
         private static void executeSql(string dbPath, string sql, string chartPath)
         {
             using var connection = new SqliteConnection($"Data Source={dbPath}");

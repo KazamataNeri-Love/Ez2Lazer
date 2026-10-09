@@ -40,4 +40,22 @@ namespace osu.Game.EzOsuGame.HUD
         [Description("Vertical")]
         Vertical,
     }
+
+    /// <summary>
+    /// Which dan track(s) <see cref="EzHUDDanDualPanel"/> displays.
+    /// </summary>
+    public enum EzDanPanelDisplayType
+    {
+        /// <summary>Both tracks.</summary>
+        [Description("RC + LN")]
+        RcLn,
+
+        /// <summary>RC track only.</summary>
+        [Description("RC")]
+        RcOnly,
+
+        /// <summary>LN track only.</summary>
+        [Description("LN")]
+        LnOnly,
+    }
 }

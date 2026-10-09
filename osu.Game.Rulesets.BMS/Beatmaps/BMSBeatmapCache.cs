@@ -78,6 +78,15 @@ namespace osu.Game.Rulesets.BMS.Beatmaps
         public string FolderPath { get; set; } = string.Empty;
 
         /// <summary>
+        /// Stage image declared by the chart itself (<c>#STAGEFILE</c> / <c>#BACKBMP</c>), resolved against the
+        /// chart folder. Guessing the image by filename wildcard misses charts whose stage file has an unrelated
+        /// name (e.g. <c>#STAGEFILE 100.jpg</c>), which leaves the externally hosted set without a background.
+        /// Only meaningful while scanning; not persisted.
+        /// </summary>
+        [JsonIgnore]
+        public string? DeclaredStageFilePath { get; set; }
+
+        /// <summary>
         /// Chart-specific title (may differ from song title).
         /// </summary>
         public string Title { get; set; } = string.Empty;
