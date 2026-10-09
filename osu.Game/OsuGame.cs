@@ -44,11 +44,11 @@ using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Background.Pixiv;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Edit;
+using osu.Game.EzOsuGame.Input;
 using osu.Game.EzOsuGame.Layout;
 using osu.Game.EzOsuGame.LocalProfile;
 using osu.Game.EzOsuGame.Overlays;
 using osu.Game.EzOsuGame.Performance;
-using osu.Game.EzOsuGame.Pets;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.EzOsuGame.Screens.Play;
 using osu.Game.Graphics;
@@ -1236,8 +1236,6 @@ namespace osu.Game
                 Margin = new MarginPadding(5),
             }, topMostOverlayContent.Add);
 
-            loadComponentSingleFile(new EzDesktopPetLayer(), topMostOverlayContent.Add);
-
             if (!IsDeployedBuild)
                 loadComponentSingleFile(devBuildBanner = new DevBuildBanner(), ScreenContainer.Add);
 
@@ -1733,6 +1731,24 @@ namespace osu.Game
             return component;
         }
 
+        /// <summary>
+        /// [Ez] 循环切换到下一个已安装规则集（最后一个回到第一个）。
+        /// </summary>
+        /// <remarks>
+        /// 与工具栏 Ctrl+数字直选共用同一个 <c>Ruleset</c> bindable，因此切换音效 / 音乐 duck 行为一致。
+        /// </remarks>
+        private void cycleRuleset()
+        {
+            // 游玩 / 编辑中切换规则集没有意义，还可能打断当前会话。
+            if (ScreenStack.CurrentScreen is Player or PlayerLoader or Editor)
+                return;
+
+            var next = EzRulesetCycleHelper.NextRuleset(RulesetStore.AvailableRulesets.ToList(), Ruleset.Value);
+
+            if (next != null)
+                Ruleset.Value = next;
+        }
+
         public bool OnPressed(KeyBindingPressEvent<GlobalAction> e)
         {
             switch (e.Action)
@@ -1751,6 +1767,10 @@ namespace osu.Game
 
             switch (e.Action)
             {
+                case GlobalAction.SelectNextRuleset:
+                    cycleRuleset();
+                    return true;
+
                 case GlobalAction.ToggleMute:
                 case GlobalAction.NextVolumeMeter:
                 case GlobalAction.PreviousVolumeMeter:

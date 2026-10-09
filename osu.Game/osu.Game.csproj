@@ -50,7 +50,6 @@
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5"/>
     <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0"/>
     <PackageReference Include="TagLibSharp" Version="2.3.0"/>
-    <PackageReference Include="Live2DCSharpSDK" Version="1.0.0.6"/>
     <!-- In-process WebAssembly host for the vendored n-key MinaCalc (4-18K mania MSD/SSR). -->
     <PackageReference Include="Wasmtime" Version="48.0.2" />
 
