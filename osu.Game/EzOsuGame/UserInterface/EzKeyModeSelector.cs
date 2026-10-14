@@ -13,6 +13,7 @@ using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Events;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Localization;
+using osu.Game.EzOsuGame.UI;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
@@ -63,8 +64,7 @@ namespace osu.Game.EzOsuGame.UserInterface
 
             if (rulesetId == 3)
             {
-                if (criteria.RulesetCriteria != null)
-                    criteria.RulesetCriteria.TryParseCustomKeywordCriteria("keys", Operator.Equal, string.Join(",", modes));
+                criteria.RulesetCriteria?.TryParseCustomKeywordCriteria("keys", Operator.Equal, string.Join(",", modes));
             }
             else
             {
@@ -106,7 +106,7 @@ namespace osu.Game.EzOsuGame.UserInterface
         [BackgroundDependencyLoader]
         private void load()
         {
-            CornerRadius = 2;
+            CornerRadius = EzUIStyleV1.CORNER_RADIUS_CHIP;
             Masking = true;
 
             InternalChildren = new Drawable[]
@@ -244,6 +244,9 @@ namespace osu.Game.EzOsuGame.UserInterface
                 AutoSizeAxes = Axes.Y;
                 Shear = OsuGame.SHEAR;
                 Masking = true;
+
+                // 选中态完全由 UpdateTabItemUI 驱动；框架默认会点亮第一个 tab，会盖住记忆的选择。
+                SelectFirstTabByDefault = false;
             }
 
             [BackgroundDependencyLoader]

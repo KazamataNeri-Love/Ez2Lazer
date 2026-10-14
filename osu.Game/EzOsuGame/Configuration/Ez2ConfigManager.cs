@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Text;
 using System.Threading;
 using JetBrains.Annotations;
@@ -101,6 +102,11 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.MenuLogoText, "(´・ω・｀),120");
             SetDefault(Ez2Setting.MenuLogoVisualisationStyle, EzLogoVisualisationStyle.RadialBars);
             SetDefault(Ez2Setting.UseSkinCursor, false);
+            SetDefault(Ez2Setting.MenuLogoBackdropStyle, EzLogoBackdropStyle.Acrylic);
+            SetDefault(Ez2Setting.MenuLogoBackdropColour, Colour4.FromHex("ff66ab"));
+            SetDefault(Ez2Setting.MenuLogoBackdropBlur, 16.0, 0.0, 40.0, 1.0);
+            SetDefault(Ez2Setting.MenuLogoBackdropOpacity, 1.0, 0.0, 1.0, 0.01);
+            SetDefault(Ez2Setting.SongSelectUseEzBackground, false);
             SetDefault(Ez2Setting.NotificationBehaviour, EzNotificationBehaviour.Normal);
             SetDefault(Ez2Setting.ScreenshotAction, EzScreenshotAction.SaveAndCopy);
             SetDefault(Ez2Setting.HitObjectLifetimeUsesOwnTime, !DebugUtils.IsNUnitRunning);
@@ -143,6 +149,8 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.BeatmapPreviewMode, EzBeatmapPreviewMode.Static);
             SetDefault(Ez2Setting.BeatmapPreviewModeMania, EzBeatmapPreviewMode.StaticFullMap);
             SetDefault(Ez2Setting.BeatmapPreviewDensity, 1.0, 0.1, 5.0, 0.05);
+            // 宽或高 <= 0 表示对应轴未手动调整，打开时使用默认宽度 / 最大高度。
+            SetDefault(Ez2Setting.BeatmapPreviewPanelSize, new Size(-1, -1), null);
             SetDefault(Ez2Setting.EditorSyncTimelineSpacing, true);
             SetDefault(Ez2Setting.SkinEditorHudSnapEnabled, false);
             SetDefault(Ez2Setting.SkinEditorHudSnapDistance, 20, 10, 50, 5);
@@ -173,10 +181,13 @@ namespace osu.Game.EzOsuGame.Configuration
             #region 皮肤与舞台资源
 
             SetDefault(Ez2Setting.GlobalTextureName, 4);
-            SetDefault(Ez2Setting.GameThemeName, EzEnumGameThemeName.Celeste_Lumiere);
+            SetDefault(Ez2Setting.GameThemeName, EzGameThemeNames.DEFAULT);
             SetDefault(Ez2Setting.NoteSetName, "lucenteclat");
             SetDefault(Ez2Setting.StageName, "Celeste_Lumiere");
             SetDefault(Ez2Setting.StagePanelEnabled, true);
+            SetDefault(Ez2Setting.StageBackground, string.Empty);
+            SetDefault(Ez2Setting.StageBackgroundColour, Colour4.White);
+            SetDefault(Ez2Setting.ColumnLightName, "EzColumnLight");
 
             SetDefault(Ez2Setting.ColumnWidthStyle, ColumnWidthStyle.EzSkinOnly);
             SetDefault(Ez2Setting.ColumnWidth, 76, 5, 400.0, 1.0);
@@ -943,6 +954,30 @@ namespace osu.Game.EzOsuGame.Configuration
         /// </summary>
         UseSkinCursor,
 
+        /// <summary>
+        /// 主界面大 logo 圆圈底色：单色、亚克力、联动背景或透明。
+        /// </summary>
+        MenuLogoBackdropStyle,
+
+        /// <summary>
+        /// <see cref="MenuLogoBackdropStyle"/> 为单色时的颜色，含透明度。
+        /// </summary>
+        MenuLogoBackdropColour,
+
+        /// <summary>
+        /// <see cref="MenuLogoBackdropStyle"/> 为亚克力时的虚化强度。
+        /// </summary>
+        MenuLogoBackdropBlur,
+
+        /// <summary>
+        /// <see cref="MenuLogoBackdropStyle"/> 为联动背景时的不透明度。
+        /// </summary>
+        MenuLogoBackdropOpacity,
+
+        /// <summary>
+        /// 开启后选歌界面沿用主页背景，不单独加载当前谱面背景。
+        /// </summary>
+        SongSelectUseEzBackground,
         NotificationBehaviour,
         ScreenshotAction,
         ManiaSkipEmptyEdgeColumns,
@@ -1063,6 +1098,10 @@ namespace osu.Game.EzOsuGame.Configuration
         BeatmapPreviewMode,
         BeatmapPreviewModeMania,
         BeatmapPreviewDensity,
+
+        /// <summary>已手动调整的谱面预览面板尺寸（像素，分量 &lt;= 0 = 该轴未调整）。</summary>
+        BeatmapPreviewPanelSize,
+
         EditorSyncTimelineSpacing,
 
         /// <summary>
@@ -1115,6 +1154,22 @@ namespace osu.Game.EzOsuGame.Configuration
         NoteSetName,
         StageName,
         StagePanelEnabled,
+
+        /// <summary>
+        /// 文件名（不含扩展名），对应 <c>EzResources/Panel</c>。空字符串表示不显示。
+        /// </summary>
+        StageBackground,
+
+        /// <summary>
+        /// Panel 图的乘色，含透明度。默认不透明白。
+        /// </summary>
+        StageBackgroundColour,
+
+        /// <summary>
+        /// 子文件夹名，对应 <c>EzResources/ColumnLight</c>。在选中目录内先按列类型取图，没有再按 S、E、P、B、A 向下降级，最后用 ColumnLight 兜底。
+        /// 整段都没有则不加载。内置资源只在 <c>EzColumnLight</c> 仍找不到时使用。
+        /// </summary>
+        ColumnLightName,
 
         ColumnWidth,
         SpecialFactor,

@@ -25,6 +25,7 @@ using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Extensions;
 using osu.Game.EzOsuGame.Localization;
+using osu.Game.EzOsuGame.UI;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
@@ -108,7 +109,7 @@ namespace osu.Game.EzOsuGame.Overlays
             Size = new Vector2(0.55f, 0.82f);
 
             Masking = true;
-            CornerRadius = 10;
+            CornerRadius = EzUIStyleV1.CORNER_RADIUS_WEDGE;
         }
 
         public void ShowManager()
@@ -243,7 +244,7 @@ namespace osu.Game.EzOsuGame.Overlays
                                     RelativeSizeAxes = Axes.Both,
                                     Padding = new MarginPadding { Horizontal = 12 },
                                     Masking = true,
-                                    CornerRadius = 10,
+                                    CornerRadius = EzUIStyleV1.CORNER_RADIUS_WEDGE,
                                     Children = new Drawable[]
                                     {
                                         new Box
@@ -251,20 +252,16 @@ namespace osu.Game.EzOsuGame.Overlays
                                             RelativeSizeAxes = Axes.Both,
                                             Colour = colours.GreySeaFoamDarker,
                                         },
-                                        new Container
+                                        new OsuScrollContainer
                                         {
                                             RelativeSizeAxes = Axes.Both,
-                                            Padding = new MarginPadding(10),
-                                            Child = new OsuScrollContainer
+                                            Child = listFlow = new FillFlowContainer
                                             {
-                                                RelativeSizeAxes = Axes.Both,
-                                                Child = listFlow = new FillFlowContainer
-                                                {
-                                                    RelativeSizeAxes = Axes.X,
-                                                    AutoSizeAxes = Axes.Y,
-                                                    Direction = FillDirection.Vertical,
-                                                    Spacing = new Vector2(0, 8),
-                                                }
+                                                RelativeSizeAxes = Axes.X,
+                                                AutoSizeAxes = Axes.Y,
+                                                Direction = FillDirection.Vertical,
+                                                Padding = new MarginPadding { Horizontal = 12 },
+                                                Spacing = new Vector2(4, 8),
                                             }
                                         }
                                     }

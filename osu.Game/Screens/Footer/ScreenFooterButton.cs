@@ -14,6 +14,7 @@ using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
+using osu.Game.EzOsuGame.UI;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
@@ -26,9 +27,9 @@ namespace osu.Game.Screens.Footer
 {
     public partial class ScreenFooterButton : OsuClickableContainer, IKeyBindingHandler<GlobalAction>
     {
-        public static int CORNER_RADIUS => 2;
+        public const float CORNER_RADIUS = EzUIStyleV1.CORNER_RADIUS_FOOTER;
 
-        public static int HEIGHT => 52;
+        public const int HEIGHT = EzUIStyleV1.FOOTER_HEIGHT + 2;
         protected const int BUTTON_WIDTH = 116;
 
         /// <summary>

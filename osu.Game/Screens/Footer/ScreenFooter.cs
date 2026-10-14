@@ -15,7 +15,6 @@ using osu.Framework.Graphics.Shapes;
 using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
 using osu.Framework.Threading;
-using osu.Game.EzOsuGame.Acrylic;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.UI;
 using osu.Game.Graphics.Containers;
@@ -41,7 +40,7 @@ namespace osu.Game.Screens.Footer
         /// </summary>
         public Action? BackButtonPressed { private get; init; }
 
-        public const int HEIGHT = 50;
+        public const int HEIGHT = EzUIStyleV1.FOOTER_HEIGHT;
 
         private const int padding = 60;
         private const float delay_per_button = 30;
@@ -97,7 +96,7 @@ namespace osu.Game.Screens.Footer
                     Children = new Drawable[]
                     {
                         // N: frosted glass — cool FooterVeil so blur reads (not same hue as solid M).
-                        footerAcrylic = new EzAcrylicPanelBackground(EzAcrylicStyle.FooterVeil)
+                        footerAcrylic = new EzAcrylicPanelBackground(EzUIStyleV1.FooterVeil)
                         {
                             AcrylicCaptureVisible = true,
                         },
@@ -143,9 +142,11 @@ namespace osu.Game.Screens.Footer
                 },
                 BackButton = new ScreenBackButton
                 {
-                    Margin = new MarginPadding { Bottom = 0, Left = OsuGame.SCREEN_EDGE_MARGIN },
+                    Margin = new MarginPadding { Left = OsuGame.SCREEN_EDGE_MARGIN },
                     Anchor = Anchor.BottomLeft,
                     Origin = Anchor.BottomLeft,
+                    // footer buttons are taller than the footer, match the flow's offset so all of them sit at the same height.
+                    Y = ScreenFooterButton.CORNER_RADIUS,
                     Action = onBackPressed,
                 },
                 hiddenButtonsContainer = new Container<ScreenFooterButton>
@@ -217,7 +218,6 @@ namespace osu.Game.Screens.Footer
 
         public void SetButtons(IReadOnlyList<ScreenFooterButton> buttons)
         {
-            temporarilyHiddenButtons.Clear();
             overlays.Clear();
 
             this.HidePopover();
@@ -364,7 +364,7 @@ namespace osu.Game.Screens.Footer
 
             background.FadeColour(colourProvider.Background5, 150, Easing.OutQuint);
             // Light scheme wash only — keep frost readable (do not retint to opaque Background5).
-            footerAcrylic.TintBox.FadeColour(colourProvider.Background5.Opacity(EzAcrylicStyle.FooterSchemeTintAlpha), 150, Easing.OutQuint);
+            footerAcrylic.TintBox.FadeColour(colourProvider.Background5.Opacity(EzUIStyleV1.FooterSchemeTintAlpha), 150, Easing.OutQuint);
 
             foreach (var button in buttonsFlow)
                 button.UpdateDisplay();

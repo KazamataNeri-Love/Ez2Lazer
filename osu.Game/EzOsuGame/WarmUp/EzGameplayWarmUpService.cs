@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using osu.Framework.Graphics.Textures;
 using osu.Framework.Logging;
 using osu.Game.EzOsuGame.Configuration;
 
@@ -129,6 +130,51 @@ namespace osu.Game.EzOsuGame.WarmUp
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
+            }
+        }
+
+        /// <summary>
+        /// 在专用线程上执行一段阻塞式预热体。
+        /// </summary>
+        /// <remarks>
+        /// 预热体同步访问 <see cref="osu.Framework.Graphics.Textures.TextureStore"/>：同一张纹理已有请求在途时，
+        /// 框架内部用 <c>WaitSafely</c> / <c>GetResultSafely</c> 阻塞等它，而这些方法在 TPL 线程池线程上会直接抛异常
+        /// （框架只放行 <see cref="TaskCreationOptions.LongRunning"/> 起的专用线程）。用 <see cref="Task.Run(Action)"/>
+        /// 起预热，多个预热项并发请求同一路径时必现。这里统一改走专用线程。
+        /// </remarks>
+        public static Task RunBlocking(Action action, CancellationToken cancellationToken)
+            => Task.Factory.StartNew(action, cancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+        /// <summary>
+        /// 等到这些纹理的 GPU 上传被绘制线程消化完。解码在后台完成只代表进了上传队列，
+        /// 队列按每帧像素预算排空；门控若在排空前放行，第一次真正画到它们的那一帧会卡住。
+        /// </summary>
+        public static void WaitForUpload(IReadOnlyList<Texture> textures, CancellationToken cancellationToken)
+        {
+            if (textures.Count == 0)
+                return;
+
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                bool pending = false;
+
+                for (int i = 0; i < textures.Count; i++)
+                {
+                    Texture texture = textures[i];
+
+                    if (!texture.UploadComplete)
+                    {
+                        pending = true;
+                        break;
+                    }
+                }
+
+                if (!pending)
+                    return;
+
+                Thread.Sleep(1);
             }
         }
 

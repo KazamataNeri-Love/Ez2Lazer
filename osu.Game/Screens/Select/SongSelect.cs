@@ -32,6 +32,7 @@ using osu.Game.Beatmaps;
 using osu.Game.Collections;
 using osu.Game.Configuration;
 using osu.Game.Database;
+using osu.Game.Graphics;
 using osu.Game.Graphics.Carousel;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Cursor;
@@ -39,6 +40,7 @@ using osu.Game.Graphics.UserInterface;
 using osu.Game.Input.Bindings;
 using osu.Game.EzOsuGame.Audio;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Layout;
 using osu.Game.EzOsuGame.Online;
 using osu.Game.EzOsuGame.Overlays;
 using osu.Game.EzOsuGame.UI;
@@ -52,13 +54,13 @@ using osu.Game.Overlays.Volume;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Scoring;
+using osu.Game.Screens.Backgrounds;
 using osu.Game.Screens.Footer;
 using osu.Game.Screens.Menu;
 using osu.Game.Screens.Play;
 using osu.Game.Screens.Ranking;
 using osu.Game.Skinning;
 using osu.Game.Utils;
-using osuTK;
 using osuTK.Graphics;
 using osuTK.Input;
 
@@ -170,12 +172,16 @@ namespace osu.Game.Screens.Select
         [Resolved]
         private IOverlayManager? overlayManager { get; set; }
 
+        [Resolved]
+        private EzLayoutLayer? ezLayoutLayer { get; set; }
+
         private InputManager inputManager = null!;
 
         private readonly RealmPopulatingOnlineLookupSource onlineLookupSource = new RealmPopulatingOnlineLookupSource();
 
         private Bindable<bool> configBackgroundBlur = null!;
         private Bindable<bool> acrylicUiEnabled = null!;
+        private Bindable<bool> useEzBackground = null!;
         private Bindable<bool> showConvertedBeatmaps = null!;
         private Bindable<KeySoundPreviewMode> keySoundPreview = null!;
         private Bindable<bool> previewFromStart = null!;
@@ -195,7 +201,7 @@ namespace osu.Game.Screens.Select
 
             AddRangeInternal(new Drawable[]
             {
-                new GlobalScrollAdjustsVolume(),
+                new ScrollAdjustsVolume(),
                 onlineLookupSource,
                 mainContent = new Container
                 {
@@ -256,7 +262,6 @@ namespace osu.Game.Screens.Select
                                                     wedgesContainer = new FillFlowContainer
                                                     {
                                                         RelativeSizeAxes = Axes.Both,
-                                                        Spacing = new Vector2(0f, 4f),
                                                         Direction = FillDirection.Vertical,
                                                         Children = new Drawable[]
                                                         {
@@ -264,6 +269,11 @@ namespace osu.Game.Screens.Select
                                                             {
                                                                 TopPadding = TopPadding,
                                                             }),
+                                                            new InputBlockingContainer
+                                                            {
+                                                                RelativeSizeAxes = Axes.X,
+                                                                Height = 4
+                                                            },
                                                             new ShearAligningWrapper(detailsArea = new BeatmapDetailsArea()),
                                                         },
                                                     },
@@ -350,6 +360,16 @@ namespace osu.Game.Screens.Select
                 if (!this.IsCurrentScreen())
                     return;
 
+                updateBackgroundDim();
+            });
+
+            useEzBackground = ezConfig.GetBindable<bool>(Ez2Setting.SongSelectUseEzBackground);
+            useEzBackground.BindValueChanged(_ =>
+            {
+                if (!this.IsCurrentScreen())
+                    return;
+
+                RefreshBackground();
                 updateBackgroundDim();
             });
 
@@ -441,6 +461,12 @@ namespace osu.Game.Screens.Select
             inputManager = GetContainingInputManager()!;
 
             FilterControl.CriteriaChanged += criteriaChanged;
+
+            // 全屏预览会铺满屏幕，隐藏游戏级 Ez 布局层的选歌 HUD，避免被其遮挡。
+            ezBeatmapPreviewOverlay.FullMapFocusState.BindValueChanged(e =>
+            {
+                ezLayoutLayer?.SongSelectLayoutSuppressed = e.NewValue;
+            });
 
             modSelectOverlay.State.BindValueChanged(v =>
             {
@@ -854,8 +880,7 @@ namespace osu.Game.Screens.Select
 
         private void onArrivingAtScreen()
         {
-            if (manageCollectionsDialog != null)
-                manageCollectionsDialog.FilteredBeatmapsProvider = getFilteredBeatmaps;
+            manageCollectionsDialog?.FilteredBeatmapsProvider = getFilteredBeatmaps;
 
             modSelectOverlay.Beatmap.BindTo(Beatmap);
             modSelectOverlay.Ruleset.BindTo(Ruleset);
@@ -963,8 +988,7 @@ namespace osu.Game.Screens.Select
 
             restoreBackground();
 
-            if (manageCollectionsDialog != null)
-                manageCollectionsDialog.FilteredBeatmapsProvider = null;
+            manageCollectionsDialog?.FilteredBeatmapsProvider = null;
 
             ezBeatmapPreviewOverlay.SuspendForScreenExit();
 
@@ -982,6 +1006,7 @@ namespace osu.Game.Screens.Select
             modSelectOverlay.SelectedMods.UnbindFrom(Mods);
             modSelectOverlay.Ruleset.UnbindFrom(Ruleset);
             modSelectOverlay.Beatmap.UnbindFrom(Beatmap);
+            modSelectOverlay.Hide();
 
             updateWedgeVisibility();
 
@@ -1061,29 +1086,38 @@ namespace osu.Game.Screens.Select
             }
         }
 
-        private void updateBackgroundDim() => ApplyToBackground(backgroundModeBeatmap =>
+        protected override BackgroundScreen CreateBackground()
+            => useEzBackground.Value ? new BackgroundScreenDefault() : new BackgroundScreenBeatmap(Beatmap.Value);
+
+        private void updateBackgroundDim()
         {
-            backgroundModeBeatmap.Beatmap = Beatmap.Value;
+            if (useEzBackground.Value)
+                return;
 
-            // [Ez] Only while acrylic UI is on: apply gameplay DimLevel / BlurLevel.
-            // Off = official IgnoreUserSettings path (fixed 0.1 dim; SongSelectBackgroundBlur only).
-            if (acrylicUiEnabled.Value)
+            ApplyToBackground(backgroundModeBeatmap =>
             {
-                backgroundModeBeatmap.IgnoreUserSettings.Value = false;
-            }
-            else
-            {
-                backgroundModeBeatmap.IgnoreUserSettings.Value = true;
-                backgroundModeBeatmap.DimWhenUserSettingsIgnored.Value = 0.1f;
-            }
+                backgroundModeBeatmap.Beatmap = Beatmap.Value;
 
-            // Required to undo results screen dimming the background.
-            // Probably needs more thought because this needs to be in every `ApplyToBackground` currently to restore sane defaults.
-            backgroundModeBeatmap.FadeColour(Color4.White, 250);
+                // [Ez] Only while acrylic UI is on: apply gameplay DimLevel / BlurLevel.
+                // Off = official IgnoreUserSettings path (fixed 0.1 dim; SongSelectBackgroundBlur only).
+                if (acrylicUiEnabled.Value)
+                {
+                    backgroundModeBeatmap.IgnoreUserSettings.Value = false;
+                }
+                else
+                {
+                    backgroundModeBeatmap.IgnoreUserSettings.Value = true;
+                    backgroundModeBeatmap.DimWhenUserSettingsIgnored.Value = 0.1f;
+                }
 
-            bool backgroundRevealActive = revealBackgroundDelegate?.State == ScheduledDelegate.RunState.Running || revealBackgroundDelegate?.State == ScheduledDelegate.RunState.Complete;
-            backgroundModeBeatmap.BlurAmount.Value = configBackgroundBlur.Value && !backgroundRevealActive ? 20 : 0f;
-        });
+                // Required to undo results screen dimming the background.
+                // Probably needs more thought because this needs to be in every `ApplyToBackground` currently to restore sane defaults.
+                backgroundModeBeatmap.FadeColour(Color4.White, 250);
+
+                bool backgroundRevealActive = revealBackgroundDelegate?.State == ScheduledDelegate.RunState.Running || revealBackgroundDelegate?.State == ScheduledDelegate.RunState.Complete;
+                backgroundModeBeatmap.BlurAmount.Value = configBackgroundBlur.Value && !backgroundRevealActive ? 20 : 0f;
+            });
+        }
 
         #endregion
 
@@ -1100,6 +1134,7 @@ namespace osu.Game.Screens.Select
         public bool IsFiltering => carousel.IsFiltering || filterDebounce?.State == ScheduledDelegate.RunState.Waiting;
 
         private const double filter_delay = 250;
+        public const double REVEAL_BACKGROUND_DELAY = 200;
 
         private ScheduledDelegate? filterDebounce;
 
@@ -1237,7 +1272,7 @@ namespace osu.Game.Screens.Select
                     updateBackgroundDim();
 
                     Footer?.Hide();
-                }, 200);
+                }, REVEAL_BACKGROUND_DELAY);
             }
 
             return base.OnMouseDown(e);

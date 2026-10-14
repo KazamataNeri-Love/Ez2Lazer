@@ -160,12 +160,14 @@ namespace osu.Game.EzOsuGame.Localization
             "内置", "Built-in");
 
         public static readonly LocalisableString HITRESULT_ANIMATION_TEMPLATE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
-            "在 GameTheme/…/judgement/ 下按帧加载时的相对路径模板（在自动探测 result-0、result_0 之后尝试）。"
-            + "\n占位符：{result} 为判定资源名；{0}、{00} 等为帧序号。"
-            + "\n默认 {result}/frame_{0} 对应子目录帧，如 Cool/frame_0；{result}-{0} 对应同级命名 Cool-0。",
-            "Relative path template for frame lookup under GameTheme/…/judgement/ (after auto-detecting result-0 / result_0)."
-            + "\nPlaceholders: {result} is the judgement asset name; {0}, {00}, etc. are frame indices."
-            + "\nDefault {result}/frame_{0} → e.g. Cool/frame_0; {result}-{0} → e.g. Cool-0.");
+            "在 GameTheme/{theme}/judgement/ 下的帧模板。默认 {result}/{000}，只查子目录里从 000.png 起的一组。"
+            + "\n找不到时只再试 {result}.gif、{result}.png，不再试同目录的其它帧。"
+            + "\n留空则按子目录帧、同层连字符帧、gif、png 的顺序探测。"
+            + "\n帧号只认 {0} 和 {000}。",
+            "Frame template under GameTheme/{theme}/judgement/. Default {result}/{000} loads the subdirectory sequence starting at 000.png."
+            + "\nIf that misses, only {result}.gif then {result}.png are tried."
+            + "\nAn empty template runs subdirectory frames, same-level hyphen frames, gif, then png."
+            + "\nFrame indices accept {0} and {000} only.");
 
         public static readonly LocalisableString HITRESULT_BLENDING_LABEL = new EzLocalizationManager.EzLocalisableString("混合模式", "Blending Mode");
         public static readonly LocalisableString HITRESULT_BLENDING_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("设置混合模式", "Set the blending mode.");
@@ -393,5 +395,38 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly LocalisableString CAMERA_UNAVAILABLE = new EzLocalizationManager.EzLocalisableString("摄像头未能打开。", "The camera could not be opened.");
         public static readonly LocalisableString CAMERA_PLATFORM_UNSUPPORTED = new EzLocalizationManager.EzLocalisableString("当前平台没有本地摄像头后端。", "This platform has no local camera backend.");
+
+        public static readonly LocalisableString EFFECT_TYPE_LABEL = new EzLocalizationManager.EzLocalisableString("动画效果", "Animation Effect");
+        public static readonly LocalisableString EFFECT_TYPE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("选择动画效果类型", "Select animation effect type.");
+
+        public static readonly LocalisableString EFFECT_START_FACTOR_LABEL = new EzLocalizationManager.EzLocalisableString("动效起始系数", "Effect Start Factor");
+        public static readonly LocalisableString EFFECT_START_FACTOR_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("动画开始时的缩放或位移系数", "Scaling or displacement factor at animation start.");
+
+        public static readonly LocalisableString EFFECT_END_FACTOR_LABEL = new EzLocalizationManager.EzLocalisableString("动效结束系数", "Effect End Factor");
+        public static readonly LocalisableString EFFECT_END_FACTOR_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("动画结束时的缩放或位移系数", "Scaling or displacement factor at animation end.");
+
+        public static readonly LocalisableString EFFECT_START_DURATION_LABEL = new EzLocalizationManager.EzLocalisableString("动效起始时长", "Effect Start Duration");
+        public static readonly LocalisableString EFFECT_START_DURATION_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("动画开始阶段的持续时间（毫秒）", "Duration of the animation start phase (milliseconds).");
+
+        public static readonly LocalisableString EFFECT_END_DURATION_LABEL = new EzLocalizationManager.EzLocalisableString("动效结束时长", "Effect End Duration");
+        public static readonly LocalisableString EFFECT_END_DURATION_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("动画结束阶段的持续时间（毫秒）", "Duration of the animation end phase (milliseconds).");
+
+        public static readonly LocalisableString BOUNCE_PEAK_LABEL = new EzLocalizationManager.EzLocalisableString("弹跳顶点", "Bounce Peak");
+        public static readonly LocalisableString BOUNCE_PEAK_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("相对静止位置的上下位移，向下为正。", "Vertical offset from rest. Positive is downward.");
+
+        public static readonly LocalisableString BOUNCE_ALPHA_LABEL = new EzLocalizationManager.EzLocalisableString("弹跳透明度", "Bounce Alpha");
+        public static readonly LocalisableString BOUNCE_ALPHA_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("弹出后收到的透明度。", "Alpha reached after the pop.");
+
+        public static readonly LocalisableString BOUNCE_RETURN_LABEL = new EzLocalizationManager.EzLocalisableString("回到原位时长", "Return Duration");
+        public static readonly LocalisableString BOUNCE_RETURN_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("从顶点回到静止位置的时间（毫秒）。", "Time to return from the peak to rest (milliseconds).");
+
+        public static readonly LocalisableString BOUNCE_EASING_LABEL = new EzLocalizationManager.EzLocalisableString("弹跳缓动", "Bounce Easing");
+        public static readonly LocalisableString BOUNCE_EASING_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("关键帧之间的缓动。直线为 None。", "Easing between keys. None is linear.");
+
+        public static readonly LocalisableString BOUNCE_OVERSHOOT_LABEL = new EzLocalizationManager.EzLocalisableString("回弹位移", "Overshoot");
+        public static readonly LocalisableString BOUNCE_OVERSHOOT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("回到原位后再走的位移，0 为不回弹。向下为正。", "Extra offset after returning to rest. Zero skips it. Positive is downward.");
+
+        public static readonly LocalisableString BOUNCE_START_ALPHA_LABEL = new EzLocalizationManager.EzLocalisableString("起始透明度", "Start Alpha");
+        public static readonly LocalisableString BOUNCE_START_ALPHA_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("弹出开始时的透明度。", "Alpha at the start of the pop.");
     }
 }
