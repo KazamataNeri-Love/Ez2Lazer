@@ -9,6 +9,7 @@ using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.Textures;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.Rulesets.Scoring;
+using osuTK;
 
 namespace osu.Game.EzOsuGame
 {
@@ -27,8 +28,8 @@ namespace osu.Game.EzOsuGame
         private readonly Source source;
         private readonly Sprite[] places;
         private readonly Texture?[] glyphs = new Texture?[10];
-
         private long shownValue;
+        private string? digitBase;
         private Bindable<string>? stageName;
         private IBindable<long>? score;
         private IBindable<int>? maxCombo;
@@ -53,13 +54,23 @@ namespace osu.Game.EzOsuGame
             int count = layout.Digits > max_places ? max_places : layout.Digits;
             places = new Sprite[count];
 
+            // 整组绕支点转：每位数字自己带 rotation，位置由「未旋转位置绕支点旋转」算出。
+            // 不用容器承载旋转 —— 零尺寸容器靠父级旋转在部分情况下会让整组叠到一起，
+            // 逐位旋转的几何等价，且每位数字各自按自身包围盒参与裁剪，更稳。
+            Vector2 pivot = layout.ToOsuPivot();
+            float rotation = layout.ToScreenRotation();
+
             for (int place = 0; place < count; place++)
             {
+                Vector2 target = EzStagePlacement.RotateAbout(EzStagePlacement.GetDigitPosition(layout, place), pivot, rotation);
+
                 places[place] = new Sprite
                 {
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
-                    Position = EzStagePlateSprite.ToOsu(layout.X + place * layout.Spacing, layout.Y),
+                    RelativeSizeAxes = Axes.None,
+                    Position = target,
+                    Rotation = rotation,
                 };
             }
 
@@ -97,67 +108,42 @@ namespace osu.Game.EzOsuGame
             apply(shownValue);
         }
 
-        // 字形在 Stage/{舞台名} 下，path 来自 layout（number、number/score、number/combo）。
+        // 字形在 Stage/{舞台名} 下。layout 的 path 可能仍是 Unity 旧目录名，取不到时按
+        // number/score、number/combo、number 逐级回退（本地整理过的库把 maxcombo 统一成了 combo）。
         private void loadGlyphs()
         {
-            string? root = chooseRoot();
+            digitBase = chooseDigitBase();
 
             for (int digit = 0; digit < glyphs.Length; digit++)
-                glyphs[digit] = root == null ? null : loadDigit(root, digit);
+                glyphs[digit] = digitBase == null ? null : resources.Get($"{digitBase}{digit}", EzTextureUsage.Glyph);
         }
 
-        private string? chooseRoot()
+        private string? chooseDigitBase()
         {
             string? body = stageName?.Value;
-            string? path = layout.Path?.Trim().Trim('/');
 
-            if (string.IsNullOrEmpty(path))
-            {
-                if (source == Source.Score)
-                {
-                    return rootIf(body, "number/score")
-                           ?? rootIf(body, "number");
-                }
-
-                return rootIf(body, "number/combo")
-                       ?? rootIf(body, "number");
-            }
-
-            return rootIf(body, path)
-                   ?? (path == "number" ? null : rootIf(body, "number"));
-        }
-
-        private string? rootIf(string? name, string path)
-        {
-            if (string.IsNullOrWhiteSpace(name))
+            if (string.IsNullOrWhiteSpace(body))
                 return null;
 
-            string root = $"Stage/{name}/";
-            return resources.Get($"{root}{path}/0", EzTextureUsage.Glyph) != null ? root : null;
+            string? declared = layout.Path?.Trim().Trim('/');
+
+            if (!string.IsNullOrEmpty(declared))
+            {
+                string? resolved = digitBaseIf(body, declared);
+
+                if (resolved != null)
+                    return resolved;
+            }
+
+            return digitBaseIf(body, source == Source.Score ? "number/score" : "number/combo")
+                   ?? digitBaseIf(body, "number");
         }
 
-        private Texture? loadDigit(string root, int digit)
+        // 只有 0 号图存在才算该目录可用，避免把空目录当成字源。
+        private string? digitBaseIf(string stage, string path)
         {
-            string? path = layout.Path?.Trim().Trim('/');
-
-            if (!string.IsNullOrEmpty(path))
-            {
-                Texture? exact = resources.Get($"{root}{path}/{digit}", EzTextureUsage.Glyph);
-
-                if (exact != null || path == "number")
-                    return exact;
-
-                return resources.Get($"{root}number/{digit}", EzTextureUsage.Glyph);
-            }
-
-            if (source == Source.Score)
-            {
-                return resources.Get($"{root}number/score/{digit}", EzTextureUsage.Glyph)
-                       ?? resources.Get($"{root}number/{digit}", EzTextureUsage.Glyph);
-            }
-
-            return resources.Get($"{root}number/combo/{digit}", EzTextureUsage.Glyph)
-                   ?? resources.Get($"{root}number/{digit}", EzTextureUsage.Glyph);
+            string root = $"Stage/{stage}/";
+            return resources.Get($"{root}{path}/0", EzTextureUsage.Glyph) != null ? $"{root}{path}/" : null;
         }
 
         private void apply(long value)
@@ -169,7 +155,18 @@ namespace osu.Game.EzOsuGame
 
             for (int place = 0; place < places.Length; place++)
             {
-                places[place].Texture = glyphs[value % 10];
+                Texture? glyph = glyphs[value % 10];
+
+                if (places[place].Texture != glyph)
+                {
+                    places[place].Texture = glyph;
+
+                    // 字形池带 scaleAdjust，默认尺寸只有源图一半；layout 的 spacing 是源图像素，
+                    // 所以这里按源图像素显式给尺寸，否则数字会整体缩小一半。
+                    if (glyph != null)
+                        places[place].Size = glyph.DisplaySize * glyph.ScaleAdjust;
+                }
+
                 value /= 10;
             }
         }

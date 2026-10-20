@@ -190,6 +190,9 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.StageBackgroundColour, Colour4.White);
             SetDefault(Ez2Setting.ColumnLightName, "EzColumnLight");
 
+            // 默认不覆盖：各 stage layout 里的 judgementLine 决定画哪张，这里留空。
+            SetDefault(Ez2Setting.JudgementLineName, string.Empty);
+
             SetDefault(Ez2Setting.ColumnWidthStyle, ColumnWidthStyle.EzSkinOnly);
             SetDefault(Ez2Setting.ColumnWidth, 76, 5, 400.0, 1.0);
             SetDefault(Ez2Setting.SpecialFactor, 1.2, 0.5, 2.0, 0.1);
@@ -445,6 +448,23 @@ namespace osu.Game.EzOsuGame.Configuration
             }
 
             return live;
+        }
+
+        /// <summary>
+        /// 列宽风格换算到单列宽度时的系数：全局总宽度按 <c>10 / keyMode</c> 摊到每列，其余风格为 1。
+        /// </summary>
+        /// <remarks>
+        /// 实际列宽由 <c>ManiaPlayfieldLayoutHelper.CalculateColumnSize</c> 应用该系数；note 尺寸等按同一条规则换算，
+        /// 否则宽度随风格变化而高度不变，note 会被压扁。
+        /// </remarks>
+        public float GetColumnWidthStyleScale(int keyMode)
+        {
+            if (keyMode <= 0)
+                return 1;
+
+            return Get<ColumnWidthStyle>(Ez2Setting.ColumnWidthStyle) == ColumnWidthStyle.GlobalTotalWidth
+                ? 10f / keyMode
+                : 1f;
         }
 
         /// <summary>
@@ -1193,6 +1213,12 @@ namespace osu.Game.EzOsuGame.Configuration
         /// 整段都没有则不加载。内置资源只在 <c>EzColumnLight</c> 仍找不到时使用。
         /// </summary>
         ColumnLightName,
+
+        /// <summary>
+        /// 判定线贴图名（不含 <c>JudgementLine_</c> 前缀与后缀），对应 <c>EzResources/JudgementLine</c>。
+        /// 空字符串表示不额外覆盖，只用 stage layout 里各自定义的那张。
+        /// </summary>
+        JudgementLineName,
 
         ColumnWidth,
         SpecialFactor,
