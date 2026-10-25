@@ -48,14 +48,14 @@ namespace osu.Game.Overlays.Music
         private FilterControl filter = null!;
         private Playlist list = null!;
         private Box classicBackground = null!;
-        private EzAcrylicPanelBackground acrylicBackground = null!;
-        private Bindable<bool> acrylicUiEnabled = null!;
+        private EzMaterialPanelBackground materialBackground = null!;
+        private Bindable<EzMaterialUiMode> materialUiMode = null!;
 
         [BackgroundDependencyLoader]
         private void load(OsuColour colours, Bindable<WorkingBeatmap> beatmap, Ez2ConfigManager ezConfig)
         {
             this.beatmap.BindTo(beatmap);
-            acrylicUiEnabled = ezConfig.GetBindable<bool>(Ez2Setting.AcrylicUiEnabled);
+            materialUiMode = ezConfig.GetBindable<EzMaterialUiMode>(Ez2Setting.MaterialUiMode);
 
             Children = new Drawable[]
             {
@@ -72,9 +72,9 @@ namespace osu.Game.Overlays.Music
                     },
                     Children = new Drawable[]
                     {
-                        acrylicBackground = new EzAcrylicPanelBackground(EzUIStyleV1.FooterVeil)
+                        materialBackground = new EzMaterialPanelBackground(EzUIStyleV1.FooterVeil)
                         {
-                            AcrylicCaptureVisible = false,
+                            MaterialCaptureVisible = false,
                         },
                         classicBackground = new Box
                         {
@@ -123,7 +123,7 @@ namespace osu.Game.Overlays.Music
             list.RowData.BindTo(filteredSets);
             beatmap.BindValueChanged(working => SelectedSet.Value = working.NewValue.BeatmapSetInfo.ToLive(realm), true);
 
-            EzAcrylicOverlayAlpha.BindExclusive(classicBackground, acrylicBackground, acrylicUiEnabled);
+            EzMaterialOverlayAlpha.BindExclusive(classicBackground, materialBackground, materialUiMode);
         }
 
         private void applyFilter(FilterCriteria criteria)
@@ -206,8 +206,8 @@ namespace osu.Game.Overlays.Music
 
         private void setAcrylicCaptureVisible(bool visible)
         {
-            acrylicBackground.AcrylicCaptureVisible = visible;
-            acrylicBackground.SyncAcrylicCaptureState();
+            materialBackground.MaterialCaptureVisible = visible;
+            materialBackground.SyncMaterialCaptureState();
         }
 
         public void ItemSelected(Live<BeatmapSetInfo> beatmapSet)

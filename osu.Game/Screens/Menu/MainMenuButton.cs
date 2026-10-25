@@ -8,22 +8,22 @@ using osu.Framework.Audio;
 using osu.Framework.Audio.Sample;
 using osu.Framework.Audio.Track;
 using osu.Framework.Bindables;
+using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
-using osu.Framework.Graphics.Shapes;
-using osu.Game.EzOsuGame.Configuration;
-using osu.Game.EzOsuGame.UI;
-using osu.Game.Graphics.Sprites;
-using osuTK;
-using osuTK.Graphics;
-using osuTK.Input;
-using osu.Framework.Extensions.Color4Extensions;
-using osu.Game.Graphics.Containers;
 using osu.Framework.Graphics.Effects;
+using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
 using osu.Game.Beatmaps.ControlPoints;
+using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.UI;
+using osu.Game.Graphics.Containers;
+using osu.Game.Graphics.Sprites;
+using osuTK;
+using osuTK.Graphics;
+using osuTK.Input;
 
 namespace osu.Game.Screens.Menu
 {
@@ -70,11 +70,11 @@ namespace osu.Game.Screens.Menu
 
         private readonly Container background;
         private readonly Drawable backgroundContent;
-        private readonly EzAcrylicPanelBackground acrylicBackground;
+        private readonly EzMaterialPanelBackground materialBackground;
         private readonly Box boxHoverLayer;
         private readonly SpriteIcon icon;
 
-        private Bindable<bool> acrylicUiEnabled = null!;
+        private Bindable<EzMaterialUiMode> materialUiMode = null!;
 
         private static readonly EdgeEffectParameters classic_edge_effect = new EdgeEffectParameters
         {
@@ -119,9 +119,9 @@ namespace osu.Game.Screens.Menu
                     Origin = Anchor.Centre,
                     Children = new Drawable[]
                     {
-                        acrylicBackground = new EzAcrylicPanelBackground(colour.Opacity(EzUIStyleV1.MENU_BUTTON_TINT_ALPHA), EzUIStyleV1.PanelFrameBufferScale)
+                        materialBackground = new EzMaterialPanelBackground(colour.Opacity(EzUIStyleV1.MENU_BUTTON_TINT_ALPHA), EzUIStyleV1.PanelFrameBufferScale)
                         {
-                            AcrylicCaptureVisible = false,
+                            MaterialCaptureVisible = false,
                             RelativeSizeAxes = Axes.Y,
                             Anchor = Anchor.Centre,
                             Origin = Anchor.Centre,
@@ -201,26 +201,26 @@ namespace osu.Game.Screens.Menu
             // (which can exceed the [0;1] range during interpolation).
             backgroundContent.Width = 2 * initialSize.X;
             backgroundContent.Shear = -background.Shear;
-            acrylicBackground.Width = backgroundContent.Width;
-            acrylicBackground.Shear = backgroundContent.Shear;
+            materialBackground.Width = backgroundContent.Width;
+            materialBackground.Shear = backgroundContent.Shear;
 
             animateState();
             FinishTransforms(true);
 
-            EzAcrylicOverlayAlpha.BindExclusive(backgroundContent, acrylicBackground, acrylicUiEnabled);
-            acrylicUiEnabled.BindValueChanged(_ => updateAcrylicChrome(), true);
+            EzMaterialOverlayAlpha.BindExclusive(backgroundContent, materialBackground, materialUiMode);
+            materialUiMode.BindValueChanged(_ => updateAcrylicChrome(), true);
         }
 
         private void updateAcrylicChrome()
         {
             // Drop shadows flicker on the blur pass.
-            background.EdgeEffect = acrylicUiEnabled.Value ? new EdgeEffectParameters() : classic_edge_effect;
+            background.EdgeEffect = EzMaterialOverlayAlpha.IsEnabled(materialUiMode.Value) ? new EdgeEffectParameters() : classic_edge_effect;
         }
 
         private void syncAcrylicCapture()
         {
-            acrylicBackground.AcrylicCaptureVisible = State == ButtonState.Expanded;
-            acrylicBackground.SyncAcrylicCaptureState();
+            materialBackground.MaterialCaptureVisible = State == ButtonState.Expanded;
+            materialBackground.SyncMaterialCaptureState();
         }
 
         private bool rightward;
@@ -276,7 +276,7 @@ namespace osu.Game.Screens.Menu
         [BackgroundDependencyLoader]
         private void load(AudioManager audio, Ez2ConfigManager ezConfig)
         {
-            acrylicUiEnabled = ezConfig.GetBindable<bool>(Ez2Setting.AcrylicUiEnabled);
+            materialUiMode = ezConfig.GetBindable<EzMaterialUiMode>(Ez2Setting.MaterialUiMode);
 
             sampleHover = audio.Samples.Get(@"Menu/button-hover");
             sampleClick = audio.Samples.Get(!string.IsNullOrEmpty(sampleName) ? $@"Menu/{sampleName}" : @"UI/button-select");

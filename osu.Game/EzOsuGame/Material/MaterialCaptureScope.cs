@@ -7,12 +7,13 @@ using osu.Framework.Development;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Screens;
+using osu.Framework.Threading;
 using osu.Game.Screens;
 using osu.Game.Screens.Backgrounds;
 using osuTK;
 using BackgroundDrawable = osu.Game.Graphics.Backgrounds.Background;
 
-namespace osu.Game.EzOsuGame.Acrylic
+namespace osu.Game.EzOsuGame.Material
 {
     /// <summary>
     /// 惰性 Acrylic 承载层：默认直绘子树；有活跃消费者时切换为全分辨率 <see cref="BufferedContainer"/>，
@@ -25,15 +26,24 @@ namespace osu.Game.EzOsuGame.Acrylic
     /// D3D11, Metal, Vulkan, and desktop OpenGL copy the swapchain instead of entering this scope.
     /// Deferred keeps this capture: its recorded frame has no swapchain pixels to copy until it executes.
     /// </remarks>
-    [Cached(typeof(IAcrylicCaptureRegistrar))]
-    public partial class AcrylicCaptureScope : CompositeDrawable, IAcrylicCaptureRegistrar
+    [Cached(typeof(IMaterialCaptureRegistrar))]
+    public partial class MaterialCaptureScope : CompositeDrawable, IMaterialCaptureRegistrar
     {
         private int captureRefCount;
         private int mutationGeneration;
         private readonly Drawable capturedContent;
         private BufferedContainer? activeBuffer;
 
-        public AcrylicCaptureScope(Drawable content)
+        /// <summary>
+        /// 释放后延迟拆除的窗口。界面切换时「上一屏释放、下一屏申请」常常紧邻发生，
+        /// 立即拆除会让整棵子树反复重挂父级，每次都重建全屏 FBO 并遍历树刷新背景虚化，
+        /// 表现为进出主菜单/选歌的卡顿。留一段窗口把成对操作合并掉。
+        /// </summary>
+        private const double release_delay = 400;
+
+        private ScheduledDelegate? pendingDeactivation;
+
+        public MaterialCaptureScope(Drawable content)
         {
             RelativeSizeAxes = Axes.Both;
             capturedContent = content;
@@ -45,6 +55,7 @@ namespace osu.Game.EzOsuGame.Acrylic
             if (captureRefCount++ > 0)
                 return;
 
+            cancelPendingDeactivation();
             invokeCaptureMutation(activateCapture);
         }
 
@@ -56,7 +67,31 @@ namespace osu.Game.EzOsuGame.Acrylic
             if (--captureRefCount > 0)
                 return;
 
-            invokeCaptureMutation(deactivateCapture);
+            scheduleDeactivation();
+        }
+
+        private void scheduleDeactivation()
+        {
+            cancelPendingDeactivation();
+
+            if (activeBuffer == null)
+                return;
+
+            pendingDeactivation = Scheduler.AddDelayed(() =>
+            {
+                pendingDeactivation = null;
+
+                if (captureRefCount > 0)
+                    return;
+
+                invokeCaptureMutation(deactivateCapture);
+            }, release_delay);
+        }
+
+        private void cancelPendingDeactivation()
+        {
+            pendingDeactivation?.Cancel();
+            pendingDeactivation = null;
         }
 
         private void invokeCaptureMutation(Action mutation)
@@ -160,6 +195,8 @@ namespace osu.Game.EzOsuGame.Acrylic
             {
                 // Dispose may run off the update thread (e.g. app shutdown). Do not reparent
                 // children here — CompositeDrawable will cascade-dispose InternalChildren.
+                pendingDeactivation?.Cancel();
+                pendingDeactivation = null;
                 mutationGeneration++;
                 captureRefCount = 0;
                 activeBuffer = null;

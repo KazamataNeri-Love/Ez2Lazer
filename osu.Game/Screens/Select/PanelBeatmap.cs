@@ -17,23 +17,23 @@ using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Localisation;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.Drawables;
+using osu.Game.Configuration;
+using osu.Game.EzOsuGame.Analysis;
+using osu.Game.EzOsuGame.Beatmaps;
+using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.UI;
+using osu.Game.EzOsuGame.UserInterface;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Backgrounds;
 using osu.Game.Graphics.Carousel;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
-using osu.Game.Configuration;
-using osu.Game.EzOsuGame.Analysis;
-using osu.Game.EzOsuGame.Beatmaps;
-using osu.Game.EzOsuGame.Configuration;
-using osu.Game.EzOsuGame.UI;
-using osu.Game.Screens.Select.Filter;
-using osu.Game.EzOsuGame.UserInterface;
 using osu.Game.Overlays;
 using osu.Game.Resources.Localisation.Web;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
+using osu.Game.Screens.Select.Filter;
 using osuTK;
 
 namespace osu.Game.Screens.Select
@@ -72,7 +72,7 @@ namespace osu.Game.Screens.Select
 
         private string? scratchText;
 
-        private Bindable<bool> acrylicUiEnabled = null!;
+        private Bindable<EzMaterialUiMode> materialUiMode = null!;
 
         [Resolved]
         private Ez2ConfigManager ezConfig { get; set; } = null!;
@@ -130,7 +130,7 @@ namespace osu.Game.Screens.Select
                 RelativeSizeAxes = Axes.Both,
             };
 
-            acrylicUiEnabled = ezConfig.GetBindable<bool>(Ez2Setting.AcrylicUiEnabled);
+            materialUiMode = ezConfig.GetBindable<EzMaterialUiMode>(Ez2Setting.MaterialUiMode);
             Container colourOverlays;
 
             Content.Children = new Drawable[]
@@ -309,7 +309,7 @@ namespace osu.Game.Screens.Select
             };
 
             // Glass N lives on Panel; hide classic M overlays when acrylic is on.
-            EzAcrylicOverlayAlpha.BindHiddenWhenAcrylic(colourOverlays, acrylicUiEnabled);
+            EzMaterialOverlayAlpha.BindHiddenWhenAcrylic(colourOverlays, materialUiMode);
         }
 
         protected override void LoadComplete()
@@ -565,9 +565,9 @@ namespace osu.Game.Screens.Select
             if (AccentColour != diffColour)
                 AccentColour = diffColour;
 
-            ApplyAcrylicIconStripBackground(backgroundBorder, acrylicUiEnabled.Value, diffColour);
+            ApplyAcrylicIconStripBackground(backgroundBorder, EzMaterialOverlayAlpha.IsEnabled(materialUiMode.Value), diffColour);
 
-            if (!acrylicUiEnabled.Value)
+            if (!EzMaterialOverlayAlpha.IsEnabled(materialUiMode.Value))
             {
                 backgroundDifficultyTint.Colour = ColourInfo.GradientHorizontal(diffColour.Opacity(0.25f), diffColour.Opacity(0f));
                 triangles.Colour = ColourInfo.GradientVertical(diffColour.Opacity(0.25f), diffColour.Opacity(0f));

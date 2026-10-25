@@ -87,9 +87,11 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly LocalisableString AUDIO_VIS_STYLE_SOLID = new EzLocalizationManager.EzLocalisableString("柱状图", "Solid Bars");
         public static readonly LocalisableString AUDIO_VIS_STYLE_CURVE = new EzLocalizationManager.EzLocalisableString("曲线", "Curve");
 
-        public static readonly LocalisableString LOGO_BACKDROP_SOLID = new EzLocalizationManager.EzLocalisableString("单色", "Solid");
-        public static readonly LocalisableString LOGO_BACKDROP_ACRYLIC = new EzLocalizationManager.EzLocalisableString("亚克力", "Acrylic");
         // public static readonly LocalisableString LOGO_BACKDROP_LINKED = new EzLocalizationManager.EzLocalisableString("联动背景", "Linked");
         public static readonly LocalisableString LOGO_BACKDROP_CLEAR = new EzLocalizationManager.EzLocalisableString("透明", "Clear");
+
+        public static readonly LocalisableString UI_MODE_DEFAULT = new EzLocalizationManager.EzLocalisableString("默认", "Default");
+        public static readonly LocalisableString UI_MODE_ACRYLIC = new EzLocalizationManager.EzLocalisableString("亚克力", "Acrylic");
+        public static readonly LocalisableString UI_MODE_LIQUID_GLASS = new EzLocalizationManager.EzLocalisableString("液态玻璃", "Liquid glass");
     }
 }

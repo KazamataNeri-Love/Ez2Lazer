@@ -101,8 +101,8 @@ namespace osu.Game.Screens.Menu
             private ButtonAreaBackgroundState state;
 
             private readonly Box classicBackground;
-            private readonly EzAcrylicPanelBackground acrylicBackground;
-            private Bindable<bool> acrylicUiEnabled;
+            private readonly EzMaterialPanelBackground materialBackground;
+            private Bindable<EzMaterialUiMode> materialUiMode = null!;
 
             public ButtonAreaBackground()
             {
@@ -113,9 +113,9 @@ namespace osu.Game.Screens.Menu
 
                 Children = new Drawable[]
                 {
-                    acrylicBackground = new EzAcrylicPanelBackground(EzUIStyleV1.FooterVeil)
+                    materialBackground = new EzMaterialPanelBackground(EzUIStyleV1.FooterVeil)
                     {
-                        AcrylicCaptureVisible = false,
+                        MaterialCaptureVisible = false,
                     },
                     classicBackground = new Box
                     {
@@ -128,14 +128,14 @@ namespace osu.Game.Screens.Menu
             [BackgroundDependencyLoader]
             private void load(Ez2ConfigManager ezConfig)
             {
-                acrylicUiEnabled = ezConfig.GetBindable<bool>(Ez2Setting.AcrylicUiEnabled);
+                materialUiMode = ezConfig.GetBindable<EzMaterialUiMode>(Ez2Setting.MaterialUiMode);
             }
 
             protected override void LoadComplete()
             {
                 base.LoadComplete();
 
-                EzAcrylicOverlayAlpha.BindExclusive(classicBackground, acrylicBackground, acrylicUiEnabled);
+                EzMaterialOverlayAlpha.BindExclusive(classicBackground, materialBackground, materialUiMode);
             }
 
             public ButtonAreaBackgroundState State
@@ -185,8 +185,8 @@ namespace osu.Game.Screens.Menu
 
             private void setAcrylicCaptureVisible(bool visible)
             {
-                acrylicBackground.AcrylicCaptureVisible = visible;
-                acrylicBackground.SyncAcrylicCaptureState();
+                materialBackground.MaterialCaptureVisible = visible;
+                materialBackground.SyncMaterialCaptureState();
             }
 
             [CanBeNull]
