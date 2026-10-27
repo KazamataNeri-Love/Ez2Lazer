@@ -386,6 +386,12 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly LocalisableString TOOLBAR_SELECT_MODE = new EzLocalizationManager.EzLocalisableString("选择模式", "Select mode");
 
+        public static readonly LocalisableString TOOLBAR_LOOP_BEATMAP = new EzLocalizationManager.EzLocalisableString("循环谱面", "Loop chart");
+
+        public static readonly LocalisableString PLACEHOLDER_LOOP_BEATMAP_NOT_SUPPORTED = new EzLocalizationManager.EzLocalisableString(
+            "内置循环谱暂仅支持 mania",
+            "Built-in loop chart is only available for mania");
+
         public static readonly LocalisableString TOOLBAR_PREVIEW_NOT_SUPPORTED = new EzLocalizationManager.EzLocalisableString(
             "预览尚未支持",
             "Preview not supported yet");
