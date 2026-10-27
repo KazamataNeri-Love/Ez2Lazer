@@ -6,6 +6,8 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Sprites;
+using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Identity;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Online.API;
 using osu.Game.Online.API.Requests.Responses;
@@ -24,7 +26,13 @@ namespace osu.Game.Skinning.Components
         [Resolved]
         private IAPIProvider api { get; set; } = null!;
 
-        private IBindable<APIUser>? apiUser;
+        [Resolved]
+        private Ez2ConfigManager ezConfig { get; set; } = null!;
+
+        /// <summary>
+        /// 非游玩场景下的生效身份名（本地账户名接管时即本地名）。必须持有字段：绑定副本是弱引用。
+        /// </summary>
+        private IBindable<string>? effectiveUsername;
 
         public PlayerName()
         {
@@ -44,11 +52,12 @@ namespace osu.Game.Skinning.Components
         private void load()
         {
             if (gameplayState != null)
+                // 游玩中直接用成绩的署名：接管时 CreateScore 已写入本地账户名。
                 text.Text = gameplayState.Score.ScoreInfo.User.Username;
             else
             {
-                apiUser = api.LocalUser.GetBoundCopy();
-                apiUser.BindValueChanged(u => text.Text = u.NewValue.Username, true);
+                effectiveUsername = EzLocalIdentity.CreateUsernameBindable(ezConfig, api);
+                effectiveUsername.BindValueChanged(u => text.Text = u.NewValue, true);
             }
         }
 

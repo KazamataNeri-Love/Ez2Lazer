@@ -18,6 +18,7 @@ using osu.Game.Beatmaps;
 using osu.Game.Configuration;
 using osu.Game.Database;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Identity;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.EzOsuGame.Screens.Play;
 using osu.Game.Online;
@@ -184,8 +185,8 @@ namespace osu.Game.Screens.Play
                 return false;
             }
 
-            // 本地模式不提交成绩，直接跳过 token 获取流程
-            if (api.IsLocalOnly)
+            // 本地模式（含本地账户名接管）不提交成绩，直接跳过 token 获取流程
+            if (api.IsLocalOnly || EzLocalIdentity.TakesOver(ezConfig))
             {
                 // token = null;
                 return true;

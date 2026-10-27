@@ -60,7 +60,8 @@ namespace osu.Game.Screens.Select
             sampleConfirmSelection = audio.Samples.Get(@"SongSelect/confirm-selection");
 
             AddInternal(new SongSelectTouchInputDetector());
-            // 常规选曲界面：转盘转动 → 逐格选曲（等价 ↑/↓），见 Ez2Setting.ScratchAxisSongSelectEnabled
+            // 常规选曲界面：转盘转动 → 逐格选曲（等价 ↑/↓）。
+            // 开关复用「使用 Ez2Ac 10k2s1p」（Ez2Setting.ManiaSkipEmptyEdgeColumns），见 EzSongSelectScratchAxisHandler。
             AddInternal(new EzSongSelectScratchAxisHandler(() => this.IsCurrentScreen()));
         }
 

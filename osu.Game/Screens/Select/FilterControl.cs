@@ -23,6 +23,7 @@ using osu.Game.Configuration;
 using osu.Game.Database;
 using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Identity;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.EzOsuGame.UI;
 using osu.Game.EzOsuGame.UserInterface;
@@ -416,6 +417,10 @@ namespace osu.Game.Screens.Select
             string query = searchTextBox.Current.Value;
             bool isValidUser = localUser.Value.Id > 1;
 
+            // 本地账户名接管时，「我打过的图」要按本地身份匹配：本地成绩落库的 RealmUser 就是本地名。
+            bool takesOver = EzLocalIdentity.TakesOver(ezConfig);
+            string? localProfileUsername = EzLocalIdentity.LocalNameIfTakesOver(ezConfig);
+
             IEnumerable<string>? collectionBeatmapMD5Hashes = null;
 
             if (Guid.TryParse(configCollectionFilter.Value, out var collectionId))
@@ -430,8 +435,8 @@ namespace osu.Game.Screens.Select
                 Ruleset = ruleset.Value,
                 Mods = mods.Value,
                 CollectionBeatmapMD5Hashes = collectionBeatmapMD5Hashes,
-                LocalUserId = isValidUser ? localUser.Value.Id : null,
-                LocalUserUsername = isValidUser ? localUser.Value.Username : null,
+                LocalUserId = takesOver ? EzLocalIdentity.LOCAL_USER_ONLINE_ID : isValidUser ? localUser.Value.Id : null,
+                LocalUserUsername = localProfileUsername ?? (isValidUser ? localUser.Value.Username : null),
                 HasVideoOrStoryboard = storyboardVideoFilterButton.Active.Value ? true : null,
             };
 

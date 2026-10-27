@@ -6,6 +6,8 @@ using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Game.Configuration;
+using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Identity;
 using osu.Game.Localisation.SkinComponents;
 using osu.Game.Online.API;
 using osu.Game.Online.API.Requests.Responses;
@@ -37,7 +39,8 @@ namespace osu.Game.Screens.Play.HUD
         [Resolved]
         private IAPIProvider api { get; set; } = null!;
 
-        private IBindable<APIUser>? apiUser;
+        /// <summary>生效身份（接管时为本地账户名）。必须持有字段：绑定副本是弱引用。</summary>
+        private IBindable<APIUser>? effectiveUser;
 
         private readonly Container cornerContainer;
 
@@ -63,11 +66,13 @@ namespace osu.Game.Screens.Play.HUD
         private void load()
         {
             if (gameplayState != null)
+                // 游玩中直接用成绩的署名：接管时已写入本地账户名，
+                // DrawableAvatar 会据此优先查 EzResources/Modify/avatars/{用户名}/。
                 avatar.User = gameplayState.Score.ScoreInfo.User;
             else
             {
-                apiUser = api.LocalUser.GetBoundCopy();
-                apiUser.BindValueChanged(u => avatar.User = u.NewValue, true);
+                effectiveUser = EzLocalIdentity.CreateUserBindable(GlobalConfigStore.EzConfig, api);
+                effectiveUser.BindValueChanged(u => avatar.User = u.NewValue, true);
             }
         }
 

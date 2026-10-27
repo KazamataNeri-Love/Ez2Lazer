@@ -20,6 +20,9 @@ namespace osu.Game.Skinning
         Playfield,
 
         [Description("Background")]
-        Background
+        Background,
+
+        [Description("Music player")]
+        MusicPlayer
     }
 }

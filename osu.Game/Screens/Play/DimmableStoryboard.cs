@@ -130,6 +130,25 @@ namespace osu.Game.Screens.Play
         {
             public override bool RemoveCompletedTransforms => true;
 
+            // Gameplay-only: fit the whole storyboard canvas inside the parent (contain/letterbox)
+            // instead of scaling by height. Keeping this in the gameplay subclass leaves the base
+            // DrawableStoryboard (used by menu/select backgrounds) untouched.
+            protected override Vector2 DrawScale
+            {
+                get
+                {
+                    if (autoVideSize)
+                        return Vector2.One;
+
+                    Vector2 parentSize = Parent?.DrawSize ?? Vector2.Zero;
+
+                    if (parentSize.X <= 0 || parentSize.Y <= 0 || Width <= 0 || Height <= 0)
+                        return Vector2.One;
+
+                    return new Vector2(Math.Min(parentSize.X / Width, parentSize.Y / Height));
+                }
+            }
+
             public GameplayDrawableStoryboard(Storyboard storyboard, IReadOnlyList<Mod> mods)
                 : base(storyboard, mods)
             {

@@ -61,7 +61,7 @@ namespace osu.Game.Storyboards.Drawables
         private BindableNumber<double> health = null!;
         private readonly BindableBool passing = new BindableBool(true);
 
-        private readonly bool autoVideSize;
+        protected readonly bool autoVideSize;
 
         protected override IReadOnlyDependencyContainer CreateChildDependencies(IReadOnlyDependencyContainer parent) =>
             dependencies = new DependencyContainer(base.CreateChildDependencies(parent));

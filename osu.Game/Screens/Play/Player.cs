@@ -16,6 +16,7 @@ using osu.Framework.Bindables;
 using osu.Framework.Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Textures;
 using osuTK;
 using osu.Framework.Logging;
@@ -34,6 +35,7 @@ using osu.Game.Graphics.Containers;
 using osu.Game.IO.Archives;
 using osu.Game.EzOsuGame.Audio;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Identity;
 using osu.Game.EzOsuGame.LocalProfile;
 using osu.Game.EzOsuGame.Performance;
 using osu.Game.EzOsuGame.Scoring;
@@ -564,13 +566,17 @@ namespace osu.Game.Screens.Play
             // Dim is applied directly to this container via FadeColour(Gray(1 - dim)),
             // matching the exact same transition used by UserDimContainer (800ms, OutQuint).
             // This ensures both layers dim in perfect sync.
+            // Contain: show the full background image (Fit) instead of cropping it (Fill/cover).
+            var background = new BeatmapBackground(working);
+            background.OnLoadComplete += _ => background.Sprite.FillMode = FillMode.Fit;
+
             var backgroundLayer = new Container
             {
                 RelativeSizeAxes = Axes.Both,
                 AlwaysPresent = true,
                 Children = new Drawable[]
                 {
-                    new BeatmapBackground(working),
+                    background,
                 },
             };
 
@@ -611,7 +617,18 @@ namespace osu.Game.Screens.Play
                 Alpha = working.Beatmap.LetterboxInBreaks ? 1 : 0,
             };
 
-            var children = new List<Drawable> { backgroundWrapper, letterboxOverlay };
+            // Black underlay fills the area revealed when the wrapper is scaled down
+            // or when the letterboxed (contain) content does not cover the screen.
+            var children = new List<Drawable>
+            {
+                new Box
+                {
+                    RelativeSizeAxes = Axes.Both,
+                    Colour = Color4.Black,
+                },
+                backgroundWrapper,
+                letterboxOverlay,
+            };
 
             // [Ez] 喷泉没有对应的用户设置，只能在极速模式下直接不构造。
             if (!EzTurboMode.Active)
@@ -1637,7 +1654,9 @@ namespace osu.Game.Screens.Play
         {
             ScoreInfo = new ScoreInfo
             {
-                User = api.LocalUser.Value,
+                // 本地账户名接管时以本地身份署名（落 RealmUser，本地档案据此分区）；
+                // 否则按登录的在线账号，与上游一致。
+                User = EzLocalIdentity.CreateEffectiveUser(GlobalConfigStore.EzConfig, api),
                 ClientVersion = game.Version,
             },
         };
