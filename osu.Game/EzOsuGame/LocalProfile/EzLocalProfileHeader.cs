@@ -4,16 +4,20 @@
 using System;
 using System.Linq;
 using osu.Framework.Allocation;
+using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Effects;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
+using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Identity;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Online.API;
+using osu.Game.Online.API.Requests.Responses;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Profile.Header.Components;
 using osu.Game.Users.Drawables;
@@ -142,19 +146,28 @@ namespace osu.Game.EzOsuGame.LocalProfile
             };
         }
 
+        /// <summary>
+        /// 当前生效的身份名（本地账户名接管时即本地名）。必须持有：框架的绑定副本是弱引用。
+        /// </summary>
+        private IBindable<string> effectiveUsername = null!;
+
+        /// <summary>当前生效身份的用户对象（头像据此查本地头像目录）。必须持有：同上。</summary>
+        private IBindable<APIUser> effectiveUser = null!;
+
         [BackgroundDependencyLoader]
-        private void load(OverlayColourProvider colours, IAPIProvider api)
+        private void load(OverlayColourProvider colours, IAPIProvider api, Ez2ConfigManager ezConfig)
         {
             coverBackground.Colour = colours.Background3;
             contentBackground.Colour = colours.Background4;
             metaText.Colour = colours.Content2;
 
-            var localUser = api.LocalUser.GetBoundCopy();
-            localUser.BindValueChanged(u =>
-            {
-                avatar.User = u.NewValue;
-                UpdateUsername(u.NewValue.Username);
-            }, true);
+            // 头像按「当前生效身份」取名：DrawableAvatar 会优先查 EzResources/Modify/avatars/{用户名}/，
+            // 命中就用本地头像，否则才回退在线头像。
+            effectiveUser = EzLocalIdentity.CreateUserBindable(ezConfig, api);
+            effectiveUser.BindValueChanged(u => avatar.User = u.NewValue, true);
+
+            effectiveUsername = EzLocalIdentity.CreateUsernameBindable(ezConfig, api);
+            effectiveUsername.BindValueChanged(u => UpdateUsername(u.NewValue), true);
         }
 
         public void UpdateUsername(string username)

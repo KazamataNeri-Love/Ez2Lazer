@@ -14,6 +14,7 @@ using osu.Game.Beatmaps;
 using osu.Game.Collections;
 using osu.Game.Database;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Identity;
 using osu.Game.Online.API;
 using osu.Game.Online.API.Requests;
 using osu.Game.Online.API.Requests.Responses;
@@ -112,7 +113,8 @@ namespace osu.Game.EzOsuGame.LocalProfile
         {
             var result = new EzLocalProfileOnlinePullResult();
 
-            if (!api.IsLoggedIn || api.IsLocalOnly)
+            // 本地账户名接管时不做在线拉取：本地档案保持纯净，只统计自己打出的成绩。
+            if (!api.IsLoggedIn || api.IsLocalOnly || EzLocalIdentity.TakesOver(GlobalConfigStore.EzConfig))
             {
                 result.ErrorMessage = "need_online";
                 return result;

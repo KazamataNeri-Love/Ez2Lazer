@@ -268,7 +268,7 @@ namespace osu.Game.EzOsuGame.LocalProfile
                 refreshContent();
             }), true);
 
-            API.LocalUser.BindValueChanged(u => Schedule(() => Header.UpdateUsername(u.NewValue.Username)), true);
+            // 用户名由 Header 自行跟随「当前生效身份」（本地账户名接管时为本地名），此处不再按在线账号覆盖。
             updateAnalysisSystemVisibility();
         }
 
