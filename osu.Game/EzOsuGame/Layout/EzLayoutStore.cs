@@ -130,16 +130,23 @@ namespace osu.Game.EzOsuGame.Layout
                 Save(lookup.Lookup, layout);
         }
 
-        public Container CreateComponentsContainer(GlobalSkinnableContainerLookup lookup)
+        public Container CreateComponentsContainer(GlobalSkinnableContainerLookup lookup, Func<SkinLayoutInfo>? fallback = null)
         {
             var layout = Load(lookup.Lookup);
 
             if (!layout.TryGetDrawableInfo(lookup.Ruleset, out var drawableInfos) || drawableInfos.Length == 0)
             {
-                return new Container
+                // No user layout on disk (or a reset was requested): fall back to the built-in default so
+                // targets which cannot come from a skin still show something useful.
+                var defaults = fallback?.Invoke();
+
+                if (defaults == null || !defaults.TryGetDrawableInfo(lookup.Ruleset, out drawableInfos) || drawableInfos.Length == 0)
                 {
-                    RelativeSizeAxes = Axes.Both,
-                };
+                    return new Container
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                    };
+                }
             }
 
             return new Container
@@ -153,6 +160,7 @@ namespace osu.Game.EzOsuGame.Layout
         {
             GlobalSkinnableContainers.SongSelect => @"SongSelect.json",
             GlobalSkinnableContainers.MainHUDComponents => @"Gameplay.json",
+            GlobalSkinnableContainers.MusicPlayer => @"MusicPlayer.json",
             _ => $"{target}.json",
         };
     }

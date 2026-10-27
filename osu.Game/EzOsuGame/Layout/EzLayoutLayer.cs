@@ -9,6 +9,7 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Platform;
 using osu.Framework.Screens;
+using osu.Game.EzOsuGame.Screens.MusicPlayer;
 using osu.Game.Screens.Play;
 using osu.Game.Screens.Select;
 using osu.Game.Skinning;
@@ -32,9 +33,11 @@ namespace osu.Game.EzOsuGame.Layout
 
         private EzLayoutContainer? gameplayContainer;
         private EzLayoutContainer? rulesetGameplayContainer;
+        private EzLayoutContainer? musicPlayerContainer;
         private Player? pendingPlayer;
 
         private bool onSongSelect;
+        private bool onMusicPlayer;
         private bool songSelectLayoutSuppressed;
 
         /// <summary>
@@ -108,9 +111,11 @@ namespace osu.Game.EzOsuGame.Layout
             unbindPendingPlayer();
 
             onSongSelect = screen is SongSelect;
+            onMusicPlayer = screen is EzMusicPlayerScreen;
             bool onPlayer = screen is Player;
 
             updateSongSelectContainerVisibility();
+            updateMusicPlayerContainerVisibility();
 
             if (onPlayer && screen is Player player)
             {
@@ -198,6 +203,32 @@ namespace osu.Game.EzOsuGame.Layout
         private void updateSongSelectContainerVisibility()
         {
             SongSelectContainer?.Alpha = onSongSelect && !songSelectLayoutSuppressed ? 1 : 0;
+        }
+
+        private void updateMusicPlayerContainerVisibility()
+        {
+            if (!onMusicPlayer)
+            {
+                if (musicPlayerContainer != null)
+                    musicPlayerContainer.Alpha = 0;
+
+                return;
+            }
+
+            musicPlayerContainer ??= createMusicPlayerContainer();
+            musicPlayerContainer.Alpha = 1;
+        }
+
+        private EzLayoutContainer createMusicPlayerContainer()
+        {
+            // Created lazily so the layout (and its components) only load when the player is first opened.
+            var container = new EzLayoutContainer(
+                Store,
+                new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.MusicPlayer),
+                EzMusicPlayerLayoutDefaults.Create);
+
+            AddInternal(container);
+            return container;
         }
 
         private void notifyTargetsChanged() => LayoutTargetsChanged?.Invoke();

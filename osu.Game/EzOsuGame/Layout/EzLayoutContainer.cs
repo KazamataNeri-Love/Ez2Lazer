@@ -1,6 +1,7 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System;
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
@@ -17,12 +18,14 @@ namespace osu.Game.EzOsuGame.Layout
     public partial class EzLayoutContainer : SkinnableContainer
     {
         private readonly EzLayoutStore store;
+        private readonly Func<SkinLayoutInfo>? fallback;
         private CompositeDrawable? dependencyDonor;
 
-        public EzLayoutContainer(EzLayoutStore store, GlobalSkinnableContainerLookup lookup)
+        public EzLayoutContainer(EzLayoutStore store, GlobalSkinnableContainerLookup lookup, Func<SkinLayoutInfo>? fallback = null)
             : base(lookup)
         {
             this.store = store;
+            this.fallback = fallback;
             RelativeSizeAxes = Axes.Both;
         }
 
@@ -51,7 +54,7 @@ namespace osu.Game.EzOsuGame.Layout
             LoadFromStore();
         }
 
-        public void LoadFromStore() => Reload(store.CreateComponentsContainer(Lookup));
+        public void LoadFromStore() => Reload(store.CreateComponentsContainer(Lookup, fallback));
 
         public override bool ReceivePositionalInputAt(Vector2 screenSpacePos) =>
             Alpha > 0 && InternalChildren.Any(c => c.IsPresent && c.ReceivePositionalInputAt(screenSpacePos));
