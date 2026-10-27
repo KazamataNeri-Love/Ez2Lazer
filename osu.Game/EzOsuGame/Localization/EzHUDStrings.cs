@@ -343,10 +343,13 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly LocalisableString AUDIO_VISUALISER_ALPHA_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("柱体的不透明度，0 为全透明，1 为不透明", "Opacity of the bars. 0 is fully transparent, 1 is fully opaque.");
 
         public static readonly LocalisableString AUDIO_VISUALISER_COLOUR_TOP_LABEL = new EzLocalizationManager.EzLocalisableString("顶部颜色", "Colour Top");
-        public static readonly LocalisableString AUDIO_VISUALISER_COLOUR_TOP_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("柱体顶部的颜色（渐变上端）", "Colour of the top of the bars (top of the gradient).");
+        public static readonly LocalisableString AUDIO_VISUALISER_COLOUR_TOP_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("两端渐变模式下柱体顶部的颜色", "Colour of the top of the bars in two-colour gradient mode.");
 
         public static readonly LocalisableString AUDIO_VISUALISER_COLOUR_BOTTOM_LABEL = new EzLocalizationManager.EzLocalisableString("底部颜色", "Colour Bottom");
-        public static readonly LocalisableString AUDIO_VISUALISER_COLOUR_BOTTOM_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("柱体底部的颜色（渐变下端）", "Colour of the bottom of the bars (bottom of the gradient).");
+        public static readonly LocalisableString AUDIO_VISUALISER_COLOUR_BOTTOM_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("两端渐变模式下柱体底部的颜色", "Colour of the bottom of the bars in two-colour gradient mode.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_COLOUR_MODE_LABEL = new EzLocalizationManager.EzLocalisableString("染色模式", "Colour Mode");
+        public static readonly LocalisableString AUDIO_VISUALISER_COLOUR_MODE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("两端渐变：自定义上下颜色；霓虹：按柱体高度套用绿→黄→红色标", "Two-colour gradient: custom top/bottom colours; Neon: fixed green → yellow → red stops mapped to bar height.");
 
         public static readonly LocalisableString AUDIO_VISUALISER_STYLE_LABEL = new EzLocalizationManager.EzLocalisableString("显示样式", "Display Style");
         public static readonly LocalisableString AUDIO_VISUALISER_STYLE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("柱状图或平滑曲线（线条+填充底部）", "Solid bars or a smooth curve (line + filled bottom).");
@@ -365,6 +368,60 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly LocalisableString AUDIO_VISUALISER_EDGE_FADE_LABEL = new EzLocalizationManager.EzLocalisableString("端点衰减", "Edge Fade");
         public static readonly LocalisableString AUDIO_VISUALISER_EDGE_FADE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("在左右两端各追加恒为 0 的虚拟位点数量（占真实位点数的比例，0=关闭）；真实频段保持不变", "Append zero-valued virtual points at each edge as a fraction of the real point count (0 = disabled); the real segment stays unchanged.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_SCALE_LABEL = new EzLocalizationManager.EzLocalisableString("频率刻度", "Frequency Scale");
+        public static readonly LocalisableString AUDIO_VISUALISER_SCALE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("线性：各柱平分频谱；对数：低频占用更多柱体，更接近人耳听感", "Linear: bars split the spectrum evenly; Logarithmic: low frequencies get more bars, closer to how we hear.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_SMOOTHING_LABEL = new EzLocalizationManager.EzLocalisableString("平滑", "Smoothing");
+        public static readonly LocalisableString AUDIO_VISUALISER_SMOOTHING_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("频谱数值的平滑强度，越大越柔和（0 = 完全跟随，0.95 = 非常平滑）", "Smoothing strength for spectrum values; higher is softer (0 = follow instantly, 0.95 = very smooth).");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_PEAKS_LABEL = new EzLocalizationManager.EzLocalisableString("显示峰值", "Show Peaks");
+        public static readonly LocalisableString AUDIO_VISUALISER_PEAKS_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("在柱体顶端显示保持一段时间的峰值线", "Show a peak line held above each bar.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_PEAK_HOLD_LABEL = new EzLocalizationManager.EzLocalisableString("峰值保持", "Peak Hold");
+        public static readonly LocalisableString AUDIO_VISUALISER_PEAK_HOLD_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("峰值在开始下落前保持的时间（毫秒）", "Time in milliseconds a peak stays before falling.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_PEAK_FALL_LABEL = new EzLocalizationManager.EzLocalisableString("峰值下落", "Peak Fall");
+        public static readonly LocalisableString AUDIO_VISUALISER_PEAK_FALL_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("峰值下落加速度；越大下落越快，0 为不下落", "Acceleration of falling peaks; higher falls faster, 0 keeps peaks pinned.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_LED_HEIGHT_LABEL = new EzLocalizationManager.EzLocalisableString("灯珠高度", "LED Height");
+        public static readonly LocalisableString AUDIO_VISUALISER_LED_HEIGHT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("每颗灯珠的像素高度，0 为整柱填充", "Pixel height of each LED segment; 0 keeps a single solid bar.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_LED_GAP_LABEL = new EzLocalizationManager.EzLocalisableString("灯珠间隙", "LED Gap");
+        public static readonly LocalisableString AUDIO_VISUALISER_LED_GAP_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("相邻灯珠之间的像素间隙，仅在 LED 分段启用时生效", "Pixel gap between LED segments; only used when LED segments are enabled.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_GHOST_LABEL = new EzLocalizationManager.EzLocalisableString("未点亮灯珠", "Ghost Segments");
+        public static readonly LocalisableString AUDIO_VISUALISER_GHOST_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("未点亮区域绘制的暗灯珠亮度，形成灯板底纹；0 为不绘制", "Brightness of unlit segments forming the LED grid; 0 disables them.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_BEVEL_LABEL = new EzLocalizationManager.EzLocalisableString("灯珠高光", "Segment Bevel");
+        public static readonly LocalisableString AUDIO_VISUALISER_BEVEL_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("灯珠顶部高光的强度，0 为无高光", "Strength of the highlight on top of each lit segment; 0 disables it.");
+
+        public static readonly LocalisableString AUDIO_VISUALISER_GLOW_LABEL = new EzLocalizationManager.EzLocalisableString("光晕强度", "Glow Strength");
+        public static readonly LocalisableString AUDIO_VISUALISER_GLOW_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("亮起柱体向外扩散的同色光晕强度，0 为关闭", "Strength of the coloured halo around lit bars; 0 disables it.");
+
+        public static readonly LocalisableString AUDIO_SCALE_BAR_COUNT_LABEL = new EzLocalizationManager.EzLocalisableString("柱数量", "Bar Count");
+        public static readonly LocalisableString AUDIO_SCALE_BAR_COUNT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("与音频可视化组件的柱数量保持一致", "Must match the bar count of the audio visualiser.");
+
+        public static readonly LocalisableString AUDIO_SCALE_BAR_WIDTH_LABEL = new EzLocalizationManager.EzLocalisableString("单柱宽度", "Bar Width");
+        public static readonly LocalisableString AUDIO_SCALE_BAR_WIDTH_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("与音频可视化组件的单柱宽度保持一致", "Must match the bar width of the audio visualiser.");
+
+        public static readonly LocalisableString AUDIO_SCALE_BAR_SPACING_LABEL = new EzLocalizationManager.EzLocalisableString("柱间距", "Bar Spacing");
+        public static readonly LocalisableString AUDIO_SCALE_BAR_SPACING_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("与音频可视化组件的柱间距保持一致", "Must match the bar spacing of the audio visualiser.");
+
+        public static readonly LocalisableString AUDIO_SCALE_EDGE_FADE_LABEL = new EzLocalizationManager.EzLocalisableString("端点衰减", "Edge Fade");
+        public static readonly LocalisableString AUDIO_SCALE_EDGE_FADE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("与音频可视化组件的端点衰减保持一致", "Must match the edge fade of the audio visualiser.");
+
+        public static readonly LocalisableString AUDIO_SCALE_FREQUENCY_SCALE_LABEL = new EzLocalizationManager.EzLocalisableString("频率刻度", "Frequency Scale");
+        public static readonly LocalisableString AUDIO_SCALE_FREQUENCY_SCALE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("与音频可视化组件的频率刻度保持一致", "Must match the frequency scale of the audio visualiser.");
+
+        public static readonly LocalisableString AUDIO_SCALE_LABEL_SIZE_LABEL = new EzLocalizationManager.EzLocalisableString("标签字号", "Label Size");
+        public static readonly LocalisableString AUDIO_SCALE_LABEL_SIZE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("刻度文字的字号", "Font size of the scale labels.");
+
+        public static readonly LocalisableString AUDIO_SCALE_COLOUR_LABEL = new EzLocalizationManager.EzLocalisableString("刻度颜色", "Scale Colour");
+        public static readonly LocalisableString AUDIO_SCALE_COLOUR_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("刻度线与文字的颜色", "Colour of the tick marks and labels.");
+
+        public static readonly LocalisableString AUDIO_SCALE_FOLLOW_LABEL = new EzLocalizationManager.EzLocalisableString("跟随频谱组件", "Follow Visualiser");
+        public static readonly LocalisableString AUDIO_SCALE_FOLLOW_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("自动绑定同一容器内音频可视化组件的柱数、柱宽、端点衰减与频率刻度（重新进入界面后生效）", "Automatically bind bar count, bar width, edge fade and frequency scale from the visualiser in the same container (applies after re-entering the screen).");
 
         public static readonly LocalisableString DAN_PANEL_DATA_SOURCE = new EzLocalizationManager.EzLocalisableString("段位数据源", "Dan Data Source");
 
