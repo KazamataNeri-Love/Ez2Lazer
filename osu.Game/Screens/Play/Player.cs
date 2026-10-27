@@ -30,6 +30,7 @@ using osu.Game.Database;
 using osu.Game.Extensions;
 using osu.Game.EzOsuGame.Analysis;
 using osu.Game.Graphics;
+using osu.Game.Graphics.Backgrounds;
 using osu.Game.EzOsuGame.Audio;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Identity;

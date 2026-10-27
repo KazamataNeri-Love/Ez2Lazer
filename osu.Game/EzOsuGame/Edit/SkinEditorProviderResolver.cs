@@ -41,6 +41,20 @@ namespace osu.Game.EzOsuGame.Edit
             return SkinEditorProviderRegistry.Get(mania_ruleset_online_id) ?? ensureManiaProviderRegistered();
         }
 
+        /// <summary>
+        /// Built-in looping chart provider. Only mania is implemented.
+        /// </summary>
+        public static ISkinEditorVirtualProvider? ResolveLoopProvider(int? rulesetOnlineId)
+        {
+            EnsureDefaultProviderRegistered();
+
+            // No ruleset selected yet → treat as mania (the only implemented loop chart).
+            if (rulesetOnlineId is null or mania_ruleset_online_id)
+                return SkinEditorProviderRegistry.Get(mania_ruleset_online_id) ?? ensureManiaProviderRegistered();
+
+            return null;
+        }
+
         private static ISkinEditorVirtualProvider? ensureManiaProviderRegistered()
         {
             try

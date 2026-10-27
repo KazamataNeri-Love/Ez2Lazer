@@ -30,6 +30,7 @@ using osu.Game.IO;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Dialog;
 using osu.Game.Overlays.Notifications;
+using osu.Game.Overlays.SkinEditor;
 using osu.Game.Rulesets;
 using osu.Game.Screens;
 using osu.Game.Skinning;
@@ -91,6 +92,11 @@ namespace osu.Game.EzOsuGame.Edit
 
         [Resolved]
         private EzResourceStore resource { get; set; } = null!;
+
+        [Resolved(canBeNull: true)]
+        private SkinEditorOverlay? skinEditorOverlay { get; set; }
+
+        private bool openHudEditorAfterExit;
 
         private Container? backgroundContainer;
         private Container sceneContentHost = null!;
@@ -166,7 +172,17 @@ namespace osu.Game.EzOsuGame.Edit
         {
             persistEditorConfig();
             this.FadeOut(200, Easing.OutQuint);
-            return base.OnExiting(e);
+
+            bool blocking = base.OnExiting(e);
+
+            if (!blocking && openHudEditorAfterExit)
+            {
+                openHudEditorAfterExit = false;
+                skinEditorOverlay?.Show();
+                skinEditorOverlay?.PresentGameplay();
+            }
+
+            return blocking;
         }
 
         [BackgroundDependencyLoader]
@@ -233,6 +249,7 @@ namespace osu.Game.EzOsuGame.Edit
                                             {
                                                 PreviewSource = PreviewState.Source,
                                                 PreviewMode = PreviewState.Mode,
+                                                LoopBeatmap = PreviewState.LoopBeatmap,
                                                 ToggleBeatmapPlaybackRequested = toggleBeatmapPlayback,
                                                 BeatmapPreviewRequested = selectBeatmapPreview,
                                             },
@@ -244,6 +261,7 @@ namespace osu.Game.EzOsuGame.Edit
                                     sceneBar = new EzSkinEditorSceneBar
                                     {
                                         RelativeSizeAxes = Axes.X,
+                                        OpenEzHudEditorRequested = openEzHudEditor,
                                     },
                                 },
                                 new Drawable[]
@@ -280,6 +298,7 @@ namespace osu.Game.EzOsuGame.Edit
             beatmapPicker = new EzSkinEditorBeatmapPicker(realm, beatmapManager);
             sceneBar.CurrentScene.BindValueChanged(onSceneChanged, true);
             skinManager.CurrentSkinInfo.BindValueChanged(onCurrentSkinInfoChanged);
+            PreviewState.LoopBeatmap.BindValueChanged(_ => refreshScene());
             bindConfigPreviewRefresh();
             bindSceneBarPlayback();
         }
@@ -352,10 +371,17 @@ namespace osu.Game.EzOsuGame.Edit
 
         private IEzSkinEditorScenePlaybackSource? getActiveScenePlaybackSource()
         {
-            if (sceneBar.CurrentScene.Value == EzSkinEditorSceneType.Appearance)
-                return embeddedPlayer is { CanBeMounted: true } player ? player : null;
+            var scene = sceneBar.CurrentScene.Value;
 
-            if (sceneBar.CurrentScene.Value is EzSkinEditorSceneType.Size or EzSkinEditorSceneType.Colour)
+            if (scene == EzSkinEditorSceneType.Appearance
+                && !PreviewState.LoopBeatmap.Value
+                && embeddedPlayer is { CanBeMounted: true } player)
+                return player;
+
+            if (scene is EzSkinEditorSceneType.Appearance
+                or EzSkinEditorSceneType.Size
+                or EzSkinEditorSceneType.Colour
+                or EzSkinEditorSceneType.SkinIni)
                 return sceneContentHost.ChildrenOfType<IEzSkinEditorScenePlaybackSource>().FirstOrDefault(s => s.IsActive);
 
             return null;
@@ -401,17 +427,14 @@ namespace osu.Game.EzOsuGame.Edit
         {
             ensureGlobalBeatmapPreview();
 
-            if (sceneBar.CurrentScene.Value == EzSkinEditorSceneType.Appearance)
-            {
-                backgroundContainer!.Child = createManiaStageBackgroundOrNull() ?? new Container { RelativeSizeAxes = Axes.Both };
-                backgroundContainer.Child.RelativeSizeAxes = Axes.Both;
-            }
-            else
-            {
+            bool appearanceBeatmapMode = sceneBar.CurrentScene.Value == EzSkinEditorSceneType.Appearance
+                                         && !PreviewState.LoopBeatmap.Value;
+
+            if (!appearanceBeatmapMode)
                 disposeEmbeddedPlayer();
-                backgroundContainer!.Child = createManiaStageBackgroundOrNull() ?? new Container { RelativeSizeAxes = Axes.Both };
-                backgroundContainer.Child.RelativeSizeAxes = Axes.Both;
-            }
+
+            backgroundContainer!.Child = createManiaStageBackgroundOrNull() ?? new Container { RelativeSizeAxes = Axes.Both };
+            backgroundContainer.Child.RelativeSizeAxes = Axes.Both;
 
             ensureSkinIniSession();
             ensureSkinJsonSession();
@@ -421,7 +444,7 @@ namespace osu.Game.EzOsuGame.Edit
             sceneContext = buildSceneContext();
             applyCurrentScene();
 
-            if (sceneBar.CurrentScene.Value == EzSkinEditorSceneType.Appearance)
+            if (appearanceBeatmapMode)
                 mountAppearanceEmbeddedPlayer();
 
             Schedule(refreshSceneBarPlayback);
@@ -446,7 +469,7 @@ namespace osu.Game.EzOsuGame.Edit
 
         private void toggleBeatmapPlayback()
         {
-            if (!PreviewState.HasBeatmapLoaded)
+            if (!PreviewState.HasBeatmapLoaded && !PreviewState.LoopBeatmap.Value)
                 return;
 
             setBeatmapPlaybackPlaying(PreviewState.Mode.Value != EzBeatmapPreviewMode.Dynamic);
@@ -477,26 +500,32 @@ namespace osu.Game.EzOsuGame.Edit
         {
             var currentScene = sceneBar.CurrentScene.Value;
 
-            bool allowBeatmapPreview = currentScene == EzSkinEditorSceneType.Appearance
-                                       && PreviewState.Source.Value == EzSkinEditorPreviewSource.Beatmap;
-
+            bool useLoopBeatmap = PreviewState.LoopBeatmap.Value;
             bool useVirtualComparisonPreview = currentScene == EzSkinEditorSceneType.Size;
-
-            int virtualPreviewKeyCount = currentScene switch
-            {
-                EzSkinEditorSceneType.Colour => getColourPreviewKeyMode(),
-                EzSkinEditorSceneType.Size => 4,
-                _ => 4,
-            };
             bool useNoteComparisonOnly = currentScene == EzSkinEditorSceneType.Note;
+            bool supportsPlayfieldPreview = currentScene is EzSkinEditorSceneType.Appearance
+                or EzSkinEditorSceneType.Size
+                or EzSkinEditorSceneType.Colour
+                or EzSkinEditorSceneType.SkinIni;
 
-            // Size/colour scenes always use the mania LN virtual provider, not the loaded beatmap ruleset.
-            var previewBeatmap = allowBeatmapPreview
-                ? PreviewState.PreviewBeatmap?.Beatmap
-                : null;
+            // PreviewHost scenes use the selected ruleset beatmap unless loop chart is on.
+            bool allowBeatmapPreview = supportsPlayfieldPreview
+                                       && currentScene != EzSkinEditorSceneType.Appearance
+                                       && !useLoopBeatmap
+                                       && PreviewState.HasBeatmapLoaded;
 
             SkinEditorProviderResolver.EnsureDefaultProviderRegistered();
-            provider = SkinEditorProviderResolver.Resolve(previewBeatmap);
+
+            ISkinEditorVirtualProvider? loopProvider = null;
+            int virtualPreviewKeyCount = 0;
+
+            if (useLoopBeatmap && supportsPlayfieldPreview)
+            {
+                loopProvider = SkinEditorProviderResolver.ResolveLoopProvider(PreviewState.Ruleset.Value?.OnlineID);
+                virtualPreviewKeyCount = loopProvider == null ? 0 : getLoopPreviewKeyCount(currentScene);
+            }
+
+            provider = loopProvider;
 
             bool usesEzNoteVariants = EzSkinEditorNoteVariantResolver.UsesEzVariants(skinManager.CurrentSkin.Value);
 
@@ -515,6 +544,7 @@ namespace osu.Game.EzOsuGame.Edit
                 RequestPreviewRefresh = requestPreviewRefresh,
                 CommitSkinIni = commitSkinIni,
                 AllowBeatmapPreview = allowBeatmapPreview,
+                UseLoopBeatmap = useLoopBeatmap,
                 UseVirtualComparisonPreview = useVirtualComparisonPreview,
                 VirtualPreviewKeyCount = virtualPreviewKeyCount,
                 UseNoteComparisonOnly = useNoteComparisonOnly,
@@ -531,6 +561,13 @@ namespace osu.Game.EzOsuGame.Edit
                 GetEmbeddedPlayer = () => embeddedPlayer,
             };
         }
+
+        private int getLoopPreviewKeyCount(EzSkinEditorSceneType scene) => scene switch
+        {
+            EzSkinEditorSceneType.Colour => getColourPreviewKeyMode(),
+            EzSkinEditorSceneType.Size => 4,
+            _ => Math.Max(4, getCurrentKeyMode()),
+        };
 
         private void mountAppearanceEmbeddedPlayer()
         {
@@ -671,6 +708,7 @@ namespace osu.Game.EzOsuGame.Edit
             var strategy = EzSkinEditorSceneRegistry.Get(sceneBar.CurrentScene.Value);
 
             if (sceneBar.CurrentScene.Value == EzSkinEditorSceneType.Appearance
+                && !sceneContext.UseLoopBeatmap
                 && getSceneContent<EzSkinEditorAppearanceSceneContent>() is EzSkinEditorAppearanceSceneContent appearance)
             {
                 appearance.RefreshFromContext(sceneContext);
@@ -1280,6 +1318,36 @@ namespace osu.Game.EzOsuGame.Edit
         {
             if (this.IsCurrentScreen())
                 ShowExitDialog();
+        }
+
+        private void openEzHudEditor()
+        {
+            if (!this.IsCurrentScreen())
+                return;
+
+            void proceed()
+            {
+                openHudEditorAfterExit = true;
+
+                if (this.IsCurrentScreen())
+                    this.Exit();
+            }
+
+            if (dialogOverlay == null || SkinIniSession?.IsDirty != true)
+            {
+                proceed();
+                return;
+            }
+
+            dialogOverlay.Push(new ConfirmDialog(EzEditorStrings.EXIT_CONFIRM_APPLY_TO_SKIN, () =>
+            {
+                applySettings();
+                proceed();
+            }, () =>
+            {
+                SkinIniSession?.Discard();
+                proceed();
+            }));
         }
 
         public void ShowExitDialog()

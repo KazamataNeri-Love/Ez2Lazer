@@ -280,6 +280,12 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly LocalisableString SCENE_LIBRARY_LABEL = new EzLocalizationManager.EzLocalisableString("场景", "Scenes");
 
+        public static readonly LocalisableString SCENE_EZ_HUD = new EzLocalizationManager.EzLocalisableString("Ez HUD", "Ez HUD");
+
+        public static readonly LocalisableString SCENE_EZ_SKIN = new EzLocalizationManager.EzLocalisableString("Ez Skin", "Ez Skin");
+
+        public static readonly LocalisableString TOOLBAR_HUD_LAYER = new EzLocalizationManager.EzLocalisableString("HUD", "HUD");
+
         public static readonly LocalisableString TAB_APPEARANCE = new EzLocalizationManager.EzLocalisableString("外观", "Appearance");
 
         public static readonly LocalisableString TAB_SIZE = new EzLocalizationManager.EzLocalisableString("尺寸", "Size");
@@ -379,6 +385,12 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly LocalisableString TOOLBAR_PLAY_BEATMAP = new EzLocalizationManager.EzLocalisableString("播放谱面", "Play beatmap");
 
         public static readonly LocalisableString TOOLBAR_SELECT_MODE = new EzLocalizationManager.EzLocalisableString("选择模式", "Select mode");
+
+        public static readonly LocalisableString TOOLBAR_LOOP_BEATMAP = new EzLocalizationManager.EzLocalisableString("循环谱面", "Loop chart");
+
+        public static readonly LocalisableString PLACEHOLDER_LOOP_BEATMAP_NOT_SUPPORTED = new EzLocalizationManager.EzLocalisableString(
+            "内置循环谱暂仅支持 mania",
+            "Built-in loop chart is only available for mania");
 
         public static readonly LocalisableString TOOLBAR_PREVIEW_NOT_SUPPORTED = new EzLocalizationManager.EzLocalisableString(
             "预览尚未支持",
