@@ -889,5 +889,145 @@ namespace osu.Game.EzOsuGame.Localization
             + "\nAlready-persisted ChartDan / CSI is not retroactively updated; rebuild (Data rebuild -> Realm chart skill chain) to apply.");
 
         #endregion
+
+        #region Ez 设置预设
+
+        public static readonly LocalisableString SETTINGS_PRESET_CAPTION =
+            new EzLocalizationManager.EzLocalisableString("设置预设方案", "Settings preset");
+
+        public static readonly LocalisableString SETTINGS_PRESET_HINT =
+            new EzLocalizationManager.EzLocalisableString(
+                "一次性套用一整组设置：皮肤 + 「Ez 游玩 / Ez Mania 设置」+「图像 / 布局」。"
+                + "\n在下拉里选中即生效；用「编辑」重命名，或用「使用当前的设置」把当前状态写回该预设。"
+                + "\n预设文件存放在数据目录的 EzSettings 文件夹，可备份与分享。",
+                "Applies a whole group of settings at once: skin + Ez Mania settings + layout."
+                + "\nSelecting an entry applies it immediately; use Edit to rename it, or \"Use current settings\" to overwrite it with the current state."
+                + "\nPreset files live in the EzSettings folder of the data directory and can be backed up or shared.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SETTINGS_PRESET_DEFAULT_NAME =
+            new EzLocalizationManager.EzLocalisableString("设置预设{0}", "Settings preset {0}");
+
+        public static readonly LocalisableString SETTINGS_PRESET_NEW =
+            new EzLocalizationManager.EzLocalisableString("新建预设", "New preset");
+
+        public static readonly LocalisableString SETTINGS_PRESET_NEW_TOOLTIP =
+            new EzLocalizationManager.EzLocalisableString(
+                "以当前设置为内容，新建一个预设。",
+                "Creates a new preset from the current settings.");
+
+        public static readonly LocalisableString SETTINGS_PRESET_RENAME =
+            new EzLocalizationManager.EzLocalisableString("重命名", "Rename");
+
+        public static readonly LocalisableString SETTINGS_PRESET_RENAME_TOOLTIP =
+            new EzLocalizationManager.EzLocalisableString(
+                "重命名该预设，并预览它包含的设置。",
+                "Renames this preset and shows what it contains.");
+
+        public static readonly LocalisableString SETTINGS_PRESET_DELETE =
+            new EzLocalizationManager.EzLocalisableString("删除预设", "Delete preset");
+
+        public static readonly LocalisableString SETTINGS_PRESET_USE_CURRENT =
+            new EzLocalizationManager.EzLocalisableString("使用当前的设置", "Use current settings");
+
+        public static readonly LocalisableString SETTINGS_PRESET_USE_CURRENT_TOOLTIP =
+            new EzLocalizationManager.EzLocalisableString(
+                "把这个预设的内容替换为当前设置（皮肤 + Ez Mania 设置 + 布局）。",
+                "Replaces this preset's contents with the current settings (skin + Ez Mania settings + layout).");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SETTINGS_PRESET_USE_CURRENT_CONFIRM =
+            new EzLocalizationManager.EzLocalisableString(
+                "用当前的皮肤与设置覆盖预设「{0}」？",
+                "Overwrite preset \"{0}\" with the current skin and settings?");
+
+        public static readonly LocalisableString SETTINGS_PRESET_PREVIEW_HEADER =
+            new EzLocalizationManager.EzLocalisableString("将写入以下设置", "The following will be saved");
+
+        public static readonly LocalisableString SETTINGS_PRESET_SKIN_LABEL =
+            new EzLocalizationManager.EzLocalisableString("皮肤", "Skin");
+
+        public static readonly LocalisableString SETTINGS_PRESET_EMPTY =
+            new EzLocalizationManager.EzLocalisableString("还没有预设，点击「新建预设」创建一个。",
+                "No presets yet. Use \"New preset\" to create one.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SETTINGS_PRESET_APPLIED =
+            new EzLocalizationManager.EzLocalisableString("已应用预设「{0}」（{1} 项设置）",
+                "Applied preset \"{0}\" ({1} settings)");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SETTINGS_PRESET_APPLIED_PARTIAL =
+            new EzLocalizationManager.EzLocalisableString("预设「{0}」已应用（{1} 项），{2} 项未生效，详见日志。",
+                "Preset \"{0}\" applied ({1} settings), {2} could not be applied. See the log for details.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SETTINGS_PRESET_SKIN_MISSING =
+            new EzLocalizationManager.EzLocalisableString("预设中的皮肤「{0}」当前不可用，其余设置已应用。",
+                "The skin \"{0}\" in this preset is not available; all other settings were applied.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SETTINGS_PRESET_SAVED =
+            new EzLocalizationManager.EzLocalisableString("预设「{0}」已保存", "Preset \"{0}\" saved");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SETTINGS_PRESET_DELETED =
+            new EzLocalizationManager.EzLocalisableString("预设「{0}」已删除", "Preset \"{0}\" deleted");
+
+        public static readonly EzLocalizationManager.EzLocalisableString SETTINGS_PRESET_DELETE_CONFIRM =
+            new EzLocalizationManager.EzLocalisableString("确定要删除预设「{0}」吗？此操作无法撤销。",
+                "Delete preset \"{0}\"? This cannot be undone.");
+
+        public static readonly LocalisableString SETTINGS_PRESET_NAME_EMPTY =
+            new EzLocalizationManager.EzLocalisableString("预设名不能为空。", "The preset name cannot be empty.");
+
+        #endregion
+
+        #region 本地账户名接管
+
+        public static readonly LocalisableString LOCAL_ACCOUNT_NAME =
+            new EzLocalizationManager.EzLocalisableString("本地账户名", "Local account name");
+
+        public static readonly LocalisableString LOCAL_ACCOUNT_NAME_TOOLTIP =
+            new EzLocalizationManager.EzLocalisableString(
+                "接管生效时用来署名成绩、在 HUD 与本地档案里显示。"
+                + "\n下拉里会列出你历史上用过的名字（来自已有成绩），可以用下方的按钮新增。",
+                "Used to sign scores and to label the HUD and local profile while takeover is on."
+                + "\nThe dropdown lists names you have used before (taken from existing scores); use the button below to add a new one.");
+
+        public static readonly LocalisableString LOCAL_ACCOUNT_NAME_ADD =
+            new EzLocalizationManager.EzLocalisableString("新增", "Add");
+
+        public static readonly LocalisableString LOCAL_ACCOUNT_NAME_ADD_TOOLTIP =
+            new EzLocalizationManager.EzLocalisableString(
+                "新增一个本地账户名；已有成绩里的用户名也可以直接在下拉里选。",
+                "Adds a new local account name. Names found in existing scores can also be picked from the dropdown.");
+
+        public static readonly LocalisableString LOCAL_ACCOUNT_NAME_RENAME =
+            new EzLocalizationManager.EzLocalisableString("重命名", "Rename");
+
+        public static readonly LocalisableString LOCAL_ACCOUNT_NAME_RENAME_TOOLTIP =
+            new EzLocalizationManager.EzLocalisableString(
+                "改写当前选中的本地账户名。只影响之后新打的成绩，不会改动已有成绩的署名。",
+                "Rewrites the currently selected local account name. Only affects scores played from now on; existing scores keep their signature.");
+
+        public static readonly LocalisableString LOCAL_ACCOUNT_NAME_TAKEOVER =
+            new EzLocalizationManager.EzLocalisableString("本地账户名接管成绩", "Local account name takes over");
+
+        public static readonly LocalisableString LOCAL_ACCOUNT_NAME_TAKEOVER_TOOLTIP =
+            new EzLocalizationManager.EzLocalisableString(
+                "开启后一切以本地账户名为准：成绩按本地名署名并归入本地档案对应分区，HUD 与本地档案标题也显示本地名；"
+                + "在线连接只用于下载（不上传成绩、不做在线拉取）。"
+                + "\n关闭时完全按登录的在线账号走，与上游行为一致。",
+                "When on, everything follows the local account name: scores are signed with it and land in that local profile partition, "
+                + "and the HUD and local profile header show it too; the online connection is used for downloads only "
+                + "(no score submission, no online pull)."
+                + "\nWhen off, everything follows the signed-in online account, exactly as upstream.");
+
+        public static readonly LocalisableString LOCAL_ACCOUNT_NAME_DIALOG_HEADER =
+            new EzLocalizationManager.EzLocalisableString("本地账户名", "Local account name");
+
+        public static readonly LocalisableString LOCAL_ACCOUNT_NAME_DIALOG_BODY =
+            new EzLocalizationManager.EzLocalisableString(
+                "输入一个本地账户名。保存后它会成为当前选中的本地账户名。",
+                "Enter a local account name. Saving makes it the current selection.");
+
+        public static readonly LocalisableString LOCAL_ACCOUNT_NAME_DIALOG_PLACEHOLDER =
+            new EzLocalizationManager.EzLocalisableString("例如：O2Jam", "e.g. O2Jam");
+
+        #endregion
     }
 }

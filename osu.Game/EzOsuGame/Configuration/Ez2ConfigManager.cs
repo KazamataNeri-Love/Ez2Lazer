@@ -30,6 +30,14 @@ namespace osu.Game.EzOsuGame.Configuration
         private readonly int[] commonKeyModes = { 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18 };
         public float DefaultHitPosition = 180f;
 
+        /// <summary>
+        /// 按 <see cref="Ez2Setting"/> 取原始 bindable（不返回绑定副本）。
+        /// 供设置预设等功能走 <see cref="IParseable"/> 字符串通道批量读写：
+        /// <c>ConfigStore</c> 本身是 <c>protected</c>，外部无法直接访问。
+        /// </summary>
+        /// <returns>未注册该项时返回 null。</returns>
+        public IBindable? GetRawBindable(Ez2Setting setting) => ConfigStore.TryGetValue(setting, out IBindable? bindable) ? bindable : null;
+
         private static readonly ConcurrentDictionary<int, KeyModeColumnData> runtime_column_data = new ConcurrentDictionary<int, KeyModeColumnData>();
 
         private static readonly Dictionary<int, Ez2Setting> key_mode_to_column_color_setting = new Dictionary<int, Ez2Setting>
@@ -108,6 +116,7 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.MenuLogoBackdropBlur, 16.0, 0.0, 40.0, 1.0);
             SetDefault(Ez2Setting.MenuLogoBackdropOpacity, 1.0, 0.0, 1.0, 0.01);
             SetDefault(Ez2Setting.SongSelectUseEzBackground, false);
+            SetDefault(Ez2Setting.PinnedMods, string.Empty);
             SetDefault(Ez2Setting.NotificationBehaviour, EzNotificationBehaviour.Normal);
             SetDefault(Ez2Setting.ScreenshotAction, EzScreenshotAction.SaveAndCopy);
             SetDefault(Ez2Setting.HitObjectLifetimeUsesOwnTime, !DebugUtils.IsNUnitRunning);
@@ -292,6 +301,10 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.EzScoreRaceFeedMode, EzReplayFeedMode.BatchAllEvents);
             SetDefault(Ez2Setting.EzHudCameraEnabled, false);
 
+            // 本地账户名接管
+            SetDefault(Ez2Setting.LocalAccountName, string.Empty);
+            SetDefault(Ez2Setting.LocalAccountNameTakesOverScore, false);
+
             #endregion
         }
 
@@ -462,7 +475,7 @@ namespace osu.Game.EzOsuGame.Configuration
         }
 
         /// <summary>
-        /// 列宽风格换算到单列宽度时的系数：全局总宽度按 <c>10 / keyMode</c> 摊到每列，其余风格为 1。
+        /// 列宽风格换算到单列宽度时的系数：总宽度类风格（全局总宽度、Ez 内置皮肤总宽度）按 <c>10 / keyMode</c> 摊到每列，其余风格为 1。
         /// </summary>
         /// <remarks>
         /// 实际列宽由 <c>ManiaPlayfieldLayoutHelper.CalculateColumnSize</c> 应用该系数；note 尺寸等按同一条规则换算，
@@ -473,7 +486,9 @@ namespace osu.Game.EzOsuGame.Configuration
             if (keyMode <= 0)
                 return 1;
 
-            return Get<ColumnWidthStyle>(Ez2Setting.ColumnWidthStyle) == ColumnWidthStyle.GlobalTotalWidth
+            ColumnWidthStyle style = Get<ColumnWidthStyle>(Ez2Setting.ColumnWidthStyle);
+
+            return style is ColumnWidthStyle.GlobalTotalWidth or ColumnWidthStyle.EzSkinTotalWidth
                 ? 10f / keyMode
                 : 1f;
         }
@@ -1032,6 +1047,11 @@ namespace osu.Game.EzOsuGame.Configuration
         /// 开启后选歌界面沿用主页背景，不单独加载当前谱面背景。
         /// </summary>
         SongSelectUseEzBackground,
+
+        /// <summary>
+        /// MOD 选择界面置顶栏的 Mod 类型名列表（逗号分隔，按显示顺序）。
+        /// </summary>
+        PinnedMods,
         NotificationBehaviour,
         ScreenshotAction,
         ManiaSkipEmptyEdgeColumns,
@@ -1380,6 +1400,18 @@ namespace osu.Game.EzOsuGame.Configuration
         /// 与 <c>EzDanAlgorithm.LnPrimaryMinRatioFor</c> 为「或」关系。
         /// </summary>
         SkillLnChartMinHoldObjects,
+
+        // 本地账户名接管
+        /// <summary>
+        /// 本地账户名。接管生效时，成绩署名、界面显示名与本地档案分区都用它。
+        /// </summary>
+        LocalAccountName,
+
+        /// <summary>
+        /// 本地账户名接管成绩：开启后一切「我是谁」以 <see cref="LocalAccountName"/> 为准，
+        /// 在线连接仅用于下载；关闭时按登录的在线账号正常署名与上传。
+        /// </summary>
+        LocalAccountNameTakesOverScore,
     }
 
     public enum EzColumnType : byte

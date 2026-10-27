@@ -35,6 +35,14 @@ namespace osu.Game.Configuration
         {
         }
 
+        /// <summary>
+        /// 按 <see cref="OsuSetting"/> 取原始 bindable（不返回绑定副本）。
+        /// 供设置预设等功能走 <see cref="IParseable"/> 字符串通道批量读写：
+        /// <c>ConfigStore</c> 本身是 <c>protected</c>，外部无法直接访问。
+        /// </summary>
+        /// <returns>未注册该项时返回 null。</returns>
+        public IBindable? GetRawBindable(OsuSetting setting) => ConfigStore.TryGetValue(setting, out IBindable? bindable) ? bindable : null;
+
         protected override void InitialiseDefaults()
         {
             // UI/selection defaults

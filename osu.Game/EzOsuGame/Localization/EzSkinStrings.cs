@@ -97,12 +97,14 @@ namespace osu.Game.EzOsuGame.Localization
             "列宽风格", "Column Width Style");
 
         public static readonly LocalisableString COLUMN_WIDTH_STYLE_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
-            "全局设置可以用在所有皮肤上。"
-            + "\n全局总列宽=设置值×10, 每列宽度=key数/总列宽。"
-            + "\n其他选项均为设置单列宽度。",
-            "Global setting can be applied to all skins."
-            + "\nGlobal total column width = configured value × 10."
-            + "\nOther styles are literal (functionality may be imperfect).");
+            "Ez 内置皮肤专用：仅 Ez 内置皮肤使用设置的列宽。"
+            + "\nEz 内置皮肤总宽度：仅 Ez 内置皮肤使用总宽度模式（设置值×10 摊到各列）。"
+            + "\n全局宽度：所有皮肤使用设置的列宽。"
+            + "\n全局总宽度：所有皮肤使用总宽度模式（设置值×10 摊到各列）。",
+            "Ez Skin Only: apply the configured column width to Ez built-in skins only."
+            + "\nEz Skin Total Width: apply total-width mode (configured value × 10 spread across columns) to Ez built-in skins only."
+            + "\nGlobal Width: apply the configured column width to all skins."
+            + "\nGlobal Total Width: apply total-width mode (configured value × 10 spread across columns) to all skins.");
 
         public static readonly LocalisableString COLUMN_WIDTH = new EzLocalizationManager.EzLocalisableString(
             "单轨宽度", "Column Width");

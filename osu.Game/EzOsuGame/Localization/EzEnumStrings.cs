@@ -13,6 +13,7 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly LocalisableString EZ_STYLE_PRO_ONLY = new EzLocalizationManager.EzLocalisableString("Ez 内置皮肤专用", "Ez Skin Only");
         public static readonly LocalisableString GLOBAL_WIDTH = new EzLocalizationManager.EzLocalisableString("全局宽度", "Global Width");
         public static readonly LocalisableString GLOBAL_TOTAL_WIDTH = new EzLocalizationManager.EzLocalisableString("全局总宽度", "Global Total Width");
+        public static readonly LocalisableString EZ_STYLE_TOTAL_WIDTH = new EzLocalizationManager.EzLocalisableString("Ez 内置皮肤总宽度", "Ez Skin Total Width");
 
         public static readonly LocalisableString SCALE = new EzLocalizationManager.EzLocalisableString("缩放动效", "Scale");
         public static readonly LocalisableString BOUNCE = new EzLocalizationManager.EzLocalisableString("跳跃动效", "Bounce");
@@ -86,6 +87,12 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly LocalisableString AUDIO_VIS_STYLE_SOLID = new EzLocalizationManager.EzLocalisableString("柱状图", "Solid Bars");
         public static readonly LocalisableString AUDIO_VIS_STYLE_CURVE = new EzLocalizationManager.EzLocalisableString("曲线", "Curve");
+
+        public static readonly LocalisableString AUDIO_VIS_SCALE_LINEAR = new EzLocalizationManager.EzLocalisableString("线性", "Linear");
+        public static readonly LocalisableString AUDIO_VIS_SCALE_LOG = new EzLocalizationManager.EzLocalisableString("对数（推荐）", "Logarithmic (recommended)");
+
+        public static readonly LocalisableString AUDIO_VIS_COLOUR_GRADIENT = new EzLocalizationManager.EzLocalisableString("两端渐变", "Two-colour gradient");
+        public static readonly LocalisableString AUDIO_VIS_COLOUR_NEON = new EzLocalizationManager.EzLocalisableString("霓虹（绿→黄→红）", "Neon (green → yellow → red)");
 
         // public static readonly LocalisableString LOGO_BACKDROP_LINKED = new EzLocalizationManager.EzLocalisableString("联动背景", "Linked");
         public static readonly LocalisableString LOGO_BACKDROP_CLEAR = new EzLocalizationManager.EzLocalisableString("透明", "Clear");

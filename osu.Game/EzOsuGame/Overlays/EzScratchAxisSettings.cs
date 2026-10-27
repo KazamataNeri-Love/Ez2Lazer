@@ -219,7 +219,7 @@ namespace osu.Game.EzOsuGame.Overlays
                     Current = scratchAxisInvert,
                 })
                 {
-                    Keywords = new[] { "ez", "scratch", "invert", "reverse", "catch", "转盘", "反转" }
+                    Keywords = new[] { "ez", "scratch", "invert", "reverse", "catch", "转盘", "反转", "选歌", "选曲", "songselect" }
                 },
             };
 

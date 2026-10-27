@@ -19,6 +19,9 @@ namespace osu.Game.EzOsuGame.Configuration
 
         [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.GLOBAL_TOTAL_WIDTH))]
         GlobalTotalWidth = 2,
+
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.EZ_STYLE_TOTAL_WIDTH))]
+        EzSkinTotalWidth = 3,
     }
 
     public enum EzEnumJudgeMode

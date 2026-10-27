@@ -117,6 +117,24 @@ namespace osu.Game.EzOsuGame.Configuration
         Curve,
     }
 
+    public enum EzAudioVisualiserFrequencyScale
+    {
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.AUDIO_VIS_SCALE_LINEAR))]
+        Linear,
+
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.AUDIO_VIS_SCALE_LOG))]
+        Logarithmic,
+    }
+
+    public enum EzAudioVisualiserColourMode
+    {
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.AUDIO_VIS_COLOUR_GRADIENT))]
+        Gradient,
+
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.AUDIO_VIS_COLOUR_NEON))]
+        Neon,
+    }
+
     public enum EzLogoBackdropStyle
     {
         [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.UI_MODE_DEFAULT))]

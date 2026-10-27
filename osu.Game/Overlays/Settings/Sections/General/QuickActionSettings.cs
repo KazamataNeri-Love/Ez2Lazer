@@ -9,6 +9,7 @@ using osu.Framework.Localisation;
 using osu.Framework.Logging;
 using osu.Framework.Platform;
 using osu.Framework.Statistics;
+using osu.Game.EzOsuGame.Presets;
 using osu.Game.Graphics;
 using osu.Game.IO;
 using osu.Game.Localisation;
@@ -68,6 +69,10 @@ namespace osu.Game.Overlays.Settings.Sections.General
             });
 
             exportStorage = (storage as OsuStorage)?.GetExportStorage() ?? storage.GetStorageForDirectory(@"exports");
+
+            // Ez 侧追加：设置预设方案（下拉 + 新建/重命名/删除 + 使用当前的设置）。
+            // 本文件是上游 ppy 文件，与 skla 合并时此处容易冲突。
+            Add(new EzSettingsPresetControl(new EzSettingsPresetStore(storage)));
         }
 
         [Resolved]

@@ -140,7 +140,8 @@ namespace osu.Game.EzOsuGame.Overlays
                     Current = ezConfig.GetBindable<bool>(Ez2Setting.ManiaSkipEmptyEdgeColumns),
                 })
                 {
-                    Keywords = new[] { "ez", "skip", "empty", "column" }
+                    // 该项同时是「转盘选曲」的开关（见 EzSongSelectScratchAxisHandler），故补上转盘相关关键字。
+                    Keywords = new[] { "ez", "skip", "empty", "column", "scratch", "转盘", "选曲", "选歌", "songselect" }
                 },
                 new EzScratchAxisSettings(),
             };
