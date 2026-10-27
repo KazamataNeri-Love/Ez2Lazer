@@ -13,18 +13,23 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input;
 using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
-using Web = osu.Game.Resources.Localisation.Web;
 using osu.Framework.Testing;
 using osu.Game.Database;
+using osu.Game.EzOsuGame.HUD;
+using osu.Game.EzOsuGame.Localization;
+using osu.Game.EzOsuGame.Screens;
+using osu.Game.EzOsuGame.ScriptedSkin;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Cursor;
 using osu.Game.Graphics.UserInterface;
+using osu.Game.Input.Bindings;
 using osu.Game.Localisation;
 using osu.Game.Overlays.Dialog;
 using osu.Game.Overlays.OSD;
@@ -32,13 +37,10 @@ using osu.Game.Overlays.Settings;
 using osu.Game.Screens.Edit;
 using osu.Game.Screens.Edit.Components;
 using osu.Game.Screens.Edit.Components.Menus;
-using osu.Game.EzOsuGame.HUD;
-using osu.Game.EzOsuGame.ScriptedSkin;
 using osu.Game.Skinning;
-using osu.Framework.Graphics.Cursor;
-using osu.Game.Input.Bindings;
-using osu.Game.EzOsuGame.Screens;
 using osu.Game.Utils;
+using osuTK;
+using Web = osu.Game.Resources.Localisation.Web;
 
 namespace osu.Game.Overlays.SkinEditor
 {
@@ -58,6 +60,9 @@ namespace osu.Game.Overlays.SkinEditor
         protected Drawable? TargetScreen;
 
         protected OsuTextFlowContainer HeaderText = null!;
+
+        private readonly BindableBool hudLayerVisible = new BindableBool(true);
+        private ShearedToggleButton hudVisibilityToggle = null!;
 
         private Bindable<Skin> currentSkin = null!;
         private Bindable<string> clipboardContent = null!;
@@ -196,14 +201,34 @@ namespace osu.Game.Overlays.SkinEditor
                                                 createEzSettingsMenu(),
                                             }
                                         },
-                                        HeaderText = new OsuTextFlowContainer
+                                        new FillFlowContainer
                                         {
-                                            TextAnchor = Anchor.TopRight,
-                                            Padding = new MarginPadding(5),
-                                            Anchor = Anchor.TopRight,
-                                            Origin = Anchor.TopRight,
-                                            AutoSizeAxes = Axes.X,
-                                            RelativeSizeAxes = Axes.Y,
+                                            Name = @"Header controls",
+                                            Anchor = Anchor.CentreRight,
+                                            Origin = Anchor.CentreRight,
+                                            AutoSizeAxes = Axes.Both,
+                                            Direction = FillDirection.Horizontal,
+                                            Spacing = new Vector2(8),
+                                            Padding = new MarginPadding { Horizontal = 8 },
+                                            Children = new Drawable[]
+                                            {
+                                                HeaderText = new OsuTextFlowContainer
+                                                {
+                                                    TextAnchor = Anchor.CentreRight,
+                                                    Anchor = Anchor.CentreLeft,
+                                                    Origin = Anchor.CentreLeft,
+                                                    AutoSizeAxes = Axes.Both,
+                                                },
+                                                hudVisibilityToggle = new ShearedToggleButton
+                                                {
+                                                    Anchor = Anchor.CentreLeft,
+                                                    Origin = Anchor.CentreLeft,
+                                                    AutoSizeAxes = Axes.X,
+                                                    Height = 30,
+                                                    Text = EzEditorStrings.TOOLBAR_HUD_LAYER,
+                                                    TextSize = 14,
+                                                },
+                                            },
                                         },
                                     },
                                 },
@@ -290,6 +315,10 @@ namespace osu.Game.Overlays.SkinEditor
             SelectedComponents.BindCollectionChanged((_, _) => Scheduler.AddOnce(populateSettings), true);
 
             SelectedTarget.BindValueChanged(targetChanged, true);
+
+            hudVisibilityToggle.Active.Value = hudLayerVisible.Value;
+            hudVisibilityToggle.Active.BindValueChanged(v => hudLayerVisible.Value = v.NewValue);
+            hudLayerVisible.BindValueChanged(_ => applyHudLayerVisibility(), true);
         }
 
         private async Task editExternally()
@@ -434,6 +463,7 @@ namespace osu.Game.Overlays.SkinEditor
                 skinComponentsContainer.OnComponentsLoaded += onComponentsLoaded;
 
             content.Child = new SkinBlueprintContainer(skinComponentsContainer);
+            applyHudLayerVisibility();
 
             var selectSections = new List<EditorSidebarSection>
             {
@@ -499,8 +529,7 @@ namespace osu.Game.Overlays.SkinEditor
 
             HeaderText.Clear();
 
-            HeaderText.AddText(SkinEditorStrings.SkinEditor, cp => cp.Font = OsuFont.Default.With(size: 16));
-            HeaderText.NewLine();
+            // Branding lives in EditorMenuBar; only show the active skin name here.
             HeaderText.AddText(SkinEditorStrings.CurrentlyEditing, cp =>
             {
                 cp.Font = OsuFont.Default.With(size: 12);
@@ -602,6 +631,16 @@ namespace osu.Game.Overlays.SkinEditor
         protected virtual SkinnableContainer? GetTarget(GlobalSkinnableContainerLookup? target)
         {
             return AvailableTargets.FirstOrDefault(c => c.Lookup.Equals(target));
+        }
+
+        private void applyHudLayerVisibility()
+        {
+            float alpha = hudLayerVisible.Value ? 1 : 0;
+
+            foreach (var target in AvailableTargets)
+                target.FadeTo(alpha, 200, Easing.OutQuint);
+
+            content?.FadeTo(alpha, 200, Easing.OutQuint);
         }
 
         protected virtual void RevertToDefault()

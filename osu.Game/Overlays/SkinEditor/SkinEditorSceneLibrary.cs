@@ -6,6 +6,7 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Screens;
+using osu.Game.EzOsuGame.Localization;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
@@ -87,6 +88,14 @@ namespace osu.Game.Overlays.SkinEditor
                                     Anchor = Anchor.CentreLeft,
                                     Origin = Anchor.CentreLeft,
                                     Action = () => skinEditorOverlay?.PresentGameplay(),
+                                },
+                                new SceneButton
+                                {
+                                    Text = EzEditorStrings.SCENE_EZ_SKIN,
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Width = 110,
+                                    Action = () => skinEditorOverlay?.ToggleEzSkinEditor(),
                                 },
                             }
                         },
