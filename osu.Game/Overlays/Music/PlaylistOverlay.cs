@@ -2,6 +2,7 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
@@ -11,6 +12,7 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Effects;
 using osu.Framework.Graphics.Shapes;
 using osu.Game.Beatmaps;
+using osu.Game.Collections;
 using osu.Game.Database;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.UI;
@@ -24,6 +26,11 @@ namespace osu.Game.Overlays.Music
     public partial class PlaylistOverlay : VisibilityContainer
     {
         public Bindable<Live<BeatmapSetInfo>?> SelectedSet = new Bindable<Live<BeatmapSetInfo>?>();
+
+        /// <summary>
+        /// When set to a collection name, only beatmap sets contained in that collection are listed.
+        /// </summary>
+        public Bindable<string?> CollectionFilter { get; } = new Bindable<string?>();
 
         private const float transition_duration = 600;
         private const float filter_area_height = 60;
@@ -44,6 +51,8 @@ namespace osu.Game.Overlays.Music
         private RealmAccess realm { get; set; } = null!;
 
         private IDisposable? beatmapSubscription;
+        private IDisposable? collectionSubscription;
+        private HashSet<string>? collectionHashes;
 
         private FilterControl filter = null!;
         private Playlist list = null!;
@@ -119,11 +128,18 @@ namespace osu.Game.Overlays.Music
             base.LoadComplete();
 
             beatmapSubscription = realm.RegisterForNotifications(r => r.All<BeatmapSetInfo>().Where(s => !s.DeletePending && !s.Protected), beatmapsChanged);
+            collectionSubscription = realm.RegisterForNotifications(r => r.All<BeatmapCollection>(), collectionsChanged);
 
             list.RowData.BindTo(filteredSets);
             beatmap.BindValueChanged(working => SelectedSet.Value = working.NewValue.BeatmapSetInfo.ToLive(realm), true);
 
             EzMaterialOverlayAlpha.BindExclusive(classicBackground, materialBackground, materialUiMode);
+
+            CollectionFilter.BindValueChanged(_ =>
+            {
+                refreshCollection();
+                rebuildFilteredList();
+            }, true);
         }
 
         private void applyFilter(FilterCriteria criteria)
@@ -135,17 +151,50 @@ namespace osu.Game.Overlays.Music
         private void rebuildFilteredList()
         {
             string query = currentCriteria.SearchText.Trim();
+            var hashes = collectionHashes;
 
             filteredSets.Clear();
 
-            if (string.IsNullOrEmpty(query))
+            IEnumerable<Live<BeatmapSetInfo>> source = beatmapSets;
+
+            if (hashes != null)
+                source = source.Where(s => setInCollection(s, hashes));
+
+            if (!string.IsNullOrEmpty(query))
+                source = source.Where(s => setMatches(s, query));
+
+            filteredSets.AddRange(source);
+        }
+
+        private void refreshCollection()
+        {
+            string? name = CollectionFilter.Value;
+
+            if (string.IsNullOrEmpty(name))
             {
-                filteredSets.AddRange(beatmapSets);
+                collectionHashes = null;
                 return;
             }
 
-            filteredSets.AddRange(beatmapSets.Where(s => setMatches(s, query)));
+            collectionHashes = realm.Run(r =>
+            {
+                var collection = r.All<BeatmapCollection>().FirstOrDefault(c => c.Name == name);
+
+                return collection == null ? new HashSet<string>() : new HashSet<string>(collection.BeatmapMD5Hashes);
+            });
         }
+
+        private void collectionsChanged(IRealmCollection<BeatmapCollection> sender, ChangeSet? changes)
+        {
+            if (CollectionFilter.Value == null)
+                return;
+
+            refreshCollection();
+            rebuildFilteredList();
+        }
+
+        private static bool setInCollection(Live<BeatmapSetInfo> liveSet, HashSet<string> hashes)
+            => liveSet.PerformRead(set => set.Beatmaps.Any(b => hashes.Contains(b.MD5Hash)));
 
         private static bool setMatches(Live<BeatmapSetInfo> liveSet, string query)
         {
@@ -229,6 +278,7 @@ namespace osu.Game.Overlays.Music
         {
             base.Dispose(isDisposing);
             beatmapSubscription?.Dispose();
+            collectionSubscription?.Dispose();
         }
     }
 }
