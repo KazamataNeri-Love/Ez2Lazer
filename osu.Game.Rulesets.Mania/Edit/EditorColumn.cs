@@ -20,16 +20,15 @@ namespace osu.Game.Rulesets.Mania.Edit
         [BackgroundDependencyLoader]
         private void load()
         {
-            // With the skin's column background gone, column boundaries have to be marked here. Drawn behind the notes
-            // (the column background layer is proxied below the playfield) so it reads as a divider, not an overlay.
-            BackgroundContainer.Add(new Box
-            {
-                RelativeSizeAxes = Axes.Y,
-                Width = 1,
-                Anchor = Anchor.TopRight,
-                Origin = Anchor.TopRight,
-                Colour = Colour4.White.Opacity(0.25f),
-            });
+            // 暂时关闭列间分隔线（皮肤列背景已在编辑器中移除时才需要它补位）。
+            // BackgroundContainer.Add(new Box
+            // {
+            //     RelativeSizeAxes = Axes.Y,
+            //     Width = 1,
+            //     Anchor = Anchor.TopRight,
+            //     Origin = Anchor.TopRight,
+            //     Colour = Colour4.White.Opacity(0.25f),
+            // });
         }
 
         protected override void OnNewDrawableHitObject(DrawableHitObject drawableHitObject)

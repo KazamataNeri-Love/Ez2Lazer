@@ -205,14 +205,12 @@ namespace osu.Game.Rulesets.Mania.EzMania
             switch (columnWidthStyle)
             {
                 case ColumnWidthStyle.EzSkinOnly:
+                case ColumnWidthStyle.EzSkinTotalWidth:
                     if (usesEzColumnWidth(skin, skinManager))
-                        width = ezWidth;
+                        width = ezWidth * ezSkinConfig.GetColumnWidthStyleScale(keyMode);
                     break;
 
                 case ColumnWidthStyle.GlobalWidth:
-                    width = ezWidth;
-                    break;
-
                 case ColumnWidthStyle.GlobalTotalWidth:
                     width = ezWidth * ezSkinConfig.GetColumnWidthStyleScale(keyMode);
                     break;

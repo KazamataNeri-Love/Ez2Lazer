@@ -308,6 +308,7 @@ namespace osu.Game.Rulesets.Mania
                         new ManiaModNeriFasterBarrelRoll(),
                         new ManiaModNeriDance(),
                         new ManiaModNeriNewDance(),
+                        new ManiaModSlantCompensation(),
                     };
 
                 case ModType.LA_Mod:

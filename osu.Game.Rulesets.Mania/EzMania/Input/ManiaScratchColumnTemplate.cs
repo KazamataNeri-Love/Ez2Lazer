@@ -19,7 +19,17 @@ namespace osu.Game.Rulesets.Mania.EzMania.Input
         {
             switch (variant)
             {
+                case 6:
+                    leftColumn = 0;
+                    rightColumn = 0;
+                    return true;
+
                 case 7:
+                    leftColumn = 0;
+                    rightColumn = 0;
+                    return true;
+
+                case 8:
                     leftColumn = 0;
                     rightColumn = 0;
                     return true;
