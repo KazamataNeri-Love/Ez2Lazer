@@ -41,6 +41,36 @@ namespace osu.Game.Localisation
         public static LocalisableString PersonalPresets => new TranslatableString(getKey(@"personal_presets"), @"Personal Presets");
 
         /// <summary>
+        /// "置顶 Mod"
+        /// </summary>
+        public static LocalisableString PinnedMods => new TranslatableString(getKey(@"pinned_mods"), @"置顶 Mod");
+
+        /// <summary>
+        /// "置顶"
+        /// </summary>
+        public static LocalisableString PinnedModAdd => new TranslatableString(getKey(@"pinned_mod_add"), @"置顶");
+
+        /// <summary>
+        /// "取消置顶"
+        /// </summary>
+        public static LocalisableString PinnedModRemove => new TranslatableString(getKey(@"pinned_mod_remove"), @"取消置顶");
+
+        /// <summary>
+        /// "上移"
+        /// </summary>
+        public static LocalisableString PinnedModMoveUp => new TranslatableString(getKey(@"pinned_mod_move_up"), @"上移");
+
+        /// <summary>
+        /// "下移"
+        /// </summary>
+        public static LocalisableString PinnedModMoveDown => new TranslatableString(getKey(@"pinned_mod_move_down"), @"下移");
+
+        /// <summary>
+        /// "右键 Mod 可置顶"
+        /// </summary>
+        public static LocalisableString PinnedModsHint => new TranslatableString(getKey(@"pinned_mods_hint"), @"右键 Mod 可置顶");
+
+        /// <summary>
         /// "Add preset"
         /// </summary>
         public static LocalisableString AddPreset => new TranslatableString(getKey(@"add_preset"), @"Add preset");

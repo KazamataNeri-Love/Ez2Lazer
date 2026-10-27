@@ -62,15 +62,14 @@ namespace osu.Game.Overlays.Mods
         private readonly Box contentBackground;
         private readonly TrianglesV2 triangles;
 
-        private const float header_height = 42;
+        private const float header_height = 34;
 
-        protected const float WIDTH = 320;
+        protected const float WIDTH = 336;
 
         protected ModSelectColumn()
         {
             Width = WIDTH;
             RelativeSizeAxes = Axes.Y;
-            Shear = OsuGame.SHEAR;
 
             InternalChildren = new Drawable[]
             {
@@ -96,7 +95,6 @@ namespace osu.Game.Overlays.Mods
                                 {
                                     RelativeSizeAxes = Axes.X,
                                     Height = header_height,
-                                    Shear = -OsuGame.SHEAR,
                                     Velocity = 0.7f,
                                     ClampAxes = Axes.Y
                                 },
@@ -111,10 +109,9 @@ namespace osu.Game.Overlays.Mods
                                     AutoSizeAxes = Axes.Y,
                                     Anchor = Anchor.CentreLeft,
                                     Origin = Anchor.CentreLeft,
-                                    Shear = -OsuGame.SHEAR,
                                     Padding = new MarginPadding
                                     {
-                                        Horizontal = 17,
+                                        Horizontal = 14,
                                         Bottom = ModSelectPanel.CORNER_RADIUS
                                     }
                                 }
@@ -166,8 +163,8 @@ namespace osu.Game.Overlays.Mods
                                                     {
                                                         RelativeSizeAxes = Axes.X,
                                                         AutoSizeAxes = Axes.Y,
-                                                        Spacing = new Vector2(0, 7),
-                                                        Padding = new MarginPadding(7)
+                                                        Spacing = new Vector2(0, 4),
+                                                        Padding = new MarginPadding(5)
                                                     }
                                                 }
                                             }

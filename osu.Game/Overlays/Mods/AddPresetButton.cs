@@ -36,7 +36,7 @@ namespace osu.Game.Overlays.Mods
             Padding = new MarginPadding();
 
             Text = "+";
-            TextSize = 30;
+            TextSize = 26;
         }
 
         protected override void LoadComplete()

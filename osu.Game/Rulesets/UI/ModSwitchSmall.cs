@@ -6,8 +6,6 @@ using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Sprites;
-using osu.Framework.Graphics.Textures;
-using osu.Framework.Utils;
 using osu.Game.Graphics;
 using osu.Game.Overlays;
 using osu.Game.Rulesets.Mods;
@@ -24,14 +22,10 @@ namespace osu.Game.Rulesets.UI
 
         private readonly IMod mod;
 
-        private Drawable background = null!;
         private SpriteIcon? modIcon;
 
         private Color4 activeForegroundColour;
         private Color4 inactiveForegroundColour;
-
-        private Color4 activeBackgroundColour;
-        private Color4 inactiveBackgroundColour;
 
         public ModSwitchSmall(IMod mod)
         {
@@ -41,34 +35,23 @@ namespace osu.Game.Rulesets.UI
         }
 
         [BackgroundDependencyLoader]
-        private void load(TextureStore textures, OsuColour colours, OverlayColourProvider? colourProvider)
+        private void load(OsuColour colours, OverlayColourProvider? colourProvider)
         {
             FillFlowContainer contentFlow;
             ModSwitchTiny tinySwitch;
 
-            InternalChildren = new[]
+            InternalChild = contentFlow = new FillFlowContainer
             {
-                background = new Sprite
+                AutoSizeAxes = Axes.Both,
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre,
+                Direction = FillDirection.Vertical,
+                Child = tinySwitch = new ModSwitchTiny(mod)
                 {
-                    RelativeSizeAxes = Axes.Both,
-                    FillMode = FillMode.Fit,
-                    Texture = textures.Get("Icons/BeatmapDetails/mod-icon"),
-                    Anchor = Anchor.Centre,
-                    Origin = Anchor.Centre,
-                },
-                contentFlow = new FillFlowContainer
-                {
-                    AutoSizeAxes = Axes.Both,
-                    Anchor = Anchor.Centre,
-                    Origin = Anchor.Centre,
-                    Direction = FillDirection.Vertical,
-                    Child = tinySwitch = new ModSwitchTiny(mod)
-                    {
-                        Anchor = Anchor.TopCentre,
-                        Origin = Anchor.TopCentre,
-                        Scale = new Vector2(0.6f),
-                        Active = { BindTarget = Active }
-                    }
+                    Anchor = Anchor.TopCentre,
+                    Origin = Anchor.TopCentre,
+                    Scale = new Vector2(0.6f),
+                    Active = { BindTarget = Active }
                 }
             };
 
@@ -78,21 +61,18 @@ namespace osu.Game.Rulesets.UI
                 {
                     Anchor = Anchor.TopCentre,
                     Origin = Anchor.TopCentre,
-                    Size = new Vector2(37, 26),
+                    Size = new Vector2(50, 34),
                     // arbitrary adjustment for better vertical alignment
                     Margin = new MarginPadding { Top = -1 },
                     Icon = mod.Icon.Value
                 });
-                tinySwitch.Scale = new Vector2(0.3f);
+                tinySwitch.Scale = new Vector2(0.36f);
             }
 
             var modTypeColour = colours.ForModType(mod.Type);
 
             inactiveForegroundColour = colourProvider?.Background5 ?? colours.Gray3;
             activeForegroundColour = modTypeColour;
-
-            inactiveBackgroundColour = colourProvider?.Background2 ?? colours.Gray5;
-            activeBackgroundColour = Interpolation.ValueAt<Colour4>(0.1f, Colour4.Black, modTypeColour, 0, 1);
         }
 
         protected override void LoadComplete()
@@ -106,7 +86,6 @@ namespace osu.Game.Rulesets.UI
         private void updateState()
         {
             modIcon?.FadeColour(Active.Value ? activeForegroundColour : inactiveForegroundColour, 200, Easing.OutQuint);
-            background.FadeColour(Active.Value ? activeBackgroundColour : inactiveBackgroundColour, 200, Easing.OutQuint);
         }
     }
 }

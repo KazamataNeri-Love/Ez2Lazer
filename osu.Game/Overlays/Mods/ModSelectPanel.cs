@@ -45,7 +45,7 @@ namespace osu.Game.Overlays.Mods
         }
 
         public const float CORNER_RADIUS = EzUIStyleV1.CORNER_RADIUS_SHEARED;
-        public const float HEIGHT = 42;
+        public const float HEIGHT = 38;
 
         public const double SAMPLE_PLAYBACK_DELAY = 30;
 
@@ -87,8 +87,6 @@ namespace osu.Game.Overlays.Mods
             Content.CornerRadius = CORNER_RADIUS;
             Content.BorderThickness = 2;
 
-            Shear = OsuGame.SHEAR;
-
             Children = new Drawable[]
             {
                 Background = new Box
@@ -118,28 +116,22 @@ namespace osu.Game.Overlays.Mods
                                 RelativeSizeAxes = Axes.Both,
                                 Padding = new MarginPadding
                                 {
-                                    Horizontal = 17.5f,
-                                    Vertical = 4
+                                    Horizontal = 14,
+                                    Vertical = 1
                                 },
                                 Direction = FillDirection.Vertical,
                                 Children = new[]
                                 {
                                     titleText = new TruncatingSpriteText
                                     {
-                                        Font = OsuFont.TorusAlternate.With(size: 18, weight: FontWeight.SemiBold),
+                                        Font = OsuFont.TorusAlternate.With(size: 17, weight: FontWeight.SemiBold),
                                         RelativeSizeAxes = Axes.X,
-                                        Shear = -OsuGame.SHEAR,
-                                        Margin = new MarginPadding
-                                        {
-                                            Left = -18 * OsuGame.SHEAR.X
-                                        },
                                         ShowTooltip = false, // Tooltip is handled by `IncompatibilityDisplayingModPanel`.
                                     },
                                     descriptionText = new TruncatingSpriteText
                                     {
                                         Font = OsuFont.Default.With(size: 12),
                                         RelativeSizeAxes = Axes.X,
-                                        Shear = -OsuGame.SHEAR,
                                         ShowTooltip = false, // Tooltip is handled by `IncompatibilityDisplayingModPanel`.
                                     }
                                 }

@@ -99,20 +99,19 @@ namespace osu.Game.Overlays.Mods
 
             if (allowIncompatibleSelection)
             {
-                ControlContainer.Height = 35;
+                ControlContainer.Height = 36;
                 ControlContainer.Add(toggleAllCheckbox = new ToggleAllCheckbox(this)
                 {
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
                     Scale = new Vector2(0.8f),
-                    RelativeSizeAxes = Axes.X,
-                    Shear = -OsuGame.SHEAR
+                    RelativeSizeAxes = Axes.X
                 });
                 ItemsFlow.Padding = new MarginPadding
                 {
                     Top = 0,
-                    Bottom = 7,
-                    Horizontal = 7
+                    Bottom = 5,
+                    Horizontal = 5
                 };
             }
         }
@@ -152,7 +151,7 @@ namespace osu.Game.Overlays.Mods
         {
             cancellationTokenSource?.Cancel();
 
-            var panels = availableMods.Select(mod => CreateModPanel(mod).With(panel => panel.Shear = Vector2.Zero)).ToArray();
+            var panels = availableMods.Select(mod => CreateModPanel(mod)).ToArray();
             latestLoadedPanels = panels;
 
             latestLoadTask = LoadComponentsAsync(panels, loaded =>

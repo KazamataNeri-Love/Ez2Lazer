@@ -20,6 +20,8 @@ using osu.Framework.Utils;
 using osu.Game.Audio;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
+using osu.Game.EzOsuGame.Overlays;
+using osu.Game.EzOsuGame.UserInterface;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Cursor;
@@ -101,6 +103,13 @@ namespace osu.Game.Overlays.Mods
 
         protected virtual ModColumn CreateModColumn(ModType modType) => new ModColumn(modType, false);
 
+        /// <summary>
+        /// 置顶栏数据源；为 <see langword="null"/> 时不显示置顶栏。
+        /// </summary>
+        protected virtual EzPinnedModsController? PinnedModsController => null;
+
+        private PinnedModColumn? pinnedColumn;
+
         protected virtual IReadOnlyList<Mod> ComputeNewModsFromSelection(IReadOnlyList<Mod> oldSelection, IReadOnlyList<Mod> newSelection) => newSelection;
 
         protected virtual IReadOnlyList<Mod> ComputeActiveMods() => SelectedMods.Value;
@@ -135,6 +144,9 @@ namespace osu.Game.Overlays.Mods
         [BackgroundDependencyLoader]
         private void load(OsuGameBase game, AudioManager audio, OsuConfigManager configManager)
         {
+            if (PinnedModsController != null && Dependencies is DependencyContainer dependencyContainer)
+                dependencyContainer.CacheAs(PinnedModsController);
+
             // Header.Title = ModSelectOverlayStrings.ModSelectTitle;
             // Header.Description = ModSelectOverlayStrings.ModSelectDescription;
             Header.Alpha = 0;
@@ -176,10 +188,9 @@ namespace osu.Game.Overlays.Mods
                                         Anchor = Anchor.BottomLeft,
                                         Origin = Anchor.BottomLeft,
                                         Direction = FillDirection.Horizontal,
-                                        Shear = OsuGame.SHEAR,
                                         RelativeSizeAxes = Axes.Y,
                                         AutoSizeAxes = Axes.X,
-                                        Margin = new MarginPadding { Horizontal = 70 },
+                                        Margin = new MarginPadding { Horizontal = 60 },
                                         Padding = new MarginPadding { Bottom = 10 },
                                         ChildrenEnumerable = createColumns()
                                     }
@@ -189,13 +200,13 @@ namespace osu.Game.Overlays.Mods
                         aboveColumnsContent = new Container
                         {
                             RelativeSizeAxes = Axes.Both,
-                            Padding = new MarginPadding { Horizontal = 100, Bottom = 15f },
+                            Padding = new MarginPadding { Horizontal = 72, Bottom = 15f },
                             Children = new Drawable[]
                             {
                                 SearchTextBox = new ShearedSearchTextBox
                                 {
                                     HoldFocus = false,
-                                    Width = 300,
+                                    Width = 312,
                                 },
                                 customisationPanel = new ModCustomisationPanel
                                 {
@@ -229,6 +240,9 @@ namespace osu.Game.Overlays.Mods
             globalAvailableMods.BindValueChanged(_ => createLocalMods(), true);
 
             base.LoadComplete();
+
+            if (PinnedModsController != null)
+                PinnedModsController.Changed += updatePinnedColumn;
 
             State.BindValueChanged(_ => samplePlaybackDisabled.Value = State.Value == Visibility.Hidden, true);
 
@@ -333,6 +347,14 @@ namespace osu.Game.Overlays.Mods
                 });
             }
 
+            if (PinnedModsController != null)
+            {
+                yield return new ColumnDimContainer(pinnedColumn = new PinnedModColumn
+                {
+                    Margin = new MarginPadding { Right = 10 }
+                });
+            }
+
             yield return createModColumnContent(ModType.NeriMod);
             yield return createModColumnContent(ModType.LA_Mod);
             yield return createModColumnContent(ModType.CommunityMod);
@@ -378,6 +400,26 @@ namespace osu.Game.Overlays.Mods
 
             foreach (var column in columnFlow.Columns.OfType<ModColumn>())
                 column.AvailableMods = AvailableMods.Value.GetValueOrDefault(column.ModType, Array.Empty<ModState>());
+
+            updatePinnedColumn();
+        }
+
+        private void updatePinnedColumn()
+        {
+            if (pinnedColumn == null || PinnedModsController == null)
+                return;
+
+            var mods = new List<ModState>();
+
+            foreach (string key in PinnedModsController.Keys)
+            {
+                var state = AllAvailableMods.FirstOrDefault(s => EzPinnedModsController.GetKey(s.Mod) == key);
+
+                if (state != null)
+                    mods.Add(state);
+            }
+
+            pinnedColumn.AvailableMods = mods;
         }
 
         private void filterMods()
@@ -706,6 +748,14 @@ namespace osu.Game.Overlays.Mods
 
         #endregion
 
+        protected override void Dispose(bool isDisposing)
+        {
+            base.Dispose(isDisposing);
+
+            if (PinnedModsController != null)
+                PinnedModsController.Changed -= updatePinnedColumn;
+        }
+
         /// <summary>
         /// Manages horizontal scrolling of mod columns, along with the "active" states of each column based on visibility.
         /// </summary>
@@ -735,10 +785,8 @@ namespace osu.Game.Overlays.Mods
 
                 foreach (var column in Child)
                 {
-                    // DrawWidth/DrawPosition do not include shear effects, and we want to know the full extents of the columns post-shear,
-                    // so we have to manually compensate.
                     var topLeft = column.ToSpaceOfOtherDrawable(Vector2.Zero, ScrollContent);
-                    var bottomRight = column.ToSpaceOfOtherDrawable(new Vector2(column.DrawWidth - column.DrawHeight * OsuGame.SHEAR.X, 0), ScrollContent);
+                    var bottomRight = column.ToSpaceOfOtherDrawable(new Vector2(column.DrawWidth, 0), ScrollContent);
 
                     bool isCurrentlyVisible = Precision.AlmostBigger(topLeft.X, leftVisibleBound)
                                               && Precision.DefinitelyBigger(rightVisibleBound, bottomRight.X);
@@ -762,7 +810,6 @@ namespace osu.Game.Overlays.Mods
                 base.Add(dimContainer);
 
                 Debug.Assert(dimContainer != null);
-                dimContainer.Column.Shear = Vector2.Zero;
             }
         }
 

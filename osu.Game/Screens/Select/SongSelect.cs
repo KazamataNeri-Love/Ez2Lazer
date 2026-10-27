@@ -116,6 +116,7 @@ namespace osu.Game.Screens.Select
         private ModSelectOverlay modSelectOverlay = null!;
         private ModSpeedHotkeyHandler modSpeedHotkeyHandler = null!;
         private readonly EzModSelectionRestoreController modRestoreController = new EzModSelectionRestoreController();
+        private EzPinnedModsController pinnedModsController = null!;
         private FooterButtonMods footerButtonMods = null!;
 
         // Blue is the most neutral choice, so I'm using that for now.
@@ -205,6 +206,7 @@ namespace osu.Game.Screens.Select
         private void load(AudioManager audio, OsuConfigManager config, Ez2ConfigManager ezConfig)
         {
             errorSample = audio.Samples.Get(@"UI/generic-error");
+            pinnedModsController = new EzPinnedModsController(ezConfig);
 
             AddRangeInternal(new Drawable[]
             {
@@ -402,6 +404,7 @@ namespace osu.Game.Screens.Select
         {
             ShowPresets = true,
             RestoreController = modRestoreController,
+            PinnedMods = pinnedModsController,
         };
 
         private void requestRecommendedSelection(IEnumerable<GroupedBeatmap> groupedBeatmaps)
