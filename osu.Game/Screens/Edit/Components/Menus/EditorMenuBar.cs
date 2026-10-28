@@ -21,6 +21,10 @@ namespace osu.Game.Screens.Edit.Components.Menus
         // Icon + "Ez2Lazereditor" needs more than upstream's 114 (sized for "osu!editor").
         private const float heading_area = 140;
 
+        private const float heading_icon_size = 26;
+
+        private const float heading_gap = 4;
+
         public EditorMenuBar()
             : base(Direction.Horizontal, true)
         {
@@ -46,12 +50,12 @@ namespace osu.Game.Screens.Edit.Components.Menus
                     Width = heading_area,
                     Padding = new MarginPadding(8),
                     Direction = FillDirection.Horizontal,
-                    Spacing = new Vector2(6),
+                    Spacing = new Vector2(heading_gap),
                     Children = new Drawable[]
                     {
                         new SpriteIcon
                         {
-                            Size = new Vector2(26),
+                            Size = new Vector2(heading_icon_size),
                             Anchor = Anchor.CentreLeft,
                             Origin = Anchor.CentreLeft,
                             Icon = OsuIcon.EditCircle,

@@ -348,4 +348,7 @@ FodyWeavers.xsd
 # MacOS literally shits anywhere lmao
 *.DS_Store
 
+# Cursor 本地规则（上游已停止跟踪，仅本地保留）
+.cursor/
+
 #.github/workflows
