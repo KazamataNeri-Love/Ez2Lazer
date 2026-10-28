@@ -19,7 +19,7 @@ namespace osu.Game.Screens.Edit.Components.Menus
     public partial class EditorMenuBar : OsuMenu
     {
         // Icon + "Ez2Lazereditor" needs more than upstream's 114 (sized for "osu!editor").
-        private const float heading_area = 168;
+        private const float heading_area = 140;
 
         public EditorMenuBar()
             : base(Direction.Horizontal, true)

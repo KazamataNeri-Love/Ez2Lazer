@@ -25,6 +25,7 @@ using osu.Game.EzOsuGame.Edit.Note;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.EzOsuGame.Overlays.Preview;
 using osu.Game.EzOsuGame.ScriptedSkin;
+using osu.Game.EzOsuGame.UI;
 using osu.Game.Graphics.Cursor;
 using osu.Game.IO;
 using osu.Game.Overlays;
@@ -34,6 +35,7 @@ using osu.Game.Overlays.SkinEditor;
 using osu.Game.Rulesets;
 using osu.Game.Screens;
 using osu.Game.Skinning;
+using osuTK;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -57,6 +59,8 @@ namespace osu.Game.EzOsuGame.Edit
     /// </summary>
     public partial class EzSkinEditorScreen : OsuScreen
     {
+        public override bool HideOverlaysOnEnter => true;
+
         [Cached]
         private readonly OverlayColourProvider colourProvider = new OverlayColourProvider(OverlayColourScheme.Blue);
 
@@ -104,6 +108,7 @@ namespace osu.Game.EzOsuGame.Edit
         private EzSkinEditorSceneBar sceneBar = null!;
         private EzSkinEditorSidebar sidebar = null!;
         private EzSkinEditorTopToolbar topToolbar = null!;
+        private EzSkinEditorPlaybackControls playbackControls = null!;
 
         private EzSkinEditorBeatmapPicker? beatmapPicker;
 
@@ -245,13 +250,38 @@ namespace osu.Game.EzOsuGame.Edit
                                                 CanExportOsk = canExportOsk,
                                                 CanUseConfigSnapshot = () => sceneBar.CurrentScene.Value != EzSkinEditorSceneType.Note,
                                             },
-                                            topToolbar = new EzSkinEditorTopToolbar
+                                            // Ez-only (official menu has skin dropdown alone). Right→left: skin, mode, progress+play.
+                                            new FillFlowContainer
                                             {
-                                                PreviewSource = PreviewState.Source,
-                                                PreviewMode = PreviewState.Mode,
-                                                LoopBeatmap = PreviewState.LoopBeatmap,
-                                                ToggleBeatmapPlaybackRequested = toggleBeatmapPlayback,
-                                                BeatmapPreviewRequested = selectBeatmapPreview,
+                                                Name = @"Header controls",
+                                                Anchor = Anchor.CentreRight,
+                                                Origin = Anchor.CentreRight,
+                                                AutoSizeAxes = Axes.X,
+                                                RelativeSizeAxes = Axes.Y,
+                                                Direction = FillDirection.Horizontal,
+                                                Spacing = new Vector2(8),
+                                                Padding = new MarginPadding
+                                                {
+                                                    Horizontal = 8,
+                                                    Vertical = EzUIStyleV1.SCENE_BAR_GAP,
+                                                },
+                                                Children = new Drawable[]
+                                                {
+                                                    playbackControls = new EzSkinEditorPlaybackControls(),
+                                                    topToolbar = new EzSkinEditorTopToolbar
+                                                    {
+                                                        PreviewSource = PreviewState.Source,
+                                                        PreviewMode = PreviewState.Mode,
+                                                        LoopBeatmap = PreviewState.LoopBeatmap,
+                                                        Ruleset = PreviewState.Ruleset,
+                                                        BeatmapPreviewRequested = selectBeatmapPreview,
+                                                    },
+                                                    new EzSkinEditorSkinDropdown
+                                                    {
+                                                        Anchor = Anchor.CentreLeft,
+                                                        Origin = Anchor.CentreLeft,
+                                                    },
+                                                },
                                             },
                                         },
                                     },
@@ -309,21 +339,22 @@ namespace osu.Game.EzOsuGame.Edit
 
             var source = getActiveScenePlaybackSource();
 
-            if (source == null || !source.IsPlaying)
+            if (source == null)
                 return;
 
-            if (source.CurrentTime - lastSceneBarProgressDisplayTime < 16)
+            // Match EzBeatmapPreviewOverlay: Abs so seek/loop backwards still refreshes.
+            if (Math.Abs(source.CurrentTime - lastSceneBarProgressDisplayTime) < 16)
                 return;
 
-            sceneBar.PlaybackControls.SetCurrentTime(source.CurrentTime);
+            playbackControls.SetCurrentTime(source.CurrentTime);
             lastSceneBarProgressDisplayTime = source.CurrentTime;
         }
 
         private void bindSceneBarPlayback()
         {
-            var controls = sceneBar.PlaybackControls;
+            var controls = playbackControls;
             controls.OnSeek = seekSceneBarPlayback;
-            controls.OnPlayStateChanged = setSceneBarPlaybackPlaying;
+            controls.OnPlayPauseClicked = toggleBeatmapPlayback;
 
             sceneBarPreviewModeBindable = PreviewState.Mode.GetBoundCopy();
             sceneBarPreviewModeBindable.BindValueChanged(mode =>
@@ -332,9 +363,12 @@ namespace osu.Game.EzOsuGame.Edit
             }, true);
         }
 
-        private void seekSceneBarPlayback(double time) => getActiveScenePlaybackSource()?.Seek(time);
-
-        private void setSceneBarPlaybackPlaying(bool playing) => setBeatmapPlaybackPlaying(playing);
+        private void seekSceneBarPlayback(double time)
+        {
+            getActiveScenePlaybackSource()?.Seek(time);
+            lastSceneBarProgressDisplayTime = double.MinValue;
+            playbackControls.SetCurrentTime(time, seeking: true);
+        }
 
         private void setBeatmapPlaybackPlaying(bool playing, bool updateMode = true)
         {
@@ -347,14 +381,14 @@ namespace osu.Game.EzOsuGame.Edit
             }
 
             getActiveScenePlaybackSource()?.SetPlaying(playing);
-            sceneBar.PlaybackControls.SetPlaying(playing);
+            playbackControls.SetPlaying(playing);
             applyPreviewAudioPolicy();
-            refreshSceneBarPlayback();
+            refreshSceneBarPlayback(playing);
         }
 
-        private void refreshSceneBarPlayback()
+        private void refreshSceneBarPlayback(bool? playingOverride = null)
         {
-            var controls = sceneBar.PlaybackControls;
+            var controls = playbackControls;
             var source = getActiveScenePlaybackSource();
 
             if (source == null)
@@ -363,10 +397,13 @@ namespace osu.Game.EzOsuGame.Edit
                 return;
             }
 
+            bool playing = playingOverride ?? source.IsPlaying;
+
             controls.Alpha = 1;
             controls.SetRange(source.BeatmapMinTime, source.BeatmapMaxTime);
             controls.SetCurrentTime(source.CurrentTime);
-            controls.SetPlaying(source.IsPlaying);
+            lastSceneBarProgressDisplayTime = source.CurrentTime;
+            controls.SetPlaying(playing);
         }
 
         private IEzSkinEditorScenePlaybackSource? getActiveScenePlaybackSource()
@@ -379,9 +416,9 @@ namespace osu.Game.EzOsuGame.Edit
                 return player;
 
             if (scene is EzSkinEditorSceneType.Appearance
-                or EzSkinEditorSceneType.Size
-                or EzSkinEditorSceneType.Colour
-                or EzSkinEditorSceneType.SkinIni)
+                         or EzSkinEditorSceneType.Size
+                         or EzSkinEditorSceneType.Colour
+                         or EzSkinEditorSceneType.SkinIni)
                 return sceneContentHost.ChildrenOfType<IEzSkinEditorScenePlaybackSource>().FirstOrDefault(s => s.IsActive);
 
             return null;
@@ -447,7 +484,7 @@ namespace osu.Game.EzOsuGame.Edit
             if (appearanceBeatmapMode)
                 mountAppearanceEmbeddedPlayer();
 
-            Schedule(refreshSceneBarPlayback);
+            Schedule(() => refreshSceneBarPlayback());
             menuBar.RefreshMenuState();
         }
 
@@ -472,7 +509,9 @@ namespace osu.Game.EzOsuGame.Edit
             if (!PreviewState.HasBeatmapLoaded && !PreviewState.LoopBeatmap.Value)
                 return;
 
-            setBeatmapPlaybackPlaying(PreviewState.Mode.Value != EzBeatmapPreviewMode.Dynamic);
+            var source = getActiveScenePlaybackSource();
+            bool playing = source?.IsPlaying ?? PreviewState.Mode.Value == EzBeatmapPreviewMode.Dynamic;
+            setBeatmapPlaybackPlaying(!playing);
         }
 
         private void selectBeatmapPreview(RulesetInfo ruleset)
@@ -504,9 +543,9 @@ namespace osu.Game.EzOsuGame.Edit
             bool useVirtualComparisonPreview = currentScene == EzSkinEditorSceneType.Size;
             bool useNoteComparisonOnly = currentScene == EzSkinEditorSceneType.Note;
             bool supportsPlayfieldPreview = currentScene is EzSkinEditorSceneType.Appearance
-                or EzSkinEditorSceneType.Size
-                or EzSkinEditorSceneType.Colour
-                or EzSkinEditorSceneType.SkinIni;
+                                                            or EzSkinEditorSceneType.Size
+                                                            or EzSkinEditorSceneType.Colour
+                                                            or EzSkinEditorSceneType.SkinIni;
 
             // PreviewHost scenes use the selected ruleset beatmap unless loop chart is on.
             bool allowBeatmapPreview = supportsPlayfieldPreview
@@ -1138,7 +1177,7 @@ namespace osu.Game.EzOsuGame.Edit
 
             if (profile == null)
             {
-                postNotification(EzEditorStrings.PLACEHOLDER_NOTE_RULESET_NOT_SUPPORTED);
+                postNotification(EzEditorStrings.TOOLBAR_NOT_SUPPORTED);
                 return;
             }
 
@@ -1262,13 +1301,13 @@ namespace osu.Game.EzOsuGame.Edit
             if (getSceneContent<EzSkinEditorPreviewHost>() is EzSkinEditorPreviewHost previewHost)
             {
                 previewHost.RefreshFromContext(sceneContext);
-                Schedule(refreshSceneBarPlayback);
+                Schedule(() => refreshSceneBarPlayback());
                 return;
             }
 
             var strategy = EzSkinEditorSceneRegistry.Get(sceneBar.CurrentScene.Value);
             sceneContentHost.Child = strategy.CreateSceneContent(sceneContext);
-            Schedule(refreshSceneBarPlayback);
+            Schedule(() => refreshSceneBarPlayback());
         }
 
         private void exportPreviewImage()
@@ -1388,6 +1427,7 @@ namespace osu.Game.EzOsuGame.Edit
                 return;
 
             mountAppearanceEmbeddedPlayer();
+            PreviewState.ResumeBeatmapPlayback();
             embeddedPlayer?.Restart();
             refreshPreviewContent();
         }

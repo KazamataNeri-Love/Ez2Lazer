@@ -104,14 +104,14 @@ namespace osu.Game.EzOsuGame.Edit.Components
                         return;
 
                     playbackContainer.Child = context.Provider.CreateDynamicPart(context.EditorSkin, context.VirtualPreviewKeyCount)
-                        .With(d => d.RelativeSizeAxes = Axes.Both);
+                                                     .With(d => d.RelativeSizeAxes = Axes.Both);
                     return;
                 }
 
                 if (!shouldRebuildPlayback("loop-unsupported", context.PreviewRuleset))
                     return;
 
-                playbackContainer.Child = createPlaceholder(EzEditorStrings.PLACEHOLDER_LOOP_BEATMAP_NOT_SUPPORTED);
+                playbackContainer.Child = createPlaceholder(EzEditorStrings.TOOLBAR_NOT_SUPPORTED);
                 return;
             }
 
@@ -142,7 +142,7 @@ namespace osu.Game.EzOsuGame.Edit.Components
                 comparisonHost = null;
 
                 if (comparisonContainer.Child is not OsuSpriteText)
-                    comparisonContainer.Child = createPlaceholder(EzEditorStrings.PLACEHOLDER_COMPARISON_NOT_SUPPORTED);
+                    comparisonContainer.Child = createPlaceholder(EzEditorStrings.TOOLBAR_NOT_SUPPORTED);
 
                 return;
             }

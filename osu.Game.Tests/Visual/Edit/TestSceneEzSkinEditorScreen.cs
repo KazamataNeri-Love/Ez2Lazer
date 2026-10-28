@@ -136,7 +136,7 @@ namespace osu.Game.Tests.Visual.Edit
             AddUntilStep("comparison grid visible", () => editorScreen.ChildrenOfType<EzSkinEditorPreviewHost>().Single().ChildrenOfType<GridContainer>().Any());
             AddUntilStep("at least one sidebar group", () => editorScreen.ChildrenOfType<EzSkinEditorSettingsGroup>().Any());
             AddAssert("no comparison placeholder", () => editorScreen.ChildrenOfType<OsuSpriteText>().All(t => t.Text.ToString().Contains("对比区") != true));
-            AddAssert("comparison preview supported", () => editorScreen.ChildrenOfType<OsuSpriteText>().All(t => t.Text.ToString().Contains(EzEditorStrings.PLACEHOLDER_COMPARISON_NOT_SUPPORTED.ToString()) != true));
+            AddAssert("comparison preview supported", () => editorScreen.ChildrenOfType<OsuSpriteText>().All(t => t.Text.ToString().Contains(EzEditorStrings.TOOLBAR_NOT_SUPPORTED.ToString()) != true));
             AddUntilStep("unified note comparison host visible", () => editorScreen.ChildrenOfType<EzSkinEditorNoteComparisonHost>().Any());
             AddUntilStep("playback and comparison are horizontal", () =>
             {
@@ -214,7 +214,7 @@ namespace osu.Game.Tests.Visual.Edit
             AddStep("enable loop chart", () => editorScreen.PreviewState.LoopBeatmap.Value = true);
 
             AddUntilStep("two sidebar groups", () => editorScreen.ChildrenOfType<EzSkinEditorSettingsGroup>().Count() == 2);
-            AddAssert("comparison preview supported", () => editorScreen.ChildrenOfType<OsuSpriteText>().All(t => t.Text.ToString().Contains(EzEditorStrings.PLACEHOLDER_COMPARISON_NOT_SUPPORTED.ToString()) != true));
+            AddAssert("comparison preview supported", () => editorScreen.ChildrenOfType<OsuSpriteText>().All(t => t.Text.ToString().Contains(EzEditorStrings.TOOLBAR_NOT_SUPPORTED.ToString()) != true));
 
             // Colour loop chart drives one full-width virtual playfield from the sidebar key mode; the unified note comparison is Size/Note only.
             AddUntilStep("virtual playfield has 4 columns", () => editorScreen.ChildrenOfType<Column>().Count() == 4);
