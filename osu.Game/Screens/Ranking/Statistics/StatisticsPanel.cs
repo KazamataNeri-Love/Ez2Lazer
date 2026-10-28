@@ -192,6 +192,7 @@ namespace osu.Game.Screens.Ranking.Statistics
                     };
 
                     bool anyRequiredHitEvents = false;
+                    int statisticIndex = 1;
 
                     foreach (var item in statisticItems)
                     {
@@ -201,10 +202,11 @@ namespace osu.Game.Screens.Ranking.Statistics
                             continue;
                         }
 
-                        flow.Add(new StatisticItemContainer(item)
+                        flow.Add(new StatisticItemContainer(item, newScore.Ruleset.ShortName)
                         {
                             Anchor = Anchor.TopCentre,
                             Origin = Anchor.TopCentre,
+                            DisplayIndex = statisticIndex++,
                         });
                     }
 

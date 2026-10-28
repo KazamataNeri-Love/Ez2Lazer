@@ -30,7 +30,11 @@ namespace osu.Game.EzOsuGame.Layout
         private readonly ISkinComponentToolboxFilter toolboxFilter = EzLayoutToolboxBlacklist.INSTANCE;
 
         protected override IEnumerable<SkinnableContainer> AvailableTargets =>
-            layoutLayer.LayoutContainers.Where(c => c.Alpha > 0);
+            layoutLayer.AllLayoutContainers.Where(c => c.Alpha > 0);
+
+        // The results backdrop is a backdrop, not a HUD layer: keep it visible while previewing without HUD.
+        protected override bool ShouldFadeWithHudLayer(SkinnableContainer target)
+            => target.Lookup.Lookup != GlobalSkinnableContainers.ResultsBackground;
 
         protected override void RequestClose() => editorOverlay.Hide();
 

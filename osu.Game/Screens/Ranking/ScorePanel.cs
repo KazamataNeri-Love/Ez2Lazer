@@ -14,6 +14,7 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Input.Events;
 using osu.Framework.Utils;
+using osu.Game.EzOsuGame.Statistics;
 using osu.Game.Scoring;
 using osu.Game.Screens.Ranking.Contracted;
 using osu.Game.Screens.Ranking.Expanded;
@@ -43,7 +44,7 @@ namespace osu.Game.Screens.Ranking
         /// <summary>
         /// Height of the panel when expanded.
         /// </summary>
-        private const float expanded_height = 586;
+        public const float EXPANDED_HEIGHT = 586;
 
         /// <summary>
         /// Height of the top layer when the panel is expanded.
@@ -94,6 +95,24 @@ namespace osu.Game.Screens.Ranking
 
         public readonly ScoreInfo Score;
 
+        /// <summary>
+        /// Zero-based display position within the results list. Selects the configured card background image.
+        /// </summary>
+        public int DisplayIndex
+        {
+            get => displayIndex;
+            set
+            {
+                if (displayIndex == value)
+                    return;
+
+                displayIndex = value;
+
+                if (cardBackground != null)
+                    cardBackground.DisplayIndex = value;
+            }
+        }
+
         [Resolved]
         private OsuGameBase game { get; set; } = null!;
 
@@ -110,6 +129,8 @@ namespace osu.Game.Screens.Ranking
         private Drawable middleLayerBackground = null!;
         private Container middleLayerContentContainer = null!;
         private Drawable? middleLayerContent;
+        private EzResultsCardBackground? cardBackground;
+        private int displayIndex;
 
         private ScorePanelTrackingContainer? trackingContainer;
 
@@ -169,9 +190,14 @@ namespace osu.Game.Screens.Ranking
                                 CornerRadius = 20,
                                 CornerExponent = 2.5f,
                                 Masking = true,
-                                Children = new[]
+                                Children = new Drawable[]
                                 {
                                     middleLayerBackground = new Box { RelativeSizeAxes = Axes.Both },
+                                    cardBackground = new EzResultsCardBackground
+                                    {
+                                        DisplayIndex = displayIndex,
+                                        RulesetShortName = Score.Ruleset.ShortName,
+                                    },
                                     new CoverBackground
                                     {
                                         RelativeSizeAxes = Axes.Both,
@@ -245,7 +271,7 @@ namespace osu.Game.Screens.Ranking
             switch (state)
             {
                 case PanelState.Expanded:
-                    Size = new Vector2(EXPANDED_WIDTH, expanded_height);
+                    Size = new Vector2(EXPANDED_WIDTH, EXPANDED_HEIGHT);
 
                     topLayerBackground.FadeColour(expanded_top_layer_colour, RESIZE_DURATION, Easing.OutQuint);
                     middleLayerBackground.FadeColour(expanded_middle_layer_colour, RESIZE_DURATION, Easing.OutQuint);

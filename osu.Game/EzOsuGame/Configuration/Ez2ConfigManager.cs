@@ -229,6 +229,18 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.NoteCornerRadius, 5, 0.0, 80, 1);
             SetDefault(Ez2Setting.NoteTrackLineHeight, 300, 0, 1000, 5.0);
 
+            SetDefault(Ez2Setting.ResultsCardBackgroundEnabled, false);
+            SetDefault(Ez2Setting.ResultsCardBackgroundEditingMode, 3);
+
+            for (int i = 0; i < 6; i++)
+            {
+                SetDefault((Ez2Setting)((int)Ez2Setting.ResultsCardBackgroundImage0 + i), string.Empty);
+                SetDefault((Ez2Setting)((int)Ez2Setting.ResultsCardBackgroundColour0 + i), Colour4.White);
+                SetDefault((Ez2Setting)((int)Ez2Setting.ResultsCardBackgroundFillMode0 + i), 0);
+            }
+
+            SetDefault(Ez2Setting.ResultsCardBackgroundRevision, 0);
+
             #endregion
 
             #region 列着色与配色系统
@@ -1308,6 +1320,44 @@ namespace osu.Game.EzOsuGame.Configuration
         HitTargetAlpha,
         NoteHeightScaleToWidth,
         NoteTrackLineHeight,
+
+        // 结算卡片背景（目前仅 Mania 有卡片映射）
+        ResultsCardBackgroundEnabled,
+
+        /// <summary>编辑器当前编辑的模式（0=osu 1=taiko 2=catch 3=mania），仅影响编辑界面。</summary>
+        ResultsCardBackgroundEditingMode,
+
+        /// <summary>
+        /// 卡片背景图文件名（<c>EzResources/Modify/Results</c> 下），空串代表该卡不换图。
+        /// 槽位：Main、Performance Breakdown、Space Graph、Timing Distribution、Every Column Timing Graph、Hit Result Count。
+        /// </summary>
+        ResultsCardBackgroundImage0,
+        ResultsCardBackgroundImage1,
+        ResultsCardBackgroundImage2,
+        ResultsCardBackgroundImage3,
+        ResultsCardBackgroundImage4,
+        ResultsCardBackgroundImage5,
+
+        /// <summary>卡片背景的乘色（含透明度，格式 #RRGGBBAA）。</summary>
+        ResultsCardBackgroundColour0,
+        ResultsCardBackgroundColour1,
+        ResultsCardBackgroundColour2,
+        ResultsCardBackgroundColour3,
+        ResultsCardBackgroundColour4,
+        ResultsCardBackgroundColour5,
+
+        /// <summary>0 = Fill（保持比例铺满并裁剪），1 = Uniform（保持比例完整显示）。</summary>
+        ResultsCardBackgroundFillMode0,
+        ResultsCardBackgroundFillMode1,
+        ResultsCardBackgroundFillMode2,
+        ResultsCardBackgroundFillMode3,
+        ResultsCardBackgroundFillMode4,
+        ResultsCardBackgroundFillMode5,
+
+        /// <summary>
+        /// 自增即强制所有结算卡片重新取图（替换同名图片后刷新用）。
+        /// </summary>
+        ResultsCardBackgroundRevision,
 
         ManiaBarLinesBool,
         ManiaPseudo3DRotation,

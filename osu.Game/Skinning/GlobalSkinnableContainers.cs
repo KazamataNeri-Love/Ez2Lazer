@@ -23,6 +23,12 @@ namespace osu.Game.Skinning
         Background,
 
         [Description("Music player")]
-        MusicPlayer
+        MusicPlayer,
+
+        [Description("Results")]
+        Results,
+
+        [Description("Results background")]
+        ResultsBackground
     }
 }

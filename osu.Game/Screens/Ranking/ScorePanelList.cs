@@ -69,6 +69,7 @@ namespace osu.Game.Screens.Ranking
         private readonly Flow flow;
         private readonly Scroll scroll;
         private ScorePanel? expandedPanel;
+        private ScorePanel[]? lastDisplayOrder;
 
         /// <summary>
         /// Creates a new <see cref="ScorePanelList"/>.
@@ -165,6 +166,24 @@ namespace osu.Game.Screens.Ranking
                     scroll.InstantScrollTarget = (scroll.InstantScrollTarget ?? scroll.Target) + ScorePanel.CONTRACTED_WIDTH + panel_spacing;
                 }
             }
+
+            updateDisplayOrder();
+        }
+
+        /// <summary>
+        /// Pushes the current display position to each panel so card backgrounds follow left-to-right order.
+        /// </summary>
+        private void updateDisplayOrder()
+        {
+            var displayOrder = flow.FlowingChildren.OfType<ScorePanelTrackingContainer>().Select(t => t.Panel).ToArray();
+
+            if (lastDisplayOrder != null && lastDisplayOrder.SequenceEqual(displayOrder))
+                return;
+
+            lastDisplayOrder = displayOrder;
+
+            for (int i = 0; i < displayOrder.Length; i++)
+                displayOrder[i].DisplayIndex = i;
         }
 
         /// <summary>

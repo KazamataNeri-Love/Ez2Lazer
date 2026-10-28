@@ -56,7 +56,12 @@ namespace osu.Game.EzOsuGame.Layout
 
         public void LoadFromStore() => Reload(store.CreateComponentsContainer(Lookup, fallback));
 
+        /// <summary>
+        /// Whether this container consumes positional input. Layers hosted underneath a screen must opt out.
+        /// </summary>
+        public bool ConsumesInput { get; init; } = true;
+
         public override bool ReceivePositionalInputAt(Vector2 screenSpacePos) =>
-            Alpha > 0 && InternalChildren.Any(c => c.IsPresent && c.ReceivePositionalInputAt(screenSpacePos));
+            ConsumesInput && Alpha > 0 && InternalChildren.Any(c => c.IsPresent && c.ReceivePositionalInputAt(screenSpacePos));
     }
 }

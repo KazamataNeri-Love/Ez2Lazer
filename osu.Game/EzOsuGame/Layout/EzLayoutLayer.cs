@@ -10,7 +10,9 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Platform;
 using osu.Framework.Screens;
 using osu.Game.EzOsuGame.Screens.MusicPlayer;
+using osu.Game.Screens;
 using osu.Game.Screens.Play;
+using osu.Game.Screens.Ranking;
 using osu.Game.Screens.Select;
 using osu.Game.Skinning;
 using osuTK;
@@ -34,10 +36,13 @@ namespace osu.Game.EzOsuGame.Layout
         private EzLayoutContainer? gameplayContainer;
         private EzLayoutContainer? rulesetGameplayContainer;
         private EzLayoutContainer? musicPlayerContainer;
+        private EzLayoutContainer? resultsContainer;
+        private EzLayoutContainer? resultsBackgroundContainer;
         private Player? pendingPlayer;
 
         private bool onSongSelect;
         private bool onMusicPlayer;
+        private bool onResults;
         private bool songSelectLayoutSuppressed;
 
         /// <summary>
@@ -97,9 +102,20 @@ namespace osu.Game.EzOsuGame.Layout
 
             game.ScreenStack.ScreenPushed -= onScreenChanged;
             game.ScreenStack.ScreenExited -= onScreenChanged;
+
+            // The results backdrop lives on the screen stack, not in this layer's own children.
+            resultsBackgroundContainer?.Expire();
+            resultsBackgroundContainer = null;
         }
 
-        public IEnumerable<EzLayoutContainer> LayoutContainers => InternalChildren.OfType<EzLayoutContainer>();
+        public IEnumerable<EzLayoutContainer> LayoutContainers
+            => InternalChildren.OfType<EzLayoutContainer>();
+
+        /// <summary>
+        /// All layout targets, including the results backdrop which is hosted by <see cref="OsuScreenStack"/>.
+        /// </summary>
+        public IEnumerable<EzLayoutContainer> AllLayoutContainers
+            => resultsBackgroundContainer == null ? LayoutContainers : LayoutContainers.Append(resultsBackgroundContainer);
 
         public override bool ReceivePositionalInputAt(Vector2 screenSpacePos) =>
             InternalChildren.Any(c => c.IsPresent && c.ReceivePositionalInputAt(screenSpacePos));
@@ -112,10 +128,12 @@ namespace osu.Game.EzOsuGame.Layout
 
             onSongSelect = screen is SongSelect;
             onMusicPlayer = screen is EzMusicPlayerScreen;
+            onResults = screen is ResultsScreen;
             bool onPlayer = screen is Player;
 
             updateSongSelectContainerVisibility();
             updateMusicPlayerContainerVisibility();
+            updateResultsContainerVisibility();
 
             if (onPlayer && screen is Player player)
             {
@@ -228,6 +246,50 @@ namespace osu.Game.EzOsuGame.Layout
                 EzMusicPlayerLayoutDefaults.Create);
 
             AddInternal(container);
+            return container;
+        }
+
+        private void updateResultsContainerVisibility()
+        {
+            if (!onResults)
+            {
+                if (resultsContainer != null)
+                    resultsContainer.Alpha = 0;
+
+                if (resultsBackgroundContainer != null)
+                    resultsBackgroundContainer.Alpha = 0;
+
+                return;
+            }
+
+            resultsContainer ??= createResultsContainer();
+            resultsContainer.Alpha = 1;
+
+            resultsBackgroundContainer ??= createResultsBackgroundContainer();
+            resultsBackgroundContainer.Alpha = 1;
+        }
+
+        private EzLayoutContainer createResultsContainer()
+        {
+            var container = new EzLayoutContainer(
+                Store,
+                new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.Results));
+
+            AddInternal(container);
+            return container;
+        }
+
+        private EzLayoutContainer createResultsBackgroundContainer()
+        {
+            // Hosted by the screen stack so it sits between the beatmap background and the results screen itself.
+            var container = new EzLayoutContainer(
+                Store,
+                new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.ResultsBackground))
+            {
+                ConsumesInput = false,
+            };
+
+            game.ScreenStack.UnderlayContent.Add(container);
             return container;
         }
 

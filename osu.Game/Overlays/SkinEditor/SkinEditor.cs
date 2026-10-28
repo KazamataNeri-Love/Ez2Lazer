@@ -23,6 +23,7 @@ using osu.Framework.Testing;
 using osu.Game.Database;
 using osu.Game.EzOsuGame.Edit.Components;
 using osu.Game.EzOsuGame.HUD;
+using osu.Game.EzOsuGame.Layout;
 using osu.Game.EzOsuGame.Screens;
 using osu.Game.EzOsuGame.ScriptedSkin;
 using osu.Game.EzOsuGame.UI;
@@ -263,7 +264,7 @@ namespace osu.Game.Overlays.SkinEditor
                                                 Depth = float.MaxValue,
                                                 RelativeSizeAxes = Axes.Both,
                                             },
-                                            settingsSidebar = new EzEditorSettingsSidebar(),
+                                            settingsSidebar = new EzEditorSettingsSidebar(this is EzLayoutEditor),
                                         }
                                     }
                                 }
@@ -692,10 +693,12 @@ namespace osu.Game.Overlays.SkinEditor
             float alpha = sceneLibrary.HudLayerVisible.Value ? 1 : 0;
 
             foreach (var target in AvailableTargets)
-                target.FadeTo(alpha, 200, Easing.OutQuint);
+                target.FadeTo(ShouldFadeWithHudLayer(target) ? alpha : 1, 200, Easing.OutQuint);
 
             content?.FadeTo(alpha, 200, Easing.OutQuint);
         }
+
+        protected virtual bool ShouldFadeWithHudLayer(SkinnableContainer target) => true;
 
         protected virtual void RevertToDefault()
         {

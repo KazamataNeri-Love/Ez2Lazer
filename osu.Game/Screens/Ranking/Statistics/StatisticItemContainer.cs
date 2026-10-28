@@ -8,6 +8,7 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Effects;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Localisation;
+using osu.Game.EzOsuGame.Statistics;
 using osu.Game.Graphics;
 using osuTK.Graphics;
 
@@ -18,11 +19,32 @@ namespace osu.Game.Screens.Ranking.Statistics
     /// </summary>
     internal partial class StatisticItemContainer : CompositeDrawable
     {
+        private EzResultsCardBackground? cardBackground;
+        private int displayIndex;
+
+        /// <summary>
+        /// Config slot used for the card background (0 is the score panel, 1..7 are the statistics cards).
+        /// </summary>
+        public int DisplayIndex
+        {
+            get => displayIndex;
+            set
+            {
+                if (displayIndex == value)
+                    return;
+
+                displayIndex = value;
+
+                if (cardBackground != null)
+                    cardBackground.DisplayIndex = value;
+            }
+        }
+
         /// <summary>
         /// Creates a new <see cref="StatisticItemContainer"/>.
         /// </summary>
         /// <param name="item">The <see cref="StatisticItem"/> to display.</param>
-        public StatisticItemContainer(StatisticItem item)
+        public StatisticItemContainer(StatisticItem item, string? rulesetShortName = null)
         {
             RelativeSizeAxes = Axes.X;
             AutoSizeAxes = Axes.Y;
@@ -37,7 +59,7 @@ namespace osu.Game.Screens.Ranking.Statistics
                 Masking = true,
                 CornerRadius = 20,
                 CornerExponent = 2.5f,
-                Children = new[]
+                Children = new Drawable[]
                 {
                     new Box
                     {
@@ -46,6 +68,11 @@ namespace osu.Game.Screens.Ranking.Statistics
                             OsuColour.Gray(0.18f).Opacity(0.95f)
                         ),
                         RelativeSizeAxes = Axes.Both,
+                    },
+                    cardBackground = new EzResultsCardBackground
+                    {
+                        DisplayIndex = displayIndex,
+                        RulesetShortName = rulesetShortName,
                     },
                     new Container
                     {

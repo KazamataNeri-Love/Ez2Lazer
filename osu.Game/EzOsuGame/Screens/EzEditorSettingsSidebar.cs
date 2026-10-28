@@ -18,14 +18,16 @@ namespace osu.Game.EzOsuGame.Screens
 
             EzSkin = 1,
 
-            Column = 2
+            Column = 2,
+
+            Result = 3
         }
 
         private EzEditorSectionSettingsSidebar? ezSkinSettings;
         private SidebarTab currentTab = SidebarTab.Select;
         private Action<Container<EditorSidebarSection>>? lastPopulator;
 
-        public EzEditorSettingsSidebar()
+        public EzEditorSettingsSidebar(bool showsResultsTab = false)
         {
             OsuTabControl<SidebarTab> tabControl;
             // 添加tabControl背景，防止内容遮挡tab标签
@@ -43,7 +45,9 @@ namespace osu.Game.EzOsuGame.Screens
                 RelativeSizeAxes = Axes.X,
                 Height = 30,
                 Margin = new MarginPadding { Left = 5 },
-                Items = new[] { SidebarTab.Select, SidebarTab.EzSkin, SidebarTab.Column }
+                Items = showsResultsTab
+                    ? new[] { SidebarTab.Select, SidebarTab.EzSkin, SidebarTab.Column, SidebarTab.Result }
+                    : new[] { SidebarTab.Select, SidebarTab.EzSkin, SidebarTab.Column }
             });
 
             // 设置内容区整体下移，避免与tab栏重叠
@@ -62,6 +66,10 @@ namespace osu.Game.EzOsuGame.Screens
 
                     case SidebarTab.Column:
                         showColumnSettings();
+                        break;
+
+                    case SidebarTab.Result:
+                        showResultSettings();
                         break;
 
                     case SidebarTab.Select when lastPopulator != null:
@@ -87,6 +95,14 @@ namespace osu.Game.EzOsuGame.Screens
                 RelativeSizeAxes = Axes.X
             };
             Content.Add(ezColumnSettings);
+        }
+
+        private void showResultSettings()
+        {
+            Content.Add(new EzEditorSectionResultsSidebar
+            {
+                RelativeSizeAxes = Axes.X
+            });
         }
 
         /// <summary>
