@@ -50,6 +50,7 @@ using osu.Game.EzOsuGame.Material;
 using osu.Game.EzOsuGame.Overlays;
 using osu.Game.EzOsuGame.Performance;
 using osu.Game.EzOsuGame.Playback;
+using osu.Game.EzOsuGame.Pets;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.EzOsuGame.Screens.Play;
 using osu.Game.Graphics;
@@ -171,8 +172,6 @@ namespace osu.Game
 
         private EzSkinEditorOverlay ezSkinEditor;
 
-        private EzPlaybackController ezPlayback;
-
         private Container overlayContent;
 
         private Container rightFloatingOverlayContent;
@@ -229,6 +228,8 @@ namespace osu.Game
         protected readonly Bindable<LocalUserPlayingState> UserPlayingState = new Bindable<LocalUserPlayingState>();
 
         public OsuScreenStack ScreenStack { get; private set; }
+
+        protected override IScreen CurrentScreen => ScreenStack?.CurrentScreen;
 
         protected BackButton BackButton => screenStackFooter.BackButton;
         protected ScreenFooter ScreenFooter => screenStackFooter.Footer;
@@ -1235,11 +1236,6 @@ namespace osu.Game
 
             Dependencies.Cache(ScreenFooter);
 
-            // Functional-layer transport for playback UIs (editor progress bar, visualizer ring). Resolves the
-            // current control target from the screen stack, so it must be registered after the stack exists.
-            Add(ezPlayback = new EzPlaybackController(() => ScreenStack.CurrentScreen));
-            Dependencies.CacheAs(ezPlayback);
-
             ScreenStack.ScreenPushed += screenPushed;
             ScreenStack.ScreenExited += screenExited;
 
@@ -1249,6 +1245,8 @@ namespace osu.Game
                 Origin = Anchor.BottomRight,
                 Margin = new MarginPadding(5),
             }, topMostOverlayContent.Add);
+
+            loadComponentSingleFile(new EzDesktopPetLayer(), topMostOverlayContent.Add, true);
 
             if (!IsDeployedBuild)
                 loadComponentSingleFile(devBuildBanner = new DevBuildBanner(), ScreenContainer.Add);
