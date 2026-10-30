@@ -25,7 +25,7 @@ namespace osu.Game.EzOsuGame.Screens
     /// 结算卡片背景配置页：模式选择、开关、每张卡的图 / 染色 / 填充方式。
     /// 仅在 Ez 布局编辑器中加入右侧边栏。
     /// </summary>
-    public partial class EzEditorSectionResultsSidebar : EditorSidebarSection
+    public partial class EzEditorSectionResultsSidebar : FillFlowContainer
     {
         private const int card_count = 6;
         private const int mania_mode = 3;
@@ -58,8 +58,11 @@ namespace osu.Game.EzOsuGame.Screens
         private OsuSpriteText unsupportedNote = null!;
 
         public EzEditorSectionResultsSidebar()
-            : base("Result Card Background")
         {
+            RelativeSizeAxes = Axes.X;
+            AutoSizeAxes = Axes.Y;
+            Direction = FillDirection.Vertical;
+            Spacing = new Vector2(10);
         }
 
         [BackgroundDependencyLoader]
@@ -132,14 +135,8 @@ namespace osu.Game.EzOsuGame.Screens
                 sections.Add(section);
             }
 
-            InternalChild = new FillFlowContainer
-            {
-                RelativeSizeAxes = Axes.X,
-                AutoSizeAxes = Axes.Y,
-                Direction = FillDirection.Vertical,
-                Spacing = new Vector2(10),
-                Children = sections,
-            };
+            foreach (var section in sections)
+                Add(section);
 
             updateCardSection(editMode.Value);
             editMode.BindValueChanged(v => updateCardSection(v.NewValue));

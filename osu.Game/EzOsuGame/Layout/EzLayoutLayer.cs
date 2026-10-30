@@ -44,6 +44,7 @@ namespace osu.Game.EzOsuGame.Layout
         private bool onMusicPlayer;
         private bool onResults;
         private bool songSelectLayoutSuppressed;
+        private bool editorHidden;
 
         /// <summary>
         /// When set, hides the song-select layout container even while song select is the current screen.
@@ -64,6 +65,25 @@ namespace osu.Game.EzOsuGame.Layout
 
         [Resolved]
         private OsuGame game { get; set; } = null!;
+
+        /// <summary>
+        /// When set, hides every layout container regardless of the current screen. Owned by the Ez
+        /// skin editor's HUD layer toggle, which temporarily hides the whole HUD layer while editing.
+        /// </summary>
+        public bool EditorHidden
+        {
+            get => editorHidden;
+            set
+            {
+                if (editorHidden == value)
+                    return;
+
+                editorHidden = value;
+                updateSongSelectContainerVisibility();
+                updateGameplayContainerVisibility();
+                updateResultsContainerVisibility();
+            }
+        }
 
         public EzLayoutLayer()
         {
@@ -190,6 +210,7 @@ namespace osu.Game.EzOsuGame.Layout
             if (ruleset != null)
                 rulesetGameplayContainer = addGameplayContainer(player, new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.MainHUDComponents, ruleset));
 
+            updateGameplayContainerVisibility();
             notifyTargetsChanged();
         }
 
@@ -220,7 +241,15 @@ namespace osu.Game.EzOsuGame.Layout
 
         private void updateSongSelectContainerVisibility()
         {
-            SongSelectContainer?.Alpha = onSongSelect && !songSelectLayoutSuppressed ? 1 : 0;
+            SongSelectContainer?.Alpha = onSongSelect && !songSelectLayoutSuppressed && !editorHidden ? 1 : 0;
+        }
+
+        private void updateGameplayContainerVisibility()
+        {
+            float alpha = editorHidden ? 0 : 1;
+
+            gameplayContainer?.Alpha = alpha;
+            rulesetGameplayContainer?.Alpha = alpha;
         }
 
         private void updateMusicPlayerContainerVisibility()
@@ -251,7 +280,7 @@ namespace osu.Game.EzOsuGame.Layout
 
         private void updateResultsContainerVisibility()
         {
-            if (!onResults)
+            if (!onResults || editorHidden)
             {
                 if (resultsContainer != null)
                     resultsContainer.Alpha = 0;
