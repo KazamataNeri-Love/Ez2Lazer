@@ -9,7 +9,6 @@ using osu.Game.EzOsuGame.Edit.Scenes;
 using osu.Game.Screens.Play;
 using osu.Game.Screens.Ranking;
 using osu.Game.Screens.Select;
-using osu.Game.Skinning;
 
 namespace osu.Game.EzOsuGame.Edit
 {
