@@ -10,10 +10,10 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Sprites;
-using osu.Framework.Graphics.Textures;
 using osu.Framework.Input.Events;
 using osu.Framework.Utils;
 using osu.Game.Configuration;
+using osu.Game.EzOsuGame;
 using osu.Game.EzOsuGame.Configuration;
 using osuTK;
 
@@ -314,7 +314,7 @@ namespace osu.Game.Graphics.Cursor
             }
 
             [BackgroundDependencyLoader]
-            private void load(OsuConfigManager config, Ez2ConfigManager ezConfig, TextureStore textures, OsuColour colour)
+            private void load(OsuConfigManager config, Ez2ConfigManager ezConfig, EzResourceStore resources, OsuColour colour)
             {
                 Children = new Drawable[]
                 {
@@ -330,14 +330,14 @@ namespace osu.Game.Graphics.Cursor
                                 {
                                     new Sprite
                                     {
-                                        Texture = textures.Get(@"Cursor/menu-cursor"),
+                                        Texture = resources.Get(@"Cursor/menu-cursor", EzTextureUsage.Shell),
                                     },
                                     AdditiveLayer = new Sprite
                                     {
                                         Blending = BlendingParameters.Additive,
                                         Colour = colour.Pink,
                                         Alpha = 0,
-                                        Texture = textures.Get(@"Cursor/menu-cursor-additive"),
+                                        Texture = resources.Get(@"Cursor/menu-cursor-additive", EzTextureUsage.Shell),
                                     },
                                 }
                             },
