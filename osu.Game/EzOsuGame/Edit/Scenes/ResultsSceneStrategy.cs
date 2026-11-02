@@ -18,6 +18,8 @@ namespace osu.Game.EzOsuGame.Edit.Scenes
 
         public EzSkinEditorSceneType SceneType => EzSkinEditorSceneType.Results;
 
+        public EzSkinEditorSceneGroup Group => EzSkinEditorSceneGroup.Gameplay;
+
         public LocalisableString TabTitle => EzEditorStrings.TAB_RESULTS;
 
         public bool SupportsHudLayer => true;

@@ -347,6 +347,7 @@ namespace osu.Game.Rulesets.Mania
                         new ManiaModAccuracyAdaptive(),
                         new ManiaModDoublePlay(),
                         new ManiaModDoubleSpace(),
+                        new ManiaModExtendKeys(),
                         new ManiaModGracer(),
                         new ManiaModJudgmentsAdjust(),
                         new ManiaModLNJudgementAdjust(),

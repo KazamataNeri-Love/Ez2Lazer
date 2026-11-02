@@ -262,6 +262,10 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly LocalisableString SCENE_MUSIC_PLAYER = new EzLocalizationManager.EzLocalisableString("听歌界面", "Music player");
 
+        public static readonly LocalisableString SCENE_GROUP_SONG_SELECT = new EzLocalizationManager.EzLocalisableString("选歌", "Song select");
+
+        public static readonly LocalisableString SCENE_GROUP_GAMEPLAY = new EzLocalizationManager.EzLocalisableString("游玩", "Gameplay");
+
         public static readonly LocalisableString SCENE_OFFICIAL_HUD = new EzLocalizationManager.EzLocalisableString("官方 HUD", "Official HUD");
 
         public static readonly LocalisableString SCENE_EZ_SKIN = new EzLocalizationManager.EzLocalisableString("Ez Skin", "Ez Skin");
@@ -295,6 +299,8 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly LocalisableString TAB_RESULTS = new EzLocalizationManager.EzLocalisableString("结算", "Results");
 
+        public static readonly LocalisableString TAB_BEATMAP_PREVIEW = new EzLocalizationManager.EzLocalisableString("谱面预览", "Beatmap preview");
+
         #endregion
 
         #region Sidebar groups
@@ -312,6 +318,8 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly LocalisableString GROUP_BASE_COLOURS = new EzLocalizationManager.EzLocalisableString("基础颜色", "Base colours");
 
         public static readonly LocalisableString GROUP_COLUMN_COLOURS = new EzLocalizationManager.EzLocalisableString("列配色", "Column colours");
+
+        public static readonly LocalisableString GROUP_BEATMAP_PREVIEW_MANIA = new EzLocalizationManager.EzLocalisableString("全谱外观", "Full-map appearance");
 
         public static readonly LocalisableString GROUP_GENERAL = new EzLocalizationManager.EzLocalisableString("General", "General");
 
@@ -456,6 +464,11 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly LocalisableString SKIN_SPECIFIC_SCENE_PLACEHOLDER = new EzLocalizationManager.EzLocalisableString(
             "皮肤专用场景布局预留。请在主工作区侧栏「专用」中编辑设置。",
             "Skin-specific scene layout is reserved. Edit settings under the workspace 「Scoped」 sidebar tab.");
+
+        // TODO: 谱面预览场景未实现编辑：仅做全谱预览，之后用来修改每种 note 的颜色与厚度。
+        public static readonly LocalisableString BEATMAP_PREVIEW_SCENE_PLACEHOLDER = new EzLocalizationManager.EzLocalisableString(
+            "谱面预览场景：插屏渲染 mania 全谱。之后用来修改每种 note 的颜色、厚度。",
+            "Beatmap preview scene: renders the full mania chart in a plugged screen. Will edit each note colour and thickness later.");
 
         #endregion
 

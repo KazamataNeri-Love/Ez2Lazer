@@ -16,20 +16,37 @@ namespace osu.Game.EzOsuGame.Edit
 {
     public static class EzSkinEditorSceneRegistry
     {
+        /// <summary>
+        /// Secondary scenes in display order. The order also drives the left scene rail within each group.
+        /// </summary>
         public static IReadOnlyList<IEzSkinEditorSceneStrategy> All { get; } = new IEzSkinEditorSceneStrategy[]
         {
             new SongSelectSceneStrategy(),
+            new BeatmapPreviewSceneStrategy(),
             new MusicPlayerSceneStrategy(),
             new GameplaySceneStrategy(),
             new AppearanceSceneStrategy(),
+            new NoteSceneStrategy(),
             new SkinIniSceneStrategy(),
             new SkinSpecificSceneStrategy(),
-            new NoteSceneStrategy(),
             new ResultsSceneStrategy(),
         };
 
+        /// <summary>
+        /// Top-level groups in scene-bar order.
+        /// </summary>
+        public static IReadOnlyList<EzSkinEditorSceneGroup> Groups { get; } = new[]
+        {
+            EzSkinEditorSceneGroup.SongSelect,
+            EzSkinEditorSceneGroup.Gameplay,
+        };
+
+        public static IEnumerable<IEzSkinEditorSceneStrategy> ForGroup(EzSkinEditorSceneGroup group) => All.Where(s => s.Group == group);
+
         public static IEzSkinEditorSceneStrategy Get(EzSkinEditorSceneType sceneType) =>
             All.First(s => s.SceneType == sceneType);
+
+        public static EzSkinEditorSceneGroup GroupOf(EzSkinEditorSceneType sceneType) => Get(sceneType).Group;
 
         /// <summary>
         /// Whether a scene presents an inserted screen whose skinnable HUD containers can be edited.
@@ -43,8 +60,8 @@ namespace osu.Game.EzOsuGame.Edit
         /// </summary>
         public static GlobalSkinnableContainers? ResolveLayoutTarget(EzSkinEditorSceneType sceneType) => sceneType switch
         {
-            EzSkinEditorSceneType.Gameplay => GlobalSkinnableContainers.MainHUDComponents,
-            EzSkinEditorSceneType.SongSelect => GlobalSkinnableContainers.SongSelect,
+            EzSkinEditorSceneType.GameplayHud => GlobalSkinnableContainers.MainHUDComponents,
+            EzSkinEditorSceneType.SongSelectHud => GlobalSkinnableContainers.SongSelect,
             EzSkinEditorSceneType.MusicPlayer => GlobalSkinnableContainers.MusicPlayer,
             _ => null,
         };
@@ -69,15 +86,15 @@ namespace osu.Game.EzOsuGame.Edit
                 return EzSkinEditorSceneType.Results;
 
             if (screenType != null && typeof(SoloSongSelect).IsAssignableFrom(screenType))
-                return EzSkinEditorSceneType.SongSelect;
+                return EzSkinEditorSceneType.SongSelectHud;
 
             if (screenType != null && typeof(EzMusicPlayerScreen).IsAssignableFrom(screenType))
                 return EzSkinEditorSceneType.MusicPlayer;
 
             if (screenType != null && typeof(Player).IsAssignableFrom(screenType))
-                return EzSkinEditorSceneType.Gameplay;
+                return EzSkinEditorSceneType.GameplayHud;
 
-            return EzSkinEditorSceneType.Gameplay;
+            return EzSkinEditorSceneType.GameplayHud;
         }
     }
 }

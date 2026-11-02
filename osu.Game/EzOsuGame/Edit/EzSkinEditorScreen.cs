@@ -13,6 +13,9 @@ using osu.Framework.Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Cursor;
+using osu.Framework.Input;
+using osu.Framework.Input.Bindings;
+using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
 using osu.Framework.Platform;
 using osu.Game.Beatmaps;
@@ -27,6 +30,7 @@ using osu.Game.EzOsuGame.Playback;
 using osu.Game.EzOsuGame.ScriptedSkin;
 using osu.Game.EzOsuGame.UI;
 using osu.Game.Graphics.Cursor;
+using osu.Game.Input.Bindings;
 using osu.Game.IO;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Dialog;
@@ -58,7 +62,7 @@ namespace osu.Game.EzOsuGame.Edit
     /// Ez 皮肤编辑器工作区（菜单栏、场景栏、游玩洞、侧栏）。
     /// 由 <see cref="EzSkinEditorOverlay"/> 托管；当前游玩/选歌屏经缩放插拔，不进本树。
     /// </summary>
-    public partial class EzSkinEditorScreen : CompositeDrawable
+    public partial class EzSkinEditorScreen : CompositeDrawable, IKeyBindingHandler<PlatformAction>, IKeyBindingHandler<GlobalAction>
     {
         public Action? RequestClose { get; set; }
 
@@ -120,6 +124,7 @@ namespace osu.Game.EzOsuGame.Edit
         private EzSkinEditorHudLayer hudLayer = null!;
         private EzSkinEditorMenuBar menuBar = null!;
         private EzSkinEditorSceneBar sceneBar = null!;
+        private EzSkinEditorSceneRail sceneRail = null!;
         private EzSkinEditorSidebar sidebar = null!;
         private EzPlaybackBar playbackBar = null!;
         private EzSkinEditorComponentPickerWindow componentPicker = null!;
@@ -154,6 +159,32 @@ namespace osu.Game.EzOsuGame.Edit
 
         internal void ApplyCoordinatedScene(EzSkinEditorSceneType scene) => sceneBar.CurrentScene.Value = scene;
 
+        /// <summary>
+        /// Top-level group switch: re-selects the scene last used in that group, falling back to its
+        /// first available scene. The scene bar only picks groups; the rail lists the scenes inside.
+        /// </summary>
+        private void requestSceneGroup(EzSkinEditorSceneGroup group)
+        {
+            if (rememberedScene.TryGetValue(group, out var remembered) && canPresent(remembered))
+            {
+                sceneBar.CurrentScene.Value = remembered;
+                return;
+            }
+
+            foreach (var strategy in EzSkinEditorSceneRegistry.ForGroup(group))
+            {
+                if (!canPresent(strategy.SceneType))
+                    continue;
+
+                sceneBar.CurrentScene.Value = strategy.SceneType;
+                return;
+            }
+        }
+
+        private bool canPresent(EzSkinEditorSceneType scene) => CanPresentScene?.Invoke(scene) != false;
+
+        private readonly Dictionary<EzSkinEditorSceneGroup, EzSkinEditorSceneType> rememberedScene = new Dictionary<EzSkinEditorSceneGroup, EzSkinEditorSceneType>();
+
         internal Bindable<EzSkinEditorPreviewSource> PreviewSource => PreviewState.Source;
 
         /// <summary>
@@ -161,6 +192,12 @@ namespace osu.Game.EzOsuGame.Edit
         /// overlays (unpinned); panel + rail width while pinned-expanded. Drives the plugged scene rect.
         /// </summary>
         internal Bindable<float> SidebarReservedWidth => sidebar.ReservedWidth;
+
+        /// <summary>
+        /// Space the left secondary-scene rail always reserves. Drives the plugged scene rect the same
+        /// way the sidebar's reserved width does, but is fixed since the rail never collapses.
+        /// </summary>
+        internal float SceneRailReservedWidth => EzVerticalRail.WIDTH;
 
         /// <summary>
         /// Per-skin skin.ini session. Skin-layer only.
@@ -173,6 +210,13 @@ namespace osu.Game.EzOsuGame.Edit
         public EzSkinJsonSession? SkinJsonSession { get; private set; }
 
         internal EzSkinEditorPreviewState PreviewState { get; } = new EzSkinEditorPreviewState();
+
+        /// <summary>
+        /// 全谱预览的绘制外观。独立于 Ez2Setting / skin.ini，存到 EzResources/Config。改动即改即存。
+        /// </summary>
+        internal EzPreviewManiaSettings PreviewManiaSettings { get; } = new EzPreviewManiaSettings();
+
+        private EzPreviewManiaSettingsStore? previewManiaSettingsStore;
 
         internal Bindable<EzSkinEditorNoteCompareKind> NoteCompareKind { get; } = new Bindable<EzSkinEditorNoteCompareKind>();
 
@@ -299,8 +343,15 @@ namespace osu.Game.EzOsuGame.Edit
                                                 CanUseConfigSnapshot = () => sceneBar.CurrentScene.Value != EzSkinEditorSceneType.Note,
                                                 UndoAction = undo,
                                                 RedoAction = redo,
+                                                CutAction = cut,
+                                                CopyAction = copy,
+                                                PasteAction = paste,
+                                                CloneAction = clone,
                                                 CanUndo = () => hudLayer.ChangeHandler?.CanUndo.Value ?? false,
                                                 CanRedo = () => hudLayer.ChangeHandler?.CanRedo.Value ?? false,
+                                                CanCut = () => hudLayer.SelectedComponents.Count > 0,
+                                                CanCopy = () => hudLayer.SelectedComponents.Count > 0,
+                                                CanPaste = () => hudLayer.CanPaste,
                                             },
                                             // Ez-only (official menu has skin dropdown alone). Right→left: skin, mode, progress+play.
                                             new FillFlowContainer
@@ -343,7 +394,7 @@ namespace osu.Game.EzOsuGame.Edit
                                     sceneBar = new EzSkinEditorSceneBar
                                     {
                                         RelativeSizeAxes = Axes.X,
-                                        SceneRequested = scene => sceneBar.CurrentScene.Value = scene,
+                                        GroupRequested = requestSceneGroup,
                                         OpenOfficialHudEditorRequested = () => OpenOfficialHudEditor?.Invoke(),
                                     },
                                 },
@@ -354,6 +405,7 @@ namespace osu.Game.EzOsuGame.Edit
                                         RelativeSizeAxes = Axes.Both,
                                         ColumnDimensions = new[]
                                         {
+                                            new Dimension(GridSizeMode.AutoSize),
                                             new Dimension(),
                                             new Dimension(GridSizeMode.AutoSize),
                                         },
@@ -361,6 +413,7 @@ namespace osu.Game.EzOsuGame.Edit
                                         {
                                             new Drawable[]
                                             {
+                                                sceneRail = new EzSkinEditorSceneRail(),
                                                 // 游玩洞：下层 ScreenContainer 经 SetCustomRect 缩进此处；本层只叠 HUD 蓝图。
                                                 gameplayHole = new Container
                                                 {
@@ -393,6 +446,8 @@ namespace osu.Game.EzOsuGame.Edit
             base.LoadComplete();
             SkinEditorProviderResolver.EnsureDefaultProviderRegistered();
             beatmapPicker = new EzSkinEditorBeatmapPicker(realm, beatmapManager);
+            loadFullMapPreviewSettings();
+            sceneRail.CurrentScene.BindTo(sceneBar.CurrentScene);
             sceneBar.CurrentScene.BindValueChanged(onSceneChanged, true);
             skinManager.CurrentSkinInfo.BindValueChanged(onCurrentSkinInfoChanged);
             PreviewState.LoopBeatmap.BindValueChanged(_ => refreshScene());
@@ -482,6 +537,8 @@ namespace osu.Game.EzOsuGame.Edit
 
             if (change.OldValue != change.NewValue)
                 persistEditorConfig();
+
+            rememberedScene[EzSkinEditorSceneRegistry.GroupOf(change.NewValue)] = change.NewValue;
 
             Schedule(() =>
             {
@@ -634,6 +691,7 @@ namespace osu.Game.EzOsuGame.Edit
                 PreviewMode = PreviewState.Mode.Value,
                 ActiveLayer = sceneBar.ActiveLayer.Value,
                 ComparisonSnapshot = useNoteComparisonOnly ? null : ComparisonSnapshotForTesting,
+                BeatmapPreviewManiaSettings = PreviewManiaSettings,
                 NoteSession = NoteSessionForTesting,
                 NoteSnapshot = NoteSnapshotForTesting,
                 CreateNoteSnapshot = createNoteSnapshot,
@@ -715,6 +773,83 @@ namespace osu.Game.EzOsuGame.Edit
             menuBar.RefreshMenuState();
         }
 
+        private void cut()
+        {
+            hudLayer.CutSelection();
+            menuBar.RefreshMenuState();
+        }
+
+        private void copy()
+        {
+            hudLayer.CopySelection();
+            menuBar.RefreshMenuState();
+        }
+
+        private void paste()
+        {
+            hudLayer.PasteClipboard();
+            menuBar.RefreshMenuState();
+        }
+
+        private void clone()
+        {
+            hudLayer.CloneSelection();
+            menuBar.RefreshMenuState();
+        }
+
+        public bool OnPressed(KeyBindingPressEvent<PlatformAction> e)
+        {
+            if (e.Repeat || !hudLayer.InteractionEnabled.Value)
+                return false;
+
+            switch (e.Action)
+            {
+                case PlatformAction.Cut:
+                    cut();
+                    return true;
+
+                case PlatformAction.Copy:
+                    copy();
+                    return true;
+
+                case PlatformAction.Paste:
+                    paste();
+                    return true;
+
+                case PlatformAction.Undo:
+                    undo();
+                    return true;
+
+                case PlatformAction.Redo:
+                    redo();
+                    return true;
+            }
+
+            return false;
+        }
+
+        public void OnReleased(KeyBindingReleaseEvent<PlatformAction> e)
+        {
+        }
+
+        public bool OnPressed(KeyBindingPressEvent<GlobalAction> e)
+        {
+            if (e.Repeat || !hudLayer.InteractionEnabled.Value)
+                return false;
+
+            if (e.Action == GlobalAction.EditorCloneSelection)
+            {
+                clone();
+                return true;
+            }
+
+            return false;
+        }
+
+        public void OnReleased(KeyBindingReleaseEvent<GlobalAction> e)
+        {
+        }
+
         private void commitSkinIni()
         {
             if (SkinIniSession is not { IsSupported: true, IsDirty: true })
@@ -734,12 +869,12 @@ namespace osu.Game.EzOsuGame.Edit
         /// <summary>
         /// 由外部告知某场景当前是否可进入（结算场景只在结算屏存在）。
         /// </summary>
-        public void SetSceneAvailable(EzSkinEditorSceneType scene, bool available) => sceneBar.SetSceneVisible(scene, available);
+        public void SetSceneAvailable(EzSkinEditorSceneType scene, bool available) => sceneRail.SetSceneVisible(scene, available);
 
         private void ensureSkinSpecificSceneVisibility()
         {
-            // 顶栏 SkinSpecific 为占位壳，按钮已隐藏；专用设置在 Appearance 侧栏「皮肤专用」栏。
-            sceneBar.SetSceneVisible(EzSkinEditorSceneType.SkinSpecific, false);
+            // 左栏 SkinSpecific 为占位壳，按钮已隐藏；专用设置在 Appearance 侧栏「皮肤专用」栏。
+            sceneRail.SetSceneVisible(EzSkinEditorSceneType.SkinSpecific, false);
         }
 
         private void ensureSkinIniSession()
@@ -752,7 +887,7 @@ namespace osu.Game.EzOsuGame.Edit
                     SkinIniSession.Discard();
 
                 SkinIniSession = null;
-                sceneBar.SetSceneVisible(EzSkinEditorSceneType.SkinIni, false);
+                sceneRail.SetSceneVisible(EzSkinEditorSceneType.SkinIni, false);
 
                 if (sceneBar.CurrentScene.Value == EzSkinEditorSceneType.SkinIni)
                     sceneBar.CurrentScene.Value = EzSkinEditorSceneType.Appearance;
@@ -760,7 +895,7 @@ namespace osu.Game.EzOsuGame.Edit
                 return;
             }
 
-            sceneBar.SetSceneVisible(EzSkinEditorSceneType.SkinIni, true);
+            sceneRail.SetSceneVisible(EzSkinEditorSceneType.SkinIni, true);
 
             Guid currentSkinId = currentSkin.ID;
             SkinIniSession ??= new EzSkinIniSession(skinManager);
@@ -1157,6 +1292,20 @@ namespace osu.Game.EzOsuGame.Edit
             ezSkinConfig.Save();
             skinManager.CurrentSkinInfo.TriggerChange();
         }
+
+        private void loadFullMapPreviewSettings()
+        {
+            previewManiaSettingsStore = new EzPreviewManiaSettingsStore(storage);
+            previewManiaSettingsStore.Load().CopyTo(PreviewManiaSettings);
+
+            PreviewManiaSettings.NoteColour.BindValueChanged(_ => saveFullMapPreviewSettings());
+            PreviewManiaSettings.HoldHeadColour.BindValueChanged(_ => saveFullMapPreviewSettings());
+            PreviewManiaSettings.HoldBodyColour.BindValueChanged(_ => saveFullMapPreviewSettings());
+            PreviewManiaSettings.HoldTailColour.BindValueChanged(_ => saveFullMapPreviewSettings());
+            PreviewManiaSettings.ThicknessScale.BindValueChanged(_ => saveFullMapPreviewSettings());
+        }
+
+        private void saveFullMapPreviewSettings() => previewManiaSettingsStore?.Save(PreviewManiaSettings);
 
         private void bindConfigPreviewRefresh()
         {

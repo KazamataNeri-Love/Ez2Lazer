@@ -4,17 +4,19 @@
 namespace osu.Game.EzOsuGame.Edit
 {
     /// <summary>
-    /// Ez 皮肤编辑器顶栏场景。尺寸与颜色设置已迁入 Appearance 侧栏五栏。
+    /// Ez 皮肤编辑器二级场景。尺寸与颜色设置已迁入 Appearance 侧栏五栏。
+    /// 一级分组见 <see cref="EzSkinEditorSceneGroup"/>。
     /// </summary>
     public enum EzSkinEditorSceneType
     {
-        SongSelect,
+        SongSelectHud,
+        BeatmapPreview,
+        GameplayHud,
         MusicPlayer,
-        Gameplay,
         Appearance,
+        Note,
         SkinIni,
         SkinSpecific,
-        Note,
 
         /// <summary>结算屏（编辑结算 HUD 与卡片背景）。</summary>
         Results,
