@@ -38,7 +38,9 @@ namespace osu.Game.EzOsuGame.Configuration
         /// <returns>未注册该项时返回 null。</returns>
         public IBindable? GetRawBindable(Ez2Setting setting) => ConfigStore.TryGetValue(setting, out IBindable? bindable) ? bindable : null;
 
-        private static readonly ConcurrentDictionary<int, KeyModeColumnData> runtime_column_data = new ConcurrentDictionary<int, KeyModeColumnData>();
+        private readonly ConcurrentDictionary<int, KeyModeColumnData> runtime_column_data = new ConcurrentDictionary<int, KeyModeColumnData>();
+        private readonly List<IBindable> columnTypeSettingSubscriptions = new List<IBindable>();
+        private bool applyingColumnTypes;
 
         private static readonly Dictionary<int, Ez2Setting> key_mode_to_column_color_setting = new Dictionary<int, Ez2Setting>
         {
@@ -89,6 +91,7 @@ namespace osu.Game.EzOsuGame.Configuration
                 return;
 
             base.PerformLoad();
+            refreshColumnTypeCaches();
         }
 
         protected override void InitialiseDefaults()
@@ -270,12 +273,9 @@ namespace osu.Game.EzOsuGame.Configuration
 
             initializeColumnTypeDefaults();
 
-            // Pre-populate caches for all common key modes to avoid lazy loading delays
-            foreach (int keyMode in commonKeyModes)
-            {
-                GetColumnTypes(keyMode);
-                GetSpecialColumnsBoolList(keyMode);
-            }
+            // 列类型缓冲区必须在 ini 加载完成后再预热（见 PerformLoad），否则缓存会停在默认值上，
+            // 后续任意一次列类型写回都会把 ini 中的自定义排列覆盖成默认排列。
+            subscribeColumnTypeSettingChanges();
 
             #endregion
 
@@ -374,6 +374,64 @@ namespace osu.Game.EzOsuGame.Configuration
                 defaults[i] = EzColumnTypeManager.GetColumnType(keyMode, i);
 
             return defaults;
+        }
+
+        private void refreshColumnTypeCaches()
+        {
+            runtime_column_data.Clear();
+
+            foreach (int keyMode in commonKeyModes)
+            {
+                GetColumnTypes(keyMode);
+                GetSpecialColumnsBoolList(keyMode);
+            }
+        }
+
+        /// <summary>
+        /// 列类型以字符串形式存储，皮肤 JSON、设置预设与手动改 ini 都会绕过 <see cref="setColumnTypeInternal"/> 直接写 bindable。
+        /// 订阅后统一失效缓冲区并同步已存在的列绑定，避免下一次写回时用陈旧数据覆盖设置。
+        /// </summary>
+        private void subscribeColumnTypeSettingChanges()
+        {
+            foreach (int keyMode in commonKeyModes)
+            {
+                Bindable<string> bindable = GetBindable<string>(getColumnTypeListSetting(keyMode));
+                columnTypeSettingSubscriptions.Add(bindable);
+                bindable.BindValueChanged(_ => onColumnTypeSettingChanged(keyMode));
+            }
+        }
+
+        private void onColumnTypeSettingChanged(int keyMode)
+        {
+            if (applyingColumnTypes)
+                return;
+
+            runtime_column_data.TryRemove(keyMode, out _);
+
+            KeyModeColumnData data = getOrBuildKeyModeColumnData(keyMode);
+            var boundIndices = new HashSet<int>();
+            var changedBindings = new List<(ColumnBindings Bindings, EzColumnType Type)>();
+
+            lock (columnBindingsLock)
+            {
+                for (int i = 0; i < data.Length; i++)
+                {
+                    if (columnBindings.TryGetValue((keyMode, i), out ColumnBindings? bindings))
+                    {
+                        boundIndices.Add(i);
+                        changedBindings.Add((bindings, (EzColumnType)data.Types[i]));
+                    }
+                }
+            }
+
+            foreach (var (bindings, type) in changedBindings)
+                bindings.SyncFromOwner(type);
+
+            for (int i = 0; i < data.Length; i++)
+            {
+                if (!boundIndices.Contains(i))
+                    ColumnTypeChanged?.Invoke(keyMode, i, (EzColumnType)data.Types[i]);
+            }
         }
 
         public void SetColumnType(int keyMode, int columnIndex, EzColumnType colorType)
@@ -777,8 +835,21 @@ namespace osu.Game.EzOsuGame.Configuration
             runtime_column_data[keyMode] = updatedData;
 
             string serialized = serializeColumnTypes(updatedTypes);
-            if (!string.Equals(Get<string>(setting), serialized, StringComparison.Ordinal))
+
+            if (string.Equals(Get<string>(setting), serialized, StringComparison.Ordinal))
+                return;
+
+            // 缓冲区已写入相同数据，抑制设置变化监听的重复解析与重复通知。
+            applyingColumnTypes = true;
+
+            try
+            {
                 SetValue(setting, serialized);
+            }
+            finally
+            {
+                applyingColumnTypes = false;
+            }
         }
 
         private void setColumnTypeInternal(int keyMode, int columnIndex, EzColumnType colorType, bool syncBindable)

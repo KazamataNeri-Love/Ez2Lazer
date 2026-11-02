@@ -81,6 +81,7 @@ namespace osu.Game.EzOsuGame.Edit
         public static IReadOnlyList<EzSkinEditorLayerDefinition> For(EzSkinEditorSceneType sceneType) => sceneType switch
         {
             EzSkinEditorSceneType.SongSelect => new[] { HudOff, EzHud },
+            EzSkinEditorSceneType.MusicPlayer => new[] { HudOff, EzHud },
             _ => new[] { HudOff, EzHud, EzHudRuleset, EzPlayfieldRuleset },
         };
 
@@ -107,6 +108,9 @@ namespace osu.Game.EzOsuGame.Edit
 
             if (sceneType == EzSkinEditorSceneType.SongSelect)
                 return new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.SongSelect);
+
+            if (sceneType == EzSkinEditorSceneType.MusicPlayer)
+                return new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.MusicPlayer);
 
             var definition = Get(layer);
 

@@ -6,9 +6,11 @@ using System.Collections.Generic;
 using System.Linq;
 using osu.Framework.Screens;
 using osu.Game.EzOsuGame.Edit.Scenes;
+using osu.Game.EzOsuGame.Screens.MusicPlayer;
 using osu.Game.Screens.Play;
 using osu.Game.Screens.Ranking;
 using osu.Game.Screens.Select;
+using osu.Game.Skinning;
 
 namespace osu.Game.EzOsuGame.Edit
 {
@@ -17,6 +19,7 @@ namespace osu.Game.EzOsuGame.Edit
         public static IReadOnlyList<IEzSkinEditorSceneStrategy> All { get; } = new IEzSkinEditorSceneStrategy[]
         {
             new SongSelectSceneStrategy(),
+            new MusicPlayerSceneStrategy(),
             new GameplaySceneStrategy(),
             new AppearanceSceneStrategy(),
             new SkinIniSceneStrategy(),
@@ -42,6 +45,7 @@ namespace osu.Game.EzOsuGame.Edit
         {
             EzSkinEditorSceneType.Gameplay => GlobalSkinnableContainers.MainHUDComponents,
             EzSkinEditorSceneType.SongSelect => GlobalSkinnableContainers.SongSelect,
+            EzSkinEditorSceneType.MusicPlayer => GlobalSkinnableContainers.MusicPlayer,
             _ => null,
         };
 
@@ -66,6 +70,9 @@ namespace osu.Game.EzOsuGame.Edit
 
             if (screenType != null && typeof(SoloSongSelect).IsAssignableFrom(screenType))
                 return EzSkinEditorSceneType.SongSelect;
+
+            if (screenType != null && typeof(EzMusicPlayerScreen).IsAssignableFrom(screenType))
+                return EzSkinEditorSceneType.MusicPlayer;
 
             if (screenType != null && typeof(Player).IsAssignableFrom(screenType))
                 return EzSkinEditorSceneType.Gameplay;

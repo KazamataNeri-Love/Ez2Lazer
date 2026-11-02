@@ -16,6 +16,7 @@ using osu.Game.Beatmaps;
 using osu.Game.Database;
 using osu.Game.EzOsuGame.Edit.Components;
 using osu.Game.EzOsuGame.Layout;
+using osu.Game.EzOsuGame.Screens.MusicPlayer;
 using osu.Game.Graphics.Containers;
 using osu.Game.Input.Bindings;
 using osu.Game.Overlays;
@@ -195,6 +196,9 @@ namespace osu.Game.EzOsuGame.Edit
             if (scene == EzSkinEditorSceneType.Results)
                 return game.ScreenStack.CurrentScreen is ResultsScreen;
 
+            if (scene == EzSkinEditorSceneType.MusicPlayer)
+                return game.ScreenStack.CurrentScreen is EzMusicPlayerScreen;
+
             return scene != EzSkinEditorSceneType.SkinIni || EzSkinIniSupport.IsSupported(skinManager.CurrentSkinInfo.Value);
         }
 
@@ -206,6 +210,7 @@ namespace osu.Game.EzOsuGame.Edit
 
             // 结算场景只在结算屏上存在，其他屏隐藏按钮避免无效切换。
             workspace.SetSceneAvailable(EzSkinEditorSceneType.Results, canPresentScene(EzSkinEditorSceneType.Results));
+            workspace.SetSceneAvailable(EzSkinEditorSceneType.MusicPlayer, canPresentScene(EzSkinEditorSceneType.MusicPlayer));
 
             // 侧栏固定时挤占场景可用宽度；宽度变化后跟随重算插拔场景矩形。
             workspace.SidebarReservedWidth.ValueChanged += onReservedWidthChanged;

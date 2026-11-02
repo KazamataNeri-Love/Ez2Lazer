@@ -60,7 +60,9 @@ namespace osu.Game.Rulesets.Mania.UI
 
             var rotation = GlobalConfigStore.EzConfig.GetBindable<double>(Ez2Setting.ManiaPseudo3DRotation);
 
-            if (!rotation.IsDefault)
+            // 用实际角度而非 IsDefault：皮肤编辑器的对比快照会把 Default 改写成当前值，
+            // 那时 IsDefault 为 true 会导致透视容器不被创建，斜轨角度整局失效。
+            if (rotation.Value > 0)
             {
                 positionContainer.Child = perspectiveContainer = new BufferedContainer(pixelSnapping: true)
                 {

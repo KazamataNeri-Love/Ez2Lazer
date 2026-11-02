@@ -82,6 +82,7 @@ namespace osu.Game.EzOsuGame.Layout
                 editorHidden = value;
                 updateSongSelectContainerVisibility();
                 updateGameplayContainerVisibility();
+                updateMusicPlayerContainerVisibility();
                 updateResultsContainerVisibility();
             }
         }
@@ -276,7 +277,7 @@ namespace osu.Game.EzOsuGame.Layout
             }
 
             musicPlayerContainer ??= createMusicPlayerContainer();
-            musicPlayerContainer.Alpha = 1;
+            musicPlayerContainer.Alpha = editorHidden ? 0 : 1;
         }
 
         private EzLayoutContainer createMusicPlayerContainer()

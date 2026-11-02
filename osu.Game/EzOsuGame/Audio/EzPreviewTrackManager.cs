@@ -55,12 +55,11 @@ namespace osu.Game.EzOsuGame.Audio
 
         /// <summary>
         /// 覆盖预览起点时间（毫秒）。若为 null，则使用谱面元数据的 PreviewTime。
-        /// 供未来 Mod / 编辑器场景使用；SongSelect 默认不设置。
         /// </summary>
         public double? OverridePreviewStartTime { get; set; }
 
         /// <summary>
-        /// 当为 true 时，预览从音频开头 (0ms) 开始播放，忽略 Metadata.PreviewTime。
+        /// 当为 true 时，预览从音频开头 (0ms) 开始播放，忽略 Metadata.PreviewTime；循环点同样固定在 0。
         /// </summary>
         public bool PreviewFromStart { get; set; }
 
@@ -247,9 +246,15 @@ namespace osu.Game.EzOsuGame.Audio
                         : 0;
                 }
 
+                // 调度起点可以晚于循环点（音频未变化时保持连续播放），但循环点始终是 PreviewStartTime，
+                // 否则与主轨 RestartPoint 不一致会产生「播一小段又跳回原位置」的循环。
+                double resumeStartTime = OverridePreviewStartTime.HasValue
+                    ? Math.Clamp(OverridePreviewStartTime.Value, 0, Math.Max(0, currentTrack?.Length ?? 0))
+                    : playback.PreviewStartTime;
+
                 double trackTimelineEndTime = currentTrack?.Length ?? 0;
                 double trackLoopLength = Math.Max(1, trackTimelineEndTime - playback.PreviewStartTime);
-                double scheduleWindowStart = playback.PreviewStartTime - tick_ms;
+                double scheduleWindowStart = Math.Min(resumeStartTime, playback.PreviewStartTime) - tick_ms;
                 double longestHitTimeEstimate = playableBeatmap.GetLastObjectTime();
                 double longestStoryboardTimeEstimate = beatmap.Storyboard?.LatestEventTime ?? 0;
                 double scheduleWindowEnd = Math.Max(
@@ -300,7 +305,7 @@ namespace osu.Game.EzOsuGame.Audio
                 playback.TrackLoopLength = Math.Max(1, trackTimelineEndTime - playback.PreviewStartTime);
                 playback.ShortBgmOneShotMode = previewMainAudioAvailable && mainAudioEndTime + tick_ms < playback.PreviewEndTime;
                 playback.ResetPlaybackProgress();
-                playback.ResetLogicalClock(playback.PreviewStartTime, Time.Current);
+                playback.ResetLogicalClock(resumeStartTime, Time.Current);
 
                 if (sampleScheduler.ScheduledHitSounds.Count == 0 && sampleScheduler.ScheduledStoryboardSamples.Count == 0)
                 {
@@ -308,9 +313,9 @@ namespace osu.Game.EzOsuGame.Audio
                     return;
                 }
 
-                sampleScheduler.ResetIndices(playback.PreviewStartTime);
+                sampleScheduler.ResetIndices(resumeStartTime);
 
-                currentTrack?.Seek(playback.PreviewStartTime);
+                currentTrack?.Seek(resumeStartTime);
 
                 if (currentTrack != null)
                 {
@@ -692,10 +697,9 @@ namespace osu.Game.EzOsuGame.Audio
             playback.ResetPlaybackProgress();
             playback.ResetLogicalClock(playback.PreviewStartTime, Time.Current);
 
-            // PreviewFromStart 模式下，每次循环也 seek 回起点。
-            double seekTarget = PreviewFromStart ? 0 : playback.PreviewStartTime;
+            // PreviewStartTime 已是循环点（from-start 时为 0），与主轨 RestartPoint 保持一致。
             currentTrack.Volume.Value = 1f;
-            currentTrack.Seek(seekTarget);
+            currentTrack.Seek(playback.PreviewStartTime);
         }
 
         private void triggerHitSound(ScheduledHitSound scheduled)
@@ -1081,7 +1085,9 @@ namespace osu.Game.EzOsuGame.Audio
 
         private double getVirtualTimelineLength(IWorkingBeatmap beatmap)
         {
-            double previewTime = Math.Max(0, OverridePreviewStartTime ?? beatmap.BeatmapInfo.Metadata.PreviewTime);
+            double previewTime = Math.Max(0, PreviewFromStart
+                ? 0
+                : OverridePreviewStartTime ?? beatmap.BeatmapInfo.Metadata.PreviewTime);
             double mappedEndTime = 0;
 
             if (beatmap.Beatmap.HitObjects.Any())

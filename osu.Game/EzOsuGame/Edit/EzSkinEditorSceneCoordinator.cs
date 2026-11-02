@@ -6,6 +6,7 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Screens;
 using osu.Game.EzOsuGame.Layout;
+using osu.Game.EzOsuGame.Screens.MusicPlayer;
 using osu.Game.Graphics.Containers;
 using osu.Game.Screens;
 using osu.Game.Screens.Play;
@@ -35,6 +36,7 @@ namespace osu.Game.EzOsuGame.Edit
         private Player? boundPlayer;
         private SongSelect? boundSongSelect;
         private ResultsScreen? boundResults;
+        private EzMusicPlayerScreen? boundMusicPlayer;
 
         private Drawable? hiddenStoryboard;
         private float previousStoryboardAlpha;
@@ -72,6 +74,10 @@ namespace osu.Game.EzOsuGame.Edit
                     presentSongSelect();
                     break;
 
+                case EzSkinEditorSceneType.MusicPlayer:
+                    presentMusicPlayer();
+                    break;
+
                 case EzSkinEditorSceneType.Results:
                     presentResults(target as ResultsScreen);
                     break;
@@ -104,6 +110,14 @@ namespace osu.Game.EzOsuGame.Edit
                 return;
             }
 
+            if (desiredScene == EzSkinEditorSceneType.MusicPlayer)
+            {
+                if (current is EzMusicPlayerScreen musicPlayer && musicPlayer.IsLoaded && !ReferenceEquals(boundMusicPlayer, musicPlayer))
+                    bindMusicPlayer(musicPlayer);
+
+                return;
+            }
+
             if (current is Player player && player.IsLoaded && !ReferenceEquals(boundPlayer, player))
                 bindGameplay(player);
         }
@@ -118,6 +132,7 @@ namespace osu.Game.EzOsuGame.Edit
             boundPlayer = null;
             boundSongSelect = null;
             boundResults = null;
+            boundMusicPlayer = null;
             workspace.SetSceneHost(null);
             scalingContainer.SetCustomRect(null);
         }
@@ -145,6 +160,37 @@ namespace osu.Game.EzOsuGame.Edit
             boundSongSelect = null;
 
             workspace.BindHudToTarget(results, layoutLayer);
+            updateScreenSizing();
+        }
+
+        private void presentMusicPlayer()
+        {
+            // The music player screen is edited in place; no screen is pushed by the editor.
+            restorePlayerChrome();
+            boundPlayer = null;
+            boundSongSelect = null;
+            boundResults = null;
+            workspace.SetSceneHost(null);
+
+            if (getCurrentScreen() is EzMusicPlayerScreen musicPlayer && musicPlayer.IsLoaded)
+                bindMusicPlayer(musicPlayer);
+            else
+            {
+                boundMusicPlayer = null;
+                workspace.BindHudToTarget(null, layoutLayer);
+            }
+
+            updateScreenSizing();
+        }
+
+        private void bindMusicPlayer(EzMusicPlayerScreen musicPlayer)
+        {
+            boundMusicPlayer = musicPlayer;
+            boundPlayer = null;
+            boundSongSelect = null;
+            boundResults = null;
+
+            workspace.BindHudToTarget(musicPlayer, layoutLayer);
             updateScreenSizing();
         }
 

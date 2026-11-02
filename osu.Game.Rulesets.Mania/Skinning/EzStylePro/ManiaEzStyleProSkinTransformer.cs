@@ -173,6 +173,11 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
 
                     switch (maniaComponent.Component)
                     {
+                        case ManiaSkinComponents.StageBackground:
+                            // Stage 背景由 EzStageBackdrop 绘制；返回空 drawable，避免回退到 DefaultStageBackground 的不透明黑底，
+                            // 否则会盖住 Stage 的 ColumnDim 暗化层，使「背景暗化」看起来始终是纯黑。
+                            return Drawable.Empty();
+
                         case ManiaSkinComponents.ColumnBackground:
                             // if (Skin is Ez2Skin && resultComponent.Component >= HitResult.Perfect)
                             //     return Drawable.Empty();

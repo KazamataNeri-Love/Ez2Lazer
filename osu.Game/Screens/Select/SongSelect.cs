@@ -56,6 +56,7 @@ using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Scoring;
 using osu.Game.Screens.Backgrounds;
+using osu.Game.Screens.Edit;
 using osu.Game.Screens.Footer;
 using osu.Game.Screens.Menu;
 using osu.Game.Screens.Play;
@@ -666,8 +667,9 @@ namespace osu.Game.Screens.Select
             // 重建调度表（不同难度的 HitObject 可能不同）但不 Seek 轨道。
             if (!audioChanged && previewFromStart.Value)
             {
+                // 音频未变化时只把当前轨道位置作为调度起点，循环点仍由 PreviewFromStart 保持为 0。
                 ezPreviewManager.OverridePreviewStartTime = beatmap.Track.CurrentTime;
-                ezPreviewManager.PreviewFromStart = false;
+                ezPreviewManager.PreviewFromStart = true;
             }
             else
             {
@@ -846,6 +848,10 @@ namespace osu.Game.Screens.Select
         public override void OnResuming(ScreenTransitionEvent e)
         {
             base.OnResuming(e);
+
+            // 编辑器试听位置不是选歌预览起点，from-start 模式下从编辑器返回应从头预览。
+            if (previewFromStart.Value && e.Last is Editor)
+                music.CurrentTrack.Seek(0);
 
             this.FadeIn(fade_duration, Easing.OutQuint);
             onArrivingAtScreen();

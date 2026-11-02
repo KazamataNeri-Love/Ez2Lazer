@@ -220,12 +220,6 @@ namespace osu.Game.Screens.Select
 
                 flowMode.BindValueChanged(e => applyFlowModeState(e.NewValue), true);
 
-                ruleset.BindValueChanged(e =>
-                {
-                    if (EzBeatmapPreviewModes.IsManiaRuleset(e.NewValue))
-                        tabControl.Current.Value = Selection.EzAnalysis;
-                }, true);
-
                 scopeDropdown.Current.BindValueChanged(scope =>
                 {
                     sortDropdown.Current.Disabled = false;
