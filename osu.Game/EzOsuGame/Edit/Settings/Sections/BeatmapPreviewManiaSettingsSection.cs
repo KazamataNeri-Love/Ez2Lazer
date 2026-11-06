@@ -1,10 +1,12 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using osu.Framework.Allocation;
 using osu.Framework.Graphics;
-using osu.Framework.Graphics.Containers;
 using osu.Framework.Localisation;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Edit.Components;
+using osu.Game.EzOsuGame.Layout;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.EzOsuGame.Overlays.Preview;
 using osu.Game.EzOsuGame.Screens;
@@ -16,17 +18,16 @@ namespace osu.Game.EzOsuGame.Edit.Settings.Sections
     /// <summary>
     /// 谱面预览场景的全谱预览外观：绘制风格、note 厚度、按部件的颜色。
     /// </summary>
-    public partial class BeatmapPreviewManiaSettingsSection : FillFlowContainer
+    public partial class BeatmapPreviewManiaSettingsSection : EzSkinEditorSettingsGroup
     {
-        private readonly EzPreviewManiaSettings settings;
+        [Resolved]
+        private EzConfigStore configStore { get; set; } = null!;
 
-        public BeatmapPreviewManiaSettingsSection(EzPreviewManiaSettings settings)
+        private EzPreviewManiaSettings settings => configStore.PreviewManiaSettings;
+
+        public BeatmapPreviewManiaSettingsSection()
+            : base(EzEditorStrings.GROUP_BEATMAP_PREVIEW_MANIA)
         {
-            this.settings = settings;
-
-            RelativeSizeAxes = Axes.X;
-            AutoSizeAxes = Axes.Y;
-            Direction = FillDirection.Vertical;
             Spacing = new Vector2(8);
         }
 
@@ -49,6 +50,11 @@ namespace osu.Game.EzOsuGame.Edit.Settings.Sections
                 },
                 new EzSettingsColour
                 {
+                    LabelText = ManiaBeatmapPreviewStrings.COLOUR_LANE_BACKGROUND,
+                    Current = settings.LaneBackgroundColour,
+                },
+                new EzSettingsColour
+                {
                     LabelText = ManiaBeatmapPreviewStrings.COLOUR_NOTE,
                     Current = settings.NoteColour,
                 },
@@ -62,11 +68,11 @@ namespace osu.Game.EzOsuGame.Edit.Settings.Sections
                     LabelText = ManiaBeatmapPreviewStrings.COLOUR_HOLD_BODY,
                     Current = settings.HoldBodyColour,
                 },
-                new EzSettingsColour
-                {
-                    LabelText = ManiaBeatmapPreviewStrings.COLOUR_HOLD_TAIL,
-                    Current = settings.HoldTailColour,
-                },
+                // new EzSettingsColour
+                // {
+                //     LabelText = ManiaBeatmapPreviewStrings.COLOUR_HOLD_TAIL,
+                //     Current = settings.HoldTailColour,
+                // },
             };
         }
     }
@@ -80,6 +86,8 @@ namespace osu.Game.EzOsuGame.Edit.Settings.Sections
             "The current beatmap is not mania. Switch to a mania beatmap to preview.");
 
         public static readonly LocalisableString NOTE_THICKNESS = new EzLocalizationManager.EzLocalisableString("note 厚度", "Note thickness");
+
+        public static readonly LocalisableString COLOUR_LANE_BACKGROUND = new EzLocalizationManager.EzLocalisableString("轨道背景颜色", "Lane background colour");
 
         public static readonly LocalisableString COLOUR_NOTE = new EzLocalizationManager.EzLocalisableString("普通 note 颜色", "Note colour");
 

@@ -3,9 +3,8 @@
 
 using System.Collections.Generic;
 using System.Linq;
-using osu.Game.EzOsuGame.Edit.Scenes;
+using osu.Framework.Graphics;
 using osu.Game.EzOsuGame.Edit.Settings.Sections;
-using osu.Game.EzOsuGame.Localization;
 
 namespace osu.Game.EzOsuGame.Edit
 {
@@ -13,42 +12,30 @@ namespace osu.Game.EzOsuGame.Edit
     {
         public static IReadOnlyList<IEzSkinEditorSkinScopedGroupProvider> All { get; } = new IEzSkinEditorSkinScopedGroupProvider[]
         {
-            new SkinScopedGroupProvider(EzSkinEditorSkinKind.EzStylePro),
-            new SkinScopedGroupProvider(EzSkinEditorSkinKind.Ez2),
-            new SkinScopedGroupProvider(EzSkinEditorSkinKind.SbI),
-            new SkinScopedGroupProvider(EzSkinEditorSkinKind.Scripted),
+            new SkinScopedGroupProvider(EzSkinFamily.EzStylePro),
+            new SkinScopedGroupProvider(EzSkinFamily.Ez2),
+            new SkinScopedGroupProvider(EzSkinFamily.SbI),
+            new SkinScopedGroupProvider(EzSkinFamily.Scripted),
         };
 
-        public static IEnumerable<IEzSkinEditorSkinScopedGroupProvider> For(EzSkinEditorSkinKind kind) =>
+        public static IEnumerable<IEzSkinEditorSkinScopedGroupProvider> For(EzSkinFamily kind) =>
             All.Where(p => p.Kind == kind);
 
         /// <summary>
-        /// 皮肤专用分组。所有皮肤种类共用同一导航标题与稳定 Id，差异只在分组内容。
+        /// 皮肤专用栏目的内容。所有皮肤种类共用同一导航标题，差异只在控件。
         /// </summary>
         private sealed class SkinScopedGroupProvider : IEzSkinEditorSkinScopedGroupProvider
         {
-            public SkinScopedGroupProvider(EzSkinEditorSkinKind kind)
+            public SkinScopedGroupProvider(EzSkinFamily kind)
             {
                 Kind = kind;
             }
 
-            public EzSkinEditorSkinKind Kind { get; }
+            public EzSkinFamily Kind { get; }
 
-            public bool IsApplicable(EzSkinEditorSceneContext context) =>
-                EzSkinEditorSkinKindResolver.Resolve(context.ActualSkin) == Kind;
-
-            public IReadOnlyList<EzSkinEditorSidebarGroupDefinition> CreateGroups(EzSkinEditorSceneContext context) =>
-                new[]
-                {
-                    new EzSkinEditorSidebarGroupDefinition
-                    {
-                        Id = AppearanceSceneStrategy.GROUP_ID_SKIN_SCOPED,
-                        Title = EzEditorStrings.GROUP_SKIN_SPECIFIC,
-                        CreateContent = () => Kind == EzSkinEditorSkinKind.Scripted
-                            ? new EzSkinEditorScriptedSkinSettingsSection()
-                            : new EzBuiltInSkinScopedSettingsControls(Kind),
-                    },
-                };
+            public Drawable CreateControls() => Kind == EzSkinFamily.Scripted
+                ? new EzSkinEditorScriptedSkinSettingsSection()
+                : new EzBuiltInSkinScopedSettingsControls(Kind);
         }
     }
 }

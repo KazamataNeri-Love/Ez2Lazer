@@ -14,10 +14,12 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Input.Events;
+using osu.Framework.Platform;
 using osu.Framework.Threading;
 using osu.Framework.Timing;
 using osu.Game.Beatmaps;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Layout;
 using osu.Game.EzOsuGame.Overlays.Preview;
 using osu.Game.EzOsuGame.UI;
 using osu.Game.Graphics;
@@ -65,6 +67,7 @@ namespace osu.Game.EzOsuGame.Overlays
         private const float settings_dock_gap = 0;
 
         private readonly StopwatchClock previewClock = new StopwatchClock();
+        private bool playbackSuspended;
         private readonly FramedClock framedPreviewClock;
         private readonly Bindable<EzBeatmapPreviewMode> previewMode = new Bindable<EzBeatmapPreviewMode>();
 
@@ -122,6 +125,12 @@ namespace osu.Game.EzOsuGame.Overlays
         private Drawable? pendingPreviewRoot;
         private DrawableRuleset? drawableRuleset;
         private IManiaStaticPreviewRenderer? maniaStaticRenderer;
+
+        [Resolved]
+        private EzConfigStore configStore { get; set; } = null!;
+
+        private EzPreviewManiaSettings maniaPreviewSettings => configStore.PreviewManiaSettings;
+
         private PreviewDensityController? densityController;
         private Bindable<double> previewDensity = null!;
         private Bindable<EzBeatmapPreviewMode> sharedPreviewModeConfig = null!;
@@ -362,7 +371,7 @@ namespace osu.Game.EzOsuGame.Overlays
         }
 
         [BackgroundDependencyLoader]
-        private void load(Ez2ConfigManager ezConfig)
+        private void load(Ez2ConfigManager ezConfig, Storage storage)
         {
             sharedPreviewModeConfig = ezConfig.GetBindable<EzBeatmapPreviewMode>(Ez2Setting.BeatmapPreviewMode);
             maniaPreviewModeConfig = ezConfig.GetBindable<EzBeatmapPreviewMode>(Ez2Setting.BeatmapPreviewModeMania);
@@ -391,11 +400,29 @@ namespace osu.Game.EzOsuGame.Overlays
                 expand();
         }
 
+        // The full-map preview keeps a masked playfield. Hide it while the skin editor is bound to
+        // this already-open song select; a song select pushed after the editor opens does not have one yet.
+        internal void SetPlaybackSuspended(bool suspended)
+        {
+            if (playbackSuspended == suspended)
+                return;
+
+            playbackSuspended = suspended;
+            stageScaleContainer.Alpha = suspended ? 0 : 1;
+
+            if (suspended || !expanded)
+                previewClock.Stop();
+            else
+                previewClock.Start();
+        }
+
         private void expand()
         {
             if (expanded)
                 return;
 
+            playbackSuspended = false;
+            stageScaleContainer.Alpha = 1;
             expanded = true;
             ExpandedState.Value = true;
             panelBackground.MaterialCaptureVisible = true;
@@ -1513,6 +1540,7 @@ namespace osu.Game.EzOsuGame.Overlays
             if (renderer == null)
                 return;
 
+            renderer.SetSettings(maniaPreviewSettings);
             renderer.SetData(data);
             renderer.SetDensity((float)previewDensity.Value);
             renderer.SetCurrentTime(previewClock.CurrentTime);

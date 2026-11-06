@@ -14,7 +14,6 @@ using osu.Framework.Platform;
 using osu.Framework.Testing;
 using osu.Game.Beatmaps;
 using osu.Game.EzOsuGame.Configuration;
-using osu.Game.EzOsuGame.Edit.Settings;
 using osu.Game.EzOsuGame.Extensions;
 using osu.Game.EzOsuGame.Layout;
 using osu.Game.EzOsuGame.Localization;
@@ -49,7 +48,9 @@ namespace osu.Game.EzOsuGame.Screens
         private Storage storage { get; set; } = null!;
 
         [Resolved]
-        private ManiaPlayfieldLayoutConfig playfieldLayout { get; set; } = null!;
+        private EzConfigLayoutStore layoutStore { get; set; } = null!;
+
+        private ManiaPlayfieldLayoutConfig playfieldLayout => layoutStore.PlayfieldLayout;
 
         [Resolved]
         private Bindable<WorkingBeatmap> beatmap { get; set; } = null!;
@@ -167,8 +168,8 @@ namespace osu.Game.EzOsuGame.Screens
                     },
                     new SettingsCheckbox
                     {
-                        LabelText = EzColumnStrings.COLOUR_ENABLE_BUTTON,
-                        TooltipText = EzColumnStrings.COLOUR_ENABLE_BUTTON_TOOLTIP,
+                        LabelText = EzColumnStrings.COLUMN_COLOURING_ENABLE_BUTTON,
+                        TooltipText = EzColumnStrings.COLUMN_COLOURING_ENABLE_BUTTON_TOOLTIP,
                         Current = colorSettingsEnabled,
                     },
                     baseColorsContainer = new FillFlowContainer

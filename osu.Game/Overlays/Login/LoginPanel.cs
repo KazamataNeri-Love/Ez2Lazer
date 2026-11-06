@@ -282,7 +282,7 @@ namespace osu.Game.Overlays.Login
         {
             // 当前值必须始终留在列表里：否则框架的 ensureItemSelectionIsValid 会把 Current
             // 顶到列表第一项，等于一打开菜单就偷偷改掉用户的本地账户名。
-            localAccountNameDropdown.Items = new List<string> { localAccountName.Value };
+            setLocalAccountNameItems(null);
 
             if (localProfileService == null)
                 return;
@@ -295,12 +295,34 @@ namespace osu.Game.Overlays.Login
 
                 var counts = t.GetResultSafely();
 
-                Schedule(() =>
-                {
-                    foreach (var entry in counts)
-                        addLocalAccountNameItem(entry.Username);
-                });
+                Schedule(() => setLocalAccountNameItems(counts.Select(c => c.Username)));
             });
+        }
+
+        /// <summary>
+        /// 用当前值加一批候选名重建列表，统一按名称 A–Z 排序；当前值即使为空也保留。
+        /// </summary>
+        private void setLocalAccountNameItems(IEnumerable<string>? names)
+        {
+            if (localAccountNameDropdown == null)
+                return;
+
+            string current = localAccountName.Value;
+            var seen = new HashSet<string>(StringComparer.Ordinal) { current };
+            var items = new List<string> { current };
+
+            foreach (string name in names ?? Enumerable.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(name))
+                    continue;
+
+                if (seen.Add(name))
+                    items.Add(name);
+            }
+
+            localAccountNameDropdown.Items = items.OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                                                   .ThenBy(n => n, StringComparer.Ordinal)
+                                                   .ToList();
         }
 
         private void addLocalAccountNameItem(string name)
@@ -314,7 +336,7 @@ namespace osu.Game.Overlays.Login
                 return;
 
             items.Add(name);
-            localAccountNameDropdown.Items = items;
+            setLocalAccountNameItems(items);
         }
 
         /// <summary>

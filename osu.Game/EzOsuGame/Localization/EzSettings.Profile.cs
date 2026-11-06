@@ -24,6 +24,12 @@ namespace osu.Game.EzOsuGame.Localization
                 "清空重建：清掉所选玩家旧统计并整段重算，同时删除未勾选玩家的旧统计",
                 "Clear & rebuild: wipe checked players’ stats and recompute, delete unchecked players’ stats");
 
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_IMPORT_SORT_BY_COUNT =
+            new EzLocalizationManager.EzLocalisableString("按成绩数量", "By score count");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_IMPORT_SORT_BY_NAME =
+            new EzLocalizationManager.EzLocalisableString("按用户名 A–Z", "By name A–Z");
+
         public static readonly EzLocalizationManager.EzLocalisableString LOCAL_PROFILE_IMPORT_CONFIRM =
             new EzLocalizationManager.EzLocalisableString("开始分析", "Analyse");
 

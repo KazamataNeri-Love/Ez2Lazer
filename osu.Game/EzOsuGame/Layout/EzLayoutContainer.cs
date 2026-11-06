@@ -7,26 +7,34 @@ using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Game.Overlays.SkinEditor;
+using osu.Game.Rulesets;
 using osu.Game.Skinning;
 using osuTK;
 
 namespace osu.Game.EzOsuGame.Layout
 {
     /// <summary>
-    /// A skinnable-style container that reloads from <see cref="EzLayoutStore"/> instead of the current skin.
+    /// A skinnable-style container that reloads from <see cref="EzConfigLayoutStore"/> instead of the current skin.
     /// Lives on <see cref="EzLayoutLayer"/> so the official skin editor cannot see it.
     /// </summary>
     public partial class EzLayoutContainer : SkinnableContainer
     {
-        private readonly EzLayoutStore store;
+        private readonly EzConfigLayoutStore store;
         private readonly Func<SkinLayoutInfo>? fallback;
         private CompositeDrawable? dependencyDonor;
 
-        public EzLayoutContainer(EzLayoutStore store, GlobalSkinnableContainerLookup lookup, Func<SkinLayoutInfo>? fallback = null)
-            : base(lookup)
+        public string LayoutFile { get; }
+
+        public RulesetInfo? Ruleset { get; }
+
+        public EzLayoutContainer(EzConfigLayoutStore store, string layoutFile, RulesetInfo? ruleset, Func<SkinLayoutInfo>? fallback = null)
+            : base(EzLayoutFiles.SkinLookup(layoutFile, ruleset)
+                   ?? throw new ArgumentException($"Ez layout file {layoutFile} is not a skin area.", nameof(layoutFile)))
         {
             this.store = store;
             this.fallback = fallback;
+            LayoutFile = layoutFile;
+            Ruleset = ruleset;
             RelativeSizeAxes = Axes.Both;
         }
 
@@ -55,12 +63,14 @@ namespace osu.Game.EzOsuGame.Layout
             LoadFromStore();
         }
 
-        public void LoadFromStore() => Reload(store.CreateComponentsContainer(Lookup, fallback));
+        public void LoadFromStore() => Reload(store.CreateComponentsContainer(LayoutFile, Ruleset, fallback));
 
         /// <summary>
         /// Whether this container consumes positional input. Layers hosted underneath a screen must opt out.
         /// </summary>
         public bool ConsumesInput { get; init; } = true;
+
+        internal bool Uses(EzConfigLayoutStore candidate) => ReferenceEquals(store, candidate);
 
         /// <summary>
         /// Places a component into this container with sane defaults, mirroring the official skin editor's

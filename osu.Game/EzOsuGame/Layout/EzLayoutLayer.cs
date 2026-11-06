@@ -7,14 +7,13 @@ using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
-using osu.Framework.Platform;
 using osu.Framework.Screens;
 using osu.Game.EzOsuGame.Screens.MusicPlayer;
+using osu.Game.Rulesets;
 using osu.Game.Screens;
 using osu.Game.Screens.Play;
 using osu.Game.Screens.Ranking;
 using osu.Game.Screens.Select;
-using osu.Game.Skinning;
 using osuTK;
 
 namespace osu.Game.EzOsuGame.Layout
@@ -24,7 +23,10 @@ namespace osu.Game.EzOsuGame.Layout
     /// </summary>
     public partial class EzLayoutLayer : CompositeDrawable
     {
-        public EzLayoutStore Store { get; private set; } = null!;
+        [Resolved]
+        private EzConfigLayoutStore layoutStore { get; set; } = null!;
+
+        public EzConfigLayoutStore Store => layoutStore;
 
         public EzLayoutContainer? SongSelectContainer { get; private set; }
 
@@ -94,28 +96,38 @@ namespace osu.Game.EzOsuGame.Layout
         }
 
         [BackgroundDependencyLoader]
-        private void load(Storage storage)
+        private void load()
         {
-            Store = createStore(storage);
-
-            InternalChild = SongSelectContainer = new EzLayoutContainer(
-                Store,
-                new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.SongSelect));
+            InternalChild = SongSelectContainer = new EzLayoutContainer(Store, EzLayoutFiles.SONG_SELECT, null);
         }
-
-        /// <summary>
-        /// Single entry point resolving the layout set for this layer. Future whole-set switching
-        /// swaps the set name here and reloads every container instead of scattering paths.
-        /// </summary>
-        private static EzLayoutStore createStore(Storage storage) => new EzLayoutStore(storage);
 
         protected override void LoadComplete()
         {
             base.LoadComplete();
 
+            layoutStore.SetChanged += reloadThemeLayouts;
             game.ScreenStack.ScreenPushed += onScreenChanged;
             game.ScreenStack.ScreenExited += onScreenChanged;
             applyScreen(game.ScreenStack.CurrentScreen);
+        }
+
+        private void reloadThemeLayouts()
+        {
+            // 只换主题 Store 上的容器。客户端容器持有另一份 Store，换主题不能拆掉再用主题 Store 重建。
+            if (SongSelectContainer?.Uses(layoutStore) == true)
+            {
+                RemoveInternal(SongSelectContainer, true);
+                SongSelectContainer = new EzLayoutContainer(layoutStore, EzLayoutFiles.SONG_SELECT, null);
+                AddInternal(SongSelectContainer);
+                updateSongSelectContainerVisibility();
+            }
+
+            if (game.ScreenStack.CurrentScreen is Player player && canAttachGameplayLayout(player))
+                recreateGameplayContainers(player);
+            else if (gameplayContainer != null || rulesetGameplayContainer != null)
+                expireGameplayContainers();
+
+            notifyTargetsChanged();
         }
 
         protected override void Dispose(bool isDisposing)
@@ -128,6 +140,7 @@ namespace osu.Game.EzOsuGame.Layout
             if (!IsLoaded)
                 return;
 
+            layoutStore.SetChanged -= reloadThemeLayouts;
             game.ScreenStack.ScreenPushed -= onScreenChanged;
             game.ScreenStack.ScreenExited -= onScreenChanged;
 
@@ -212,13 +225,14 @@ namespace osu.Game.EzOsuGame.Layout
         {
             expireGameplayContainers();
 
-            gameplayContainer = addGameplayContainer(player, new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.MainHUDComponents));
+            gameplayContainer = addGameplayContainer(player, EzLayoutFiles.MAIN_HUD, null);
 
             var ruleset = player.Ruleset.Value;
+
             if (ruleset != null)
             {
-                rulesetGameplayContainer = addGameplayContainer(player, new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.MainHUDComponents, ruleset));
-                rulesetPlayfieldContainer = addGameplayContainer(player, new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.Playfield, ruleset));
+                rulesetGameplayContainer = addGameplayContainer(player, EzLayoutFiles.MAIN_HUD, ruleset);
+                rulesetPlayfieldContainer = addGameplayContainer(player, EzLayoutFiles.PLAYFIELD, ruleset);
             }
 
             updateGameplayContainerVisibility();
@@ -228,9 +242,9 @@ namespace osu.Game.EzOsuGame.Layout
         private static bool canAttachGameplayLayout(Player player) =>
             player.IsLoaded && player.Dependencies != null;
 
-        private EzLayoutContainer addGameplayContainer(Player player, GlobalSkinnableContainerLookup lookup)
+        private EzLayoutContainer addGameplayContainer(Player player, string layoutFile, RulesetInfo? ruleset)
         {
-            var container = new EzLayoutContainer(Store, lookup);
+            var container = new EzLayoutContainer(Store, layoutFile, ruleset);
 
             if (canAttachGameplayLayout(player))
             {
@@ -285,7 +299,8 @@ namespace osu.Game.EzOsuGame.Layout
             // Created lazily so the layout (and its components) only load when the player is first opened.
             var container = new EzLayoutContainer(
                 Store,
-                new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.MusicPlayer),
+                EzLayoutFiles.MUSIC_PLAYER,
+                null,
                 EzMusicPlayerLayoutDefaults.Create);
 
             AddInternal(container);
@@ -316,7 +331,8 @@ namespace osu.Game.EzOsuGame.Layout
         {
             var container = new EzLayoutContainer(
                 Store,
-                new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.Results));
+                EzLayoutFiles.RESULTS,
+                null);
 
             AddInternal(container);
             return container;
@@ -327,7 +343,8 @@ namespace osu.Game.EzOsuGame.Layout
             // Hosted by the screen stack so it sits between the beatmap background and the results screen itself.
             var container = new EzLayoutContainer(
                 Store,
-                new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.ResultsBackground))
+                EzLayoutFiles.RESULTS_BACKGROUND,
+                null)
             {
                 ConsumesInput = false,
             };

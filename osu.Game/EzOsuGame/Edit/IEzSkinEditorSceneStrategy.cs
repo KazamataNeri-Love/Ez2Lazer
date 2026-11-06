@@ -4,6 +4,9 @@
 using System.Collections.Generic;
 using osu.Framework.Graphics;
 using osu.Framework.Localisation;
+using osu.Game.EzOsuGame.Edit.Components;
+using osu.Game.EzOsuGame.Layout;
+using osu.Game.Rulesets;
 
 namespace osu.Game.EzOsuGame.Edit
 {
@@ -14,13 +17,15 @@ namespace osu.Game.EzOsuGame.Edit
     /// </summary>
     public interface IEzSkinEditorSceneStrategy
     {
-        EzSkinEditorSceneType SceneType { get; }
+        /// <summary>
+        /// 场景，一级分类。
+        /// </summary>
+        EzEditorSceneGroup Group { get; }
 
         /// <summary>
-        /// Top-level group this scene belongs to. Drives which scene-bar group is highlighted and
-        /// which secondary scenes the left rail lists.
+        /// 场景，二级分类
         /// </summary>
-        EzSkinEditorSceneGroup Group { get; }
+        EzEditorSceneType SceneType { get; }
 
         LocalisableString TabTitle { get; }
 
@@ -30,12 +35,21 @@ namespace osu.Game.EzOsuGame.Edit
         /// </summary>
         bool IsAvailable => true;
 
-        IReadOnlyList<EzSkinEditorSidebarGroupDefinition> CreateSidebarGroups(EzSkinEditorSceneContext context);
+        IReadOnlyList<EzSkinEditorSettingsGroup> Sections { get; }
 
         /// <summary>
-        /// Optional footer overlay pinned to the bottom of the sidebar (e.g. skin.ini save bar).
+        /// Supplies loaded rulesets before <see cref="Sections"/> is first read.
+        /// Colouring scenes ask each ruleset for its own sidebar groups.
         /// </summary>
-        Drawable? CreateSidebarFooter(EzSkinEditorSceneContext context) => null;
+        void AttachRulesets(IReadOnlyList<Ruleset> rulesets)
+        {
+        }
+
+        /// <summary>
+        /// Optional footer pinned to the bottom of the sidebar (e.g. skin.ini save bar).
+        /// Created once and reused.
+        /// </summary>
+        Drawable? Footer => null;
 
         /// <summary>
         /// Whether this scene presents an inserted screen whose skinnable HUD containers can be edited.
@@ -47,5 +61,10 @@ namespace osu.Game.EzOsuGame.Edit
         /// panel does not cover the play area the user is dragging components in.
         /// </summary>
         bool HoverExpandsSidebar => true;
+
+        /// <summary>
+        /// Which Game layout directory persists this scene's HUD JSON when edited.
+        /// </summary>
+        EzLayoutRoot LayoutRoot => EzLayoutRoot.Theme;
     }
 }

@@ -2,16 +2,20 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using osu.Framework.Allocation;
+using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Localisation;
 using osu.Game.Beatmaps;
+using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Edit.Settings.Sections;
+using osu.Game.EzOsuGame.Layout;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.EzOsuGame.Overlays.Preview;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Rulesets;
 using osu.Game.Screens;
+using osu.Game.Screens.Backgrounds;
 using osu.Game.Screens.Menu;
 using osuTK.Graphics;
 
@@ -30,18 +34,38 @@ namespace osu.Game.EzOsuGame.Edit.Screens
 
         public override bool? AllowGlobalTrackControl => false;
 
-        private readonly EzPreviewManiaSettings settings;
+        protected override BackgroundScreen? CreateBackground()
+        {
+            if (EzSkinEditorActiveState.Active || workingBeatmap is not WorkingBeatmap concrete)
+                return null;
+
+            return new BackgroundScreenBeatmap(concrete);
+        }
+
+        [Resolved]
+        private EzConfigStore configStore { get; set; } = null!;
+
+        private EzPreviewManiaSettings settings => configStore.PreviewManiaSettings;
 
         private IWorkingBeatmap? workingBeatmap;
         private RulesetInfo? rulesetInfo;
 
         private Container viewport = null!;
 
-        public EzSkinEditorPreviewManiaScreen(IWorkingBeatmap? workingBeatmap, RulesetInfo? rulesetInfo, EzPreviewManiaSettings settings)
+        private readonly Bindable<ManiaLongNoteStyle> styleTrigger = new Bindable<ManiaLongNoteStyle>();
+        private readonly BindableFloat thicknessTrigger = new BindableFloat();
+        private readonly BindableColour4 laneBackgroundTrigger = new BindableColour4();
+        private readonly BindableColour4 noteColourTrigger = new BindableColour4();
+        private readonly BindableColour4 holdHeadTrigger = new BindableColour4();
+        private readonly BindableColour4 holdBodyTrigger = new BindableColour4();
+
+        [Resolved]
+        private IRulesetStore rulesets { get; set; } = null!;
+
+        public EzSkinEditorPreviewManiaScreen(IWorkingBeatmap? workingBeatmap, RulesetInfo? rulesetInfo)
         {
             this.workingBeatmap = workingBeatmap;
             this.rulesetInfo = rulesetInfo;
-            this.settings = settings;
 
             Anchor = Anchor.Centre;
             Origin = Anchor.Centre;
@@ -69,14 +93,29 @@ namespace osu.Game.EzOsuGame.Edit.Screens
 
             rebuild();
 
-            // 设置即改即存且立即回灌预览：任一 bindable 变化触发一次重绘。
-            settings.Style.BindValueChanged(_ => applySettings());
-            settings.ThicknessScale.BindValueChanged(_ => applySettings());
+            bindSettingTrigger(styleTrigger, settings.Style);
+            bindSettingTrigger(thicknessTrigger, settings.ThicknessScale);
+            bindSettingTrigger(laneBackgroundTrigger, settings.LaneBackgroundColour);
+            bindSettingTrigger(noteColourTrigger, settings.NoteColour);
+            bindSettingTrigger(holdHeadTrigger, settings.HoldHeadColour);
+            bindSettingTrigger(holdBodyTrigger, settings.HoldBodyColour);
+        }
 
-            settings.NoteColour.BindValueChanged(_ => applySettings());
-            settings.HoldHeadColour.BindValueChanged(_ => applySettings());
-            settings.HoldBodyColour.BindValueChanged(_ => applySettings());
-            settings.HoldTailColour.BindValueChanged(_ => applySettings());
+        protected override void Dispose(bool isDisposing)
+        {
+            styleTrigger.UnbindAll();
+            thicknessTrigger.UnbindAll();
+            laneBackgroundTrigger.UnbindAll();
+            noteColourTrigger.UnbindAll();
+            holdHeadTrigger.UnbindAll();
+            holdBodyTrigger.UnbindAll();
+            base.Dispose(isDisposing);
+        }
+
+        private void bindSettingTrigger<T>(Bindable<T> trigger, Bindable<T> source)
+        {
+            trigger.BindTo(source);
+            trigger.BindValueChanged(_ => applySettings(), false);
         }
 
         /// <summary>
@@ -84,7 +123,10 @@ namespace osu.Game.EzOsuGame.Edit.Screens
         /// </summary>
         public void SetSource(IWorkingBeatmap? beatmap, RulesetInfo? ruleset)
         {
-            if (ReferenceEquals(workingBeatmap, beatmap) && ReferenceEquals(rulesetInfo, ruleset))
+            bool unchanged = workingBeatmap?.BeatmapInfo.Hash == beatmap?.BeatmapInfo.Hash
+                             && rulesetInfo?.ShortName == ruleset?.ShortName;
+
+            if (unchanged)
                 return;
 
             workingBeatmap = beatmap;
@@ -100,7 +142,9 @@ namespace osu.Game.EzOsuGame.Edit.Screens
 
             viewport.Child = renderer;
 
-            if (workingBeatmap == null || rulesetInfo == null || !EzBeatmapPreviewModes.IsManiaRuleset(rulesetInfo))
+            RulesetInfo? ruleset = resolveRulesetForRender(rulesetInfo, workingBeatmap);
+
+            if (workingBeatmap == null || ruleset == null || !EzBeatmapPreviewModes.IsManiaRuleset(ruleset))
             {
                 viewport.Child = createPlaceholder(ManiaBeatmapPreviewStrings.BEATMAP_NOT_MANIA);
                 return;
@@ -110,7 +154,7 @@ namespace osu.Game.EzOsuGame.Edit.Screens
 
             try
             {
-                playableBeatmap = workingBeatmap.GetPlayableBeatmap(rulesetInfo);
+                playableBeatmap = workingBeatmap.GetPlayableBeatmap(ruleset);
             }
             catch
             {
@@ -134,6 +178,14 @@ namespace osu.Game.EzOsuGame.Edit.Screens
         {
             if (viewport.Child is StaticFullMapPreviewRenderer renderer)
                 renderer.SetSettings(settings);
+        }
+
+        private RulesetInfo? resolveRulesetForRender(RulesetInfo? ruleset, IWorkingBeatmap? beatmap)
+        {
+            if (beatmap?.BeatmapInfo.Ruleset is not RulesetInfo beatmapRuleset)
+                return ruleset;
+
+            return EzSkinEditorBeatmapPicker.ResolveRulesetForPreview(rulesets, beatmapRuleset, ruleset) ?? ruleset;
         }
 
         private static OsuSpriteText createPlaceholder(LocalisableString text) => new OsuSpriteText

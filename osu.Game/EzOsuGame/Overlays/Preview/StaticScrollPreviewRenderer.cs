@@ -25,6 +25,8 @@ namespace osu.Game.EzOsuGame.Overlays.Preview
         private float lastViewportHeight;
         private int lastMeasuresPerColumn = -1;
 
+        private EzPreviewManiaSettings? settings;
+
         public StaticScrollPreviewRenderer()
         {
             RelativeSizeAxes = Axes.Both;
@@ -80,6 +82,13 @@ namespace osu.Game.EzOsuGame.Overlays.Preview
             rebuild();
         }
 
+        public void SetSettings(EzPreviewManiaSettings settings)
+        {
+            this.settings = settings;
+            if (hasData)
+                rebuild();
+        }
+
         public void AdjustScroll(float delta)
         {
             float maxOffset = getMaxScrollOffset();
@@ -110,7 +119,7 @@ namespace osu.Game.EzOsuGame.Overlays.Preview
 
         private void rebuild()
         {
-            if (DrawWidth <= 1 || DrawHeight <= 1)
+            if (DrawWidth <= 1 || DrawHeight <= 1 || settings == null)
                 return;
 
             lastViewportWidth = DrawWidth;
@@ -123,7 +132,7 @@ namespace osu.Game.EzOsuGame.Overlays.Preview
             batchDrawable.Size = new Vector2(layout.ContentWidth, DrawHeight);
 
             var quads = new List<PreviewQuad>(layoutEntries.Count + layout.ColumnCount * (data.TotalColumns + layout.RowsPerColumn));
-            ManiaPreviewColumnRenderer.BuildColumnPanels(quads, layoutEntries, layout, data, totalRows, DrawHeight, EzPreviewManiaSettings.DEFAULT);
+            ManiaPreviewColumnRenderer.BuildColumnPanels(quads, layoutEntries, layout, data, totalRows, DrawHeight, settings);
 
             batchDrawable.SetQuads(quads);
             scrollOffset = Math.Clamp(scrollOffset, 0, getMaxScrollOffset());

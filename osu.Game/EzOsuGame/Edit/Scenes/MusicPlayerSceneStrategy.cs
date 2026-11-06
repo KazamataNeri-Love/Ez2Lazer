@@ -13,9 +13,11 @@ namespace osu.Game.EzOsuGame.Edit.Scenes
     /// </summary>
     public class MusicPlayerSceneStrategy : IEzSkinEditorSceneStrategy
     {
-        public EzSkinEditorSceneType SceneType => EzSkinEditorSceneType.MusicPlayer;
+        private EzSkinEditorSettingsGroup[]? sections;
 
-        public EzSkinEditorSceneGroup Group => EzSkinEditorSceneGroup.SongSelect;
+        public EzEditorSceneType SceneType => EzEditorSceneType.MusicPlayer;
+
+        public EzEditorSceneGroup Group => EzEditorSceneGroup.SongSelect;
 
         public LocalisableString TabTitle => EzEditorStrings.SCENE_MUSIC_PLAYER;
 
@@ -23,21 +25,10 @@ namespace osu.Game.EzOsuGame.Edit.Scenes
 
         public bool HoverExpandsSidebar => false;
 
-        public IReadOnlyList<EzSkinEditorSidebarGroupDefinition> CreateSidebarGroups(EzSkinEditorSceneContext context) => new[]
+        public IReadOnlyList<EzSkinEditorSettingsGroup> Sections => sections ??= new EzSkinEditorSettingsGroup[]
         {
-            new EzSkinEditorSidebarGroupDefinition
-            {
-                Id = GameplaySceneStrategy.GROUP_ID_HUD,
-                Title = EzEditorStrings.SIDEBAR_TAB_HUD,
-                CreateContent = () => new EzSkinEditorHudWorkspaceSection(),
-            },
-            new EzSkinEditorSidebarGroupDefinition
-            {
-                Id = GameplaySceneStrategy.GROUP_ID_LIBRARY_GLOBAL,
-                Title = EzEditorStrings.LIBRARY_GLOBAL_TITLE,
-                Visible = context.ActiveLayer != EzSkinEditorLayer.HudOff,
-                CreateContent = () => new EzSkinEditorComponentLibrarySection(rulesetScoped: false) { Title = EzEditorStrings.LIBRARY_GLOBAL_TITLE },
-            },
+            new EzSkinEditorHudWorkspaceSection(),
+            new EzSkinEditorComponentLibrarySection(rulesetScoped: false),
         };
     }
 }

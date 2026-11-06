@@ -4,8 +4,8 @@
 using System.Collections.Generic;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
-using osu.Framework.Graphics.Containers;
 using osu.Framework.Localisation;
+using osu.Game.EzOsuGame.Edit.Components;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
@@ -18,33 +18,27 @@ namespace osu.Game.EzOsuGame.Edit.Scenes
     /// </summary>
     public class SkinSpecificSceneStrategy : IEzSkinEditorSceneStrategy
     {
-        public EzSkinEditorSceneType SceneType => EzSkinEditorSceneType.SkinSpecific;
+        private EzSkinEditorSettingsGroup[]? sections;
 
-        public EzSkinEditorSceneGroup Group => EzSkinEditorSceneGroup.Gameplay;
+        public EzEditorSceneType SceneType => EzEditorSceneType.SkinSpecific;
+
+        public EzEditorSceneGroup Group => EzEditorSceneGroup.Gameplay;
 
         public LocalisableString TabTitle => EzEditorStrings.TAB_SKIN_SPECIFIC;
 
         public bool IsAvailable => false;
 
-        public IReadOnlyList<EzSkinEditorSidebarGroupDefinition> CreateSidebarGroups(EzSkinEditorSceneContext context) =>
-            new[]
-            {
-                new EzSkinEditorSidebarGroupDefinition
-                {
-                    Title = EzEditorStrings.TAB_SKIN_SPECIFIC,
-                    CreateContent = () => new SkinSpecificScenePlaceholderSection(),
-                },
-            };
+        public IReadOnlyList<EzSkinEditorSettingsGroup> Sections => sections ??= new EzSkinEditorSettingsGroup[]
+        {
+            new SkinSpecificScenePlaceholderSection(),
+        };
     }
 
-    public partial class SkinSpecificScenePlaceholderSection : FillFlowContainer
+    public partial class SkinSpecificScenePlaceholderSection : EzSkinEditorSettingsGroup
     {
         public SkinSpecificScenePlaceholderSection()
+            : base(EzEditorStrings.TAB_SKIN_SPECIFIC)
         {
-            RelativeSizeAxes = Axes.X;
-            AutoSizeAxes = Axes.Y;
-            Direction = FillDirection.Vertical;
-            Padding = new MarginPadding(8);
         }
 
         [BackgroundDependencyLoader]

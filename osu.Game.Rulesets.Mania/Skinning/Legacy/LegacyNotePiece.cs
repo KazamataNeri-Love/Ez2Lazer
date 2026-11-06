@@ -8,7 +8,7 @@ using osu.Framework.Graphics.Animations;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.Textures;
-using osu.Game.Rulesets.Mania.Configuration;
+using osu.Game.Rulesets.Mania.UI;
 using osu.Game.Rulesets.UI.Scrolling;
 using osu.Game.Skinning;
 using osuTK;
@@ -22,9 +22,9 @@ namespace osu.Game.Rulesets.Mania.Skinning.Legacy
         private Container directionContainer = null!;
 
         private Drawable noteAnimation = null!;
+        private ISkinSource skin = null!;
 
         private float? widthForNoteHeightScale;
-        private string index = "1";
 
         public LegacyNotePiece()
         {
@@ -32,11 +32,10 @@ namespace osu.Game.Rulesets.Mania.Skinning.Legacy
             AutoSizeAxes = Axes.Y;
         }
 
-        [BackgroundDependencyLoader]
-        private void load(ISkinSource skin, IScrollingInfo scrollingInfo, ManiaRulesetConfigManager? config)
+        [BackgroundDependencyLoader(true)]
+        private void load(ISkinSource skin, IScrollingInfo scrollingInfo)
         {
-            bool baseColor = config != null && config.Get<bool>(ManiaRulesetSetting.TimingBasedNoteColouring);
-            index = baseColor ? "1" : FallbackColumnIndex;
+            this.skin = skin;
 
             widthForNoteHeightScale = skin.GetConfig<ManiaSkinConfigurationLookup, float>(new ManiaSkinConfigurationLookup(LegacyManiaSkinConfigurationLookups.WidthForNoteHeightScale))?.Value;
 
@@ -45,11 +44,25 @@ namespace osu.Game.Rulesets.Mania.Skinning.Legacy
                 Origin = Anchor.BottomCentre,
                 RelativeSizeAxes = Axes.X,
                 AutoSizeAxes = Axes.Y,
-                Child = noteAnimation = GetAnimation(skin) ?? Empty()
             };
+
+            reloadAnimation();
 
             direction.BindTo(scrollingInfo.Direction);
             direction.BindValueChanged(OnDirectionChanged, true);
+        }
+
+        protected override void OnTintDisplaySettingsChanged()
+        {
+            reloadAnimation();
+        }
+
+        private void reloadAnimation()
+        {
+            if (directionContainer == null || skin == null)
+                return;
+
+            directionContainer.Child = noteAnimation = GetAnimation(skin) ?? Empty();
         }
 
         protected override void Update()
@@ -102,9 +115,16 @@ namespace osu.Game.Rulesets.Mania.Skinning.Legacy
             }
 
             string noteImage = GetColumnSkinConfig<string>(skin, lookup)?.Value
-                               ?? $"mania-note{index}{suffix}";
+                               ?? $"mania-note{ResolveNoteTextureFileIndex(partForLookup(lookup))}{suffix}";
 
             return skin.GetAnimation(noteImage, WrapMode.ClampToEdge, WrapMode.ClampToEdge, true, true);
         }
+
+        private static ManiaNoteDisplayColourPart partForLookup(LegacyManiaSkinConfigurationLookups lookup) => lookup switch
+        {
+            LegacyManiaSkinConfigurationLookups.HoldNoteHeadImage => ManiaNoteDisplayColourPart.HoldHead,
+            LegacyManiaSkinConfigurationLookups.HoldNoteTailImage => ManiaNoteDisplayColourPart.HoldBody,
+            _ => ManiaNoteDisplayColourPart.Note,
+        };
     }
 }

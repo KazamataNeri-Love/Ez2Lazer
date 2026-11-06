@@ -4,6 +4,7 @@
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Localisation;
+using osu.Game.EzOsuGame.Maintenance;
 using osu.Game.Graphics;
 using osu.Game.Localisation;
 using osu.Game.Overlays.Settings.Sections.Maintenance;
@@ -28,6 +29,7 @@ namespace osu.Game.Overlays.Settings.Sections
                 new SkinSettings(),
                 new CollectionsSettings(),
                 new ScoreSettings(),
+                new EzReplayMaintenanceSettings(),
                 new ModPresetSettings()
             };
         }

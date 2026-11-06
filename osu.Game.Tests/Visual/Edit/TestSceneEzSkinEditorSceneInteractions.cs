@@ -10,7 +10,7 @@ using osu.Game.Database;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Edit;
 using osu.Game.EzOsuGame.Edit.Components;
-using osu.Game.EzOsuGame.Edit.Scenes;
+using osu.Game.EzOsuGame.Edit.Settings.Sections;
 using osu.Game.Rulesets.Mania;
 using osu.Game.Rulesets.Mania.EzMania.Editor;
 using osu.Game.Skinning;
@@ -51,7 +51,7 @@ namespace osu.Game.Tests.Visual.Edit
         [Test]
         public void TestAppearanceGroupInteractions()
         {
-            runSidebarGroupInteraction(AppearanceSceneStrategy.GROUP_ID_TEXTURE);
+            runSidebarGroupInteraction<EzSkinEditorTextureSettingsSection>();
             AddAssert("workspace still present", () => editorScreen.IsLoaded);
             AddAssert("all appearance groups visible", () => editorScreen.ChildrenOfType<EzSkinEditorSettingsGroup>().Count() >= 5);
         }
@@ -59,14 +59,14 @@ namespace osu.Game.Tests.Visual.Edit
         [Test]
         public void TestSizeGroupInteractions()
         {
-            runSidebarGroupInteraction(AppearanceSceneStrategy.GROUP_ID_SIZE);
+            runSidebarGroupInteraction<EzSkinEditorSizeSettingsSection>();
             AddAssert("size group present", () => editorScreen.ChildrenOfType<EzSkinEditorSettingsGroup>().Any());
         }
 
         [Test]
         public void TestColourGroupInteractions()
         {
-            runSidebarGroupInteraction(AppearanceSceneStrategy.GROUP_ID_BASE_COLOURS);
+            runSidebarGroupInteraction<EzSkinEditorBaseColourSettingsSection>();
             AddAssert("all appearance groups visible", () => editorScreen.ChildrenOfType<EzSkinEditorSettingsGroup>().Count() >= 5);
         }
 
@@ -74,7 +74,7 @@ namespace osu.Game.Tests.Visual.Edit
         public void TestNoteSceneInteractions()
         {
             // Note 首页可改项较少，两页合计断言。
-            runSceneInteraction(EzSkinEditorSceneType.Note, minVisited: 1);
+            runSceneInteraction(EzEditorSceneType.Note, minVisited: 1);
             AddStep("navigate to note edit group", () => editorScreen.ChildrenOfType<EzSkinEditorSidebar>().Single().SelectSidebarPage(1));
             cycleDriverSettings(minVisited: 1);
             AddAssert("workspace still present", () => editorScreen.IsLoaded);
@@ -84,10 +84,10 @@ namespace osu.Game.Tests.Visual.Edit
         [Test]
         public void TestSkinIniSceneInteractions()
         {
-            runSceneInteraction(EzSkinEditorSceneType.SkinIni, importSkin: true);
+            runSceneInteraction(EzEditorSceneType.SkinIni, importSkin: true);
             AddAssert("sidebar groups", () => editorScreen.ChildrenOfType<EzSkinEditorSidebar>().Single().PageCount == 3);
             AddAssert("workspace still present", () => editorScreen.IsLoaded);
-            AddStep("discard draft", () => editorScreen.SkinIniSession?.Discard());
+            AddStep("discard draft", () => editorScreen.SkinIniSession.Discard());
         }
 
         private void loadWorkspace()
@@ -104,18 +104,22 @@ namespace osu.Game.Tests.Visual.Edit
             AddUntilStep("wait for workspace load", () => editorScreen.IsLoaded);
         }
 
-        private void runSidebarGroupInteraction(string groupId)
+        private void runSidebarGroupInteraction<T>() where T : EzSkinEditorSettingsGroup
         {
             driver = null;
 
             loadWorkspace();
-            AddStep("switch to appearance", () => editorScreen.CurrentScene.Value = EzSkinEditorSceneType.Appearance);
-            AddStep($"select group {groupId}", () => editorScreen.ChildrenOfType<EzSkinEditorSidebar>().Single().SelectSidebarGroupById(groupId));
+            AddStep("switch to appearance", () => editorScreen.CurrentScene.Value = EzEditorSceneType.Appearance);
+            AddStep($"select {typeof(T).Name}", () =>
+            {
+                var group = editorScreen.ChildrenOfType<T>().Single();
+                editorScreen.ChildrenOfType<EzSkinEditorSidebar>().Single().SelectSidebarGroup(group);
+            });
 
             cycleDriverSettings();
         }
 
-        private void runSceneInteraction(EzSkinEditorSceneType scene, bool importSkin = false, int minVisited = 2)
+        private void runSceneInteraction(EzEditorSceneType scene, bool importSkin = false, int minVisited = 2)
         {
             if (importSkin)
                 importLegacySkin();

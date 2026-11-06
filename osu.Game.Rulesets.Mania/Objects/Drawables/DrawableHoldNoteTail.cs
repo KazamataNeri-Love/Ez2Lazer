@@ -12,6 +12,7 @@ using osu.Game.Rulesets.Mania.EzMania.Diagnostics;
 #endif
 using osu.Game.Rulesets.Mania.EzMania.Helper;
 using osu.Game.Rulesets.Mania.EzMania.ReplayJudge;
+using osu.Game.Rulesets.Mania.UI;
 using osu.Game.Rulesets.Scoring;
 
 namespace osu.Game.Rulesets.Mania.Objects.Drawables
@@ -28,6 +29,8 @@ namespace osu.Game.Rulesets.Mania.Objects.Drawables
         public readonly IBindable<double?> MissingStartTime = new Bindable<double?>();
 
         protected override ManiaSkinComponents Component => ManiaSkinComponents.HoldNoteTail;
+
+        protected override ManiaNoteDisplayColourPart DisplayColourPart => ManiaNoteDisplayColourPart.HoldBody;
 
         protected internal DrawableHoldNote HoldNote => (DrawableHoldNote)ParentHitObject;
 
@@ -111,7 +114,7 @@ namespace osu.Game.Rulesets.Mania.Objects.Drawables
                 {
                     r.IsComboHit = false;
                 }
-            }, (result, judgeMode: judgeMode));
+            }, (result, judgeMode));
         }
 
         internal new void EzDispatchExtraResult(HitResult result) => DispatchNewResult(result);

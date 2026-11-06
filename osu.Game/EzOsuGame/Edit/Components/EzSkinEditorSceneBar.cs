@@ -31,21 +31,21 @@ namespace osu.Game.EzOsuGame.Edit.Components
 
         private const float padding = 10;
 
-        public Bindable<EzSkinEditorSceneType> CurrentScene { get; } = new Bindable<EzSkinEditorSceneType>(EzSkinEditorSceneType.Appearance);
+        public Bindable<EzEditorSceneType> CurrentScene { get; } = new Bindable<EzEditorSceneType>(EzEditorSceneType.Appearance);
 
         /// <summary>
         /// Raised when the user picks a top-level group. The owner resolves which secondary scene in
         /// that group to show (remembered per group) and writes it back to <see cref="CurrentScene"/>.
         /// </summary>
-        public Action<EzSkinEditorSceneGroup>? GroupRequested { get; set; }
+        public Action<EzEditorSceneGroup>? GroupRequested { get; set; }
 
         public Action? OpenOfficialHudEditorRequested { get; set; }
 
         /// <summary>
         /// The active editing layer. Only selects which layout container is edited; visibility is
-        /// driven separately by whether the value is <see cref="EzSkinEditorLayer.HudOff"/>.
+        /// driven separately by whether the value is <see cref="EzHUDLayer.HudOff"/>.
         /// </summary>
-        public Bindable<EzSkinEditorLayer> ActiveLayer { get; } = new Bindable<EzSkinEditorLayer>(EzSkinEditorLayer.EzHud);
+        public Bindable<EzHUDLayer> ActiveLayer { get; } = new Bindable<EzHUDLayer>(EzHUDLayer.EzHud);
 
         /// <summary>
         /// Ruleset shown by the editor; used to label the ruleset-scoped layer options.
@@ -60,7 +60,7 @@ namespace osu.Game.EzOsuGame.Edit.Components
         private EzEditorLayerButton layerButton = null!;
         private EzToggleButton visualPickerButton = null!;
 
-        private readonly Dictionary<EzSkinEditorSceneGroup, GroupTabButton> groupButtons = new Dictionary<EzSkinEditorSceneGroup, GroupTabButton>();
+        private readonly Dictionary<EzEditorSceneGroup, GroupTabButton> groupButtons = new Dictionary<EzEditorSceneGroup, GroupTabButton>();
 
         public EzSkinEditorSceneBar()
         {
@@ -109,7 +109,7 @@ namespace osu.Game.EzOsuGame.Edit.Components
                                                Origin = Anchor.CentreLeft,
                                                Margin = new MarginPadding { Horizontal = 10 },
                                            })
-                                           .Append(new SkinEditorSceneLibrary.SceneButton
+                                           .Append(new EzSceneBarButton
                                            {
                                                Text = EzEditorStrings.SCENE_OFFICIAL_HUD,
                                                Width = 120,
@@ -169,13 +169,14 @@ namespace osu.Game.EzOsuGame.Edit.Components
             return button;
         });
 
-        private static LocalisableString getGroupTitle(EzSkinEditorSceneGroup group) => group switch
+        private static LocalisableString getGroupTitle(EzEditorSceneGroup group) => group switch
         {
-            EzSkinEditorSceneGroup.SongSelect => EzEditorStrings.SCENE_GROUP_SONG_SELECT,
+            EzEditorSceneGroup.SongSelect => EzEditorStrings.SCENE_GROUP_SONG_SELECT,
+            EzEditorSceneGroup.BeatmapEditor => EzEditorStrings.SCENE_GROUP_BEATMAP_EDITOR,
             _ => EzEditorStrings.SCENE_GROUP_GAMEPLAY,
         };
 
-        private void updateActiveTab(EzSkinEditorSceneType scene)
+        private void updateActiveTab(EzEditorSceneType scene)
         {
             var activeGroup = EzSkinEditorSceneRegistry.GroupOf(scene);
 
@@ -183,11 +184,11 @@ namespace osu.Game.EzOsuGame.Edit.Components
                 button.Active = group == activeGroup;
         }
 
-        private partial class GroupTabButton : SkinEditorSceneLibrary.SceneButton
+        private partial class GroupTabButton : EzSceneBarButton
         {
-            public EzSkinEditorSceneGroup Group { get; }
+            public EzEditorSceneGroup Group { get; }
 
-            public GroupTabButton(EzSkinEditorSceneGroup group, LocalisableString text, Action action)
+            public GroupTabButton(EzEditorSceneGroup group, LocalisableString text, Action action)
             {
                 Group = group;
                 Text = text;

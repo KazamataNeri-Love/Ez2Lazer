@@ -9,43 +9,25 @@ using osu.Game.EzOsuGame.Configuration;
 namespace osu.Game.EzOsuGame.Overlays.Preview
 {
     /// <summary>
-    /// 全谱预览的绘制外观：按 note 部件的颜色，以及作用于普通 note 与面头的厚度缩放。
-    /// 与游戏内皮肤无关，只影响全谱预览组件。改动即预览色板，由协调器/预览屏直接读取。
+    /// 全谱预览外观（颜色、厚度、LN 风格）。进程内唯一实例由 <see cref="osu.Game.EzOsuGame.Layout.EzConfigStore"/> 持有，写盘也由它负责。
     /// </summary>
     public sealed class EzPreviewManiaSettings
     {
-        public const string FILENAME = "ManiaBeatmapPreviewStrings.json";
+        public const string FILENAME = "ManiaBeatmapPreviewSettings.json";
 
-        /// <summary>厚度缩放，1 为基准。</summary>
         public const float MIN_THICKNESS_SCALE = 0.25f;
 
         public const float MAX_THICKNESS_SCALE = 3f;
 
         public const float DEFAULT_THICKNESS_SCALE = 1f;
 
-        public static readonly Colour4 DEFAULT_NOTE_COLOUR = new Colour4(0, 170, 255, 230);
+        public static readonly Colour4 DEFAULT_LANE_BACKGROUND_COLOUR = Colour4.FromHex("#181818");
 
-        public static readonly Colour4 DEFAULT_HOLD_HEAD_COLOUR = new Colour4(255, 80, 80, 235);
+        public static readonly Colour4 DEFAULT_NOTE_COLOUR = Colour4.FromHex("#00AAFF");
 
-        public static readonly Colour4 DEFAULT_HOLD_BODY_COLOUR = new Colour4(255, 220, 70, 230);
+        public static readonly Colour4 DEFAULT_HOLD_HEAD_COLOUR = Colour4.FromHex("#FF5050EB");
 
-        public static readonly Colour4 DEFAULT_HOLD_TAIL_COLOUR = new Colour4(255, 220, 70, 230);
-
-        /// <summary>
-        /// 共享默认实例。没有用户设置的调用点（如预览叠层）从这里取默认值，不再各自重复字面量。
-        /// </summary>
-        public static readonly EzPreviewManiaSettings DEFAULT = new EzPreviewManiaSettings();
-
-        /// <summary>
-        /// 单个部件的默认颜色。设置缺省（如 <see cref="ManiaPreviewDrawHelper"/> 无设置可读）时用。
-        /// </summary>
-        public static Colour4 DefaultColourFor(EzManiaNotePart part) => part switch
-        {
-            EzManiaNotePart.HoldHead => DEFAULT_HOLD_HEAD_COLOUR,
-            EzManiaNotePart.HoldBody => DEFAULT_HOLD_BODY_COLOUR,
-            EzManiaNotePart.HoldTail => DEFAULT_HOLD_TAIL_COLOUR,
-            _ => DEFAULT_NOTE_COLOUR,
-        };
+        public static readonly Colour4 DEFAULT_HOLD_BODY_COLOUR = Colour4.FromHex("#FFE782B2");
 
         public BindableColour4 NoteColour { get; } = new BindableColour4(DEFAULT_NOTE_COLOUR);
 
@@ -53,7 +35,7 @@ namespace osu.Game.EzOsuGame.Overlays.Preview
 
         public BindableColour4 HoldBodyColour { get; } = new BindableColour4(DEFAULT_HOLD_BODY_COLOUR);
 
-        public BindableColour4 HoldTailColour { get; } = new BindableColour4(DEFAULT_HOLD_TAIL_COLOUR);
+        public BindableColour4 LaneBackgroundColour { get; } = new BindableColour4(DEFAULT_LANE_BACKGROUND_COLOUR);
 
         public BindableFloat ThicknessScale { get; } = new BindableFloat(DEFAULT_THICKNESS_SCALE)
         {
@@ -63,11 +45,17 @@ namespace osu.Game.EzOsuGame.Overlays.Preview
 
         public Bindable<ManiaLongNoteStyle> Style { get; } = new Bindable<ManiaLongNoteStyle>(ManiaLongNoteStyle.Column);
 
+        public static Colour4 DefaultColourFor(EzManiaNotePart part) => part switch
+        {
+            EzManiaNotePart.HoldHead => DEFAULT_HOLD_HEAD_COLOUR,
+            EzManiaNotePart.HoldBody => DEFAULT_HOLD_BODY_COLOUR,
+            _ => DEFAULT_NOTE_COLOUR,
+        };
+
         public Colour4 For(EzManiaNotePart part) => part switch
         {
             EzManiaNotePart.HoldHead => HoldHeadColour.Value,
             EzManiaNotePart.HoldBody => HoldBodyColour.Value,
-            EzManiaNotePart.HoldTail => HoldTailColour.Value,
             _ => NoteColour.Value,
         };
 
@@ -75,25 +63,12 @@ namespace osu.Game.EzOsuGame.Overlays.Preview
         {
             EzManiaNotePart.HoldHead => HoldHeadColour,
             EzManiaNotePart.HoldBody => HoldBodyColour,
-            EzManiaNotePart.HoldTail => HoldTailColour,
             _ => NoteColour,
         };
 
-        /// <summary>把另一份设置的值覆盖到本实例（同一批 bindable，不替换引用）。</summary>
-        public void CopyTo(EzPreviewManiaSettings target)
-        {
-            target.NoteColour.Value = NoteColour.Value;
-            target.HoldHeadColour.Value = HoldHeadColour.Value;
-            target.HoldBodyColour.Value = HoldBodyColour.Value;
-            target.HoldTailColour.Value = HoldTailColour.Value;
-            target.ThicknessScale.Value = ThicknessScale.Value;
-            target.Style.Value = Style.Value;
-        }
+        internal void ApplyDocument(EzPreviewManiaSettingsDocument? document) => document?.ApplyTo(this);
     }
 
-    /// <summary>
-    /// 存档格式。字段缺失时回落到默认调色板/厚度。
-    /// </summary>
     internal sealed class EzPreviewManiaSettingsDocument
     {
         public string? NoteColour { get; set; }
@@ -102,30 +77,30 @@ namespace osu.Game.EzOsuGame.Overlays.Preview
 
         public string? HoldBodyColour { get; set; }
 
-        public string? HoldTailColour { get; set; }
+        public string? LaneBackgroundColour { get; set; }
 
         public float? ThicknessScale { get; set; }
 
         public string? Style { get; set; }
 
-        public static EzPreviewManiaSettingsDocument From(EzPreviewManiaSettings maniaSettings) => new EzPreviewManiaSettingsDocument
+        public static EzPreviewManiaSettingsDocument From(EzPreviewManiaSettings settings) => new EzPreviewManiaSettingsDocument
         {
-            NoteColour = maniaSettings.NoteColour.Value.ToHex(),
-            HoldHeadColour = maniaSettings.HoldHeadColour.Value.ToHex(),
-            HoldBodyColour = maniaSettings.HoldBodyColour.Value.ToHex(),
-            HoldTailColour = maniaSettings.HoldTailColour.Value.ToHex(),
-            ThicknessScale = maniaSettings.ThicknessScale.Value,
-            Style = maniaSettings.Style.Value.ToString(),
+            NoteColour = settings.NoteColour.Value.ToHex(),
+            HoldHeadColour = settings.HoldHeadColour.Value.ToHex(),
+            HoldBodyColour = settings.HoldBodyColour.Value.ToHex(),
+            LaneBackgroundColour = settings.LaneBackgroundColour.Value.ToHex(),
+            ThicknessScale = settings.ThicknessScale.Value,
+            Style = settings.Style.Value.ToString(),
         };
 
-        public void ApplyTo(EzPreviewManiaSettings maniaSettings)
+        public void ApplyTo(EzPreviewManiaSettings settings)
         {
-            maniaSettings.NoteColour.Value = parse(NoteColour, EzPreviewManiaSettings.DEFAULT_NOTE_COLOUR);
-            maniaSettings.HoldHeadColour.Value = parse(HoldHeadColour, EzPreviewManiaSettings.DEFAULT_HOLD_HEAD_COLOUR);
-            maniaSettings.HoldBodyColour.Value = parse(HoldBodyColour, EzPreviewManiaSettings.DEFAULT_HOLD_BODY_COLOUR);
-            maniaSettings.HoldTailColour.Value = parse(HoldTailColour, EzPreviewManiaSettings.DEFAULT_HOLD_TAIL_COLOUR);
-            maniaSettings.ThicknessScale.Value = parseThickness(ThicknessScale);
-            maniaSettings.Style.Value = parseStyle(Style);
+            settings.NoteColour.Value = parse(NoteColour, EzPreviewManiaSettings.DEFAULT_NOTE_COLOUR);
+            settings.HoldHeadColour.Value = parse(HoldHeadColour, EzPreviewManiaSettings.DEFAULT_HOLD_HEAD_COLOUR);
+            settings.HoldBodyColour.Value = parse(HoldBodyColour, EzPreviewManiaSettings.DEFAULT_HOLD_BODY_COLOUR);
+            settings.LaneBackgroundColour.Value = parse(LaneBackgroundColour, EzPreviewManiaSettings.DEFAULT_LANE_BACKGROUND_COLOUR);
+            settings.ThicknessScale.Value = parseThickness(ThicknessScale);
+            settings.Style.Value = parseStyle(Style);
         }
 
         private static ManiaLongNoteStyle parseStyle(string? value) =>

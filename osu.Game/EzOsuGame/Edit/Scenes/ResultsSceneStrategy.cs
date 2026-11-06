@@ -3,6 +3,7 @@
 
 using System.Collections.Generic;
 using osu.Framework.Localisation;
+using osu.Game.EzOsuGame.Edit.Components;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.EzOsuGame.Screens;
 
@@ -14,24 +15,36 @@ namespace osu.Game.EzOsuGame.Edit.Scenes
     /// </summary>
     public class ResultsSceneStrategy : IEzSkinEditorSceneStrategy
     {
-        public const string GROUP_ID_CARD_BACKGROUND = "results_card_background";
+        private EzSkinEditorSettingsGroup[]? sections;
 
-        public EzSkinEditorSceneType SceneType => EzSkinEditorSceneType.Results;
+        public EzEditorSceneType SceneType => EzEditorSceneType.Results;
 
-        public EzSkinEditorSceneGroup Group => EzSkinEditorSceneGroup.Gameplay;
+        public EzEditorSceneGroup Group => EzEditorSceneGroup.Gameplay;
 
         public LocalisableString TabTitle => EzEditorStrings.TAB_RESULTS;
 
         public bool SupportsHudLayer => true;
 
-        public IReadOnlyList<EzSkinEditorSidebarGroupDefinition> CreateSidebarGroups(EzSkinEditorSceneContext context) => new[]
+        public IReadOnlyList<EzSkinEditorSettingsGroup> Sections => sections ??= new EzSkinEditorSettingsGroup[]
         {
-            new EzSkinEditorSidebarGroupDefinition
-            {
-                Id = GROUP_ID_CARD_BACKGROUND,
-                Title = EzEditorStrings.GROUP_RESULTS_CARD_BACKGROUND,
-                CreateContent = () => new EzEditorSectionResultsSidebar(),
-            },
+            new EzSkinEditorResultsCardBackgroundSection(),
         };
+    }
+
+    /// <summary>
+    /// 把已有的结算卡片背景配置页包成编辑器侧栏分组。
+    /// </summary>
+    public partial class EzSkinEditorResultsCardBackgroundSection : EzSkinEditorSettingsGroup
+    {
+        public EzSkinEditorResultsCardBackgroundSection()
+            : base(EzEditorStrings.GROUP_RESULTS_CARD_BACKGROUND)
+        {
+        }
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+            Add(new EzEditorSectionResultsSidebar());
+        }
     }
 }

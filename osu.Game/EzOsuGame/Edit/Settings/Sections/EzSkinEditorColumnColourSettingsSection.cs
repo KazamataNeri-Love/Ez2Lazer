@@ -12,6 +12,7 @@ using osu.Framework.Graphics.Shapes;
 using osu.Framework.Localisation;
 using osu.Framework.Testing;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Edit.Components;
 using osu.Game.EzOsuGame.Extensions;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.EzOsuGame.Screens;
@@ -23,42 +24,42 @@ using osuTK.Graphics;
 
 namespace osu.Game.EzOsuGame.Edit.Settings.Sections
 {
-    public partial class EzSkinEditorColumnColourSettingsSection : FillFlowContainer
+    public partial class EzSkinEditorColumnColourSettingsSection : EzSkinEditorSettingsGroup
     {
         private static readonly List<int> available_key_modes = new List<int> { 0, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18 };
 
-        private readonly EzSkinEditorPreviewState? previewState;
+        private IBindable<int?>? suggestedKeyMode;
 
         private readonly Dictionary<int, List<EzSelectorColour>> columnSelectorCache = new Dictionary<int, List<EzSelectorColour>>();
-        private readonly Dictionary<Ez2Setting, BindableColour4> colorBindables = new Dictionary<Ez2Setting, BindableColour4>();
+        private readonly Dictionary<Ez2Setting, BindableColour4> typeBindables = new Dictionary<Ez2Setting, BindableColour4>();
 
         private FillFlowContainer columnsContainer = null!;
         private Bindable<int> columnTypeListSelectBindable = null!;
-        private Bindable<bool> colorSettingsEnabled = null!;
+        private Bindable<bool> columnColouringEnabled = null!;
 
         [Resolved]
         private Ez2ConfigManager ezSkinConfig { get; set; } = null!;
 
-        public EzSkinEditorColumnColourSettingsSection(EzSkinEditorPreviewState? previewState = null)
+        [Resolved]
+        private EzSkinEditorPreviewState previewState { get; set; } = null!;
+
+        public EzSkinEditorColumnColourSettingsSection()
+            : base(EzEditorStrings.COLUMN_TYPE)
         {
-            this.previewState = previewState;
-            RelativeSizeAxes = Axes.X;
-            AutoSizeAxes = Axes.Y;
-            Direction = FillDirection.Vertical;
             Spacing = new Vector2(8);
         }
 
         [BackgroundDependencyLoader]
         private void load()
         {
-            colorSettingsEnabled = ezSkinConfig.GetBindable<bool>(Ez2Setting.ColorSettingsEnabled);
+            columnColouringEnabled = ezSkinConfig.GetBindable<bool>(Ez2Setting.ColorSettingsEnabled);
             columnTypeListSelectBindable = ezSkinConfig.GetBindable<int>(Ez2Setting.ColumnTypeListSelect);
 
-            colorBindables[Ez2Setting.ColumnTypeA] = createColorBindable(Ez2Setting.ColumnTypeA);
-            colorBindables[Ez2Setting.ColumnTypeB] = createColorBindable(Ez2Setting.ColumnTypeB);
-            colorBindables[Ez2Setting.ColumnTypeS] = createColorBindable(Ez2Setting.ColumnTypeS);
-            colorBindables[Ez2Setting.ColumnTypeE] = createColorBindable(Ez2Setting.ColumnTypeE);
-            colorBindables[Ez2Setting.ColumnTypeP] = createColorBindable(Ez2Setting.ColumnTypeP);
+            typeBindables[Ez2Setting.ColumnTypeA] = createColorBindable(Ez2Setting.ColumnTypeA);
+            typeBindables[Ez2Setting.ColumnTypeB] = createColorBindable(Ez2Setting.ColumnTypeB);
+            typeBindables[Ez2Setting.ColumnTypeS] = createColorBindable(Ez2Setting.ColumnTypeS);
+            typeBindables[Ez2Setting.ColumnTypeE] = createColorBindable(Ez2Setting.ColumnTypeE);
+            typeBindables[Ez2Setting.ColumnTypeP] = createColorBindable(Ez2Setting.ColumnTypeP);
 
             Children = new Drawable[]
             {
@@ -96,26 +97,27 @@ namespace osu.Game.EzOsuGame.Edit.Settings.Sections
 
             columnTypeListSelectBindable.BindValueChanged(e => updateColumnsType(e.NewValue), true);
 
-            colorSettingsEnabled.BindValueChanged(e => onColorSettingsEnabledChanged(e.NewValue), true);
+            columnColouringEnabled.BindValueChanged(e => onColorSettingsEnabledChanged(e.NewValue), true);
 
-            colorBindables[Ez2Setting.ColumnTypeA].BindValueChanged(e => updateBaseColour(e.NewValue, EzConstants.COLUMN_TYPE_A));
-            colorBindables[Ez2Setting.ColumnTypeB].BindValueChanged(e => updateBaseColour(e.NewValue, EzConstants.COLUMN_TYPE_B));
-            colorBindables[Ez2Setting.ColumnTypeS].BindValueChanged(e => updateBaseColour(e.NewValue, EzConstants.COLUMN_TYPE_S));
-            colorBindables[Ez2Setting.ColumnTypeE].BindValueChanged(e => updateBaseColour(e.NewValue, EzConstants.COLUMN_TYPE_E));
-            colorBindables[Ez2Setting.ColumnTypeP].BindValueChanged(e => updateBaseColour(e.NewValue, EzConstants.COLUMN_TYPE_P));
+            typeBindables[Ez2Setting.ColumnTypeA].BindValueChanged(e => updateBaseColour(e.NewValue, EzConstants.COLUMN_TYPE_A));
+            typeBindables[Ez2Setting.ColumnTypeB].BindValueChanged(e => updateBaseColour(e.NewValue, EzConstants.COLUMN_TYPE_B));
+            typeBindables[Ez2Setting.ColumnTypeS].BindValueChanged(e => updateBaseColour(e.NewValue, EzConstants.COLUMN_TYPE_S));
+            typeBindables[Ez2Setting.ColumnTypeE].BindValueChanged(e => updateBaseColour(e.NewValue, EzConstants.COLUMN_TYPE_E));
+            typeBindables[Ez2Setting.ColumnTypeP].BindValueChanged(e => updateBaseColour(e.NewValue, EzConstants.COLUMN_TYPE_P));
 
-            previewState?.SuggestedKeyMode.BindValueChanged(e => updateKeyModeFromPreview(), true);
+            suggestedKeyMode = previewState.SuggestedKeyMode.GetBoundCopy();
+            suggestedKeyMode.BindValueChanged(_ => updateKeyModeFromPreview(), true);
         }
 
         protected override void Dispose(bool isDisposing)
         {
             columnTypeListSelectBindable.UnbindAll();
-            colorSettingsEnabled.UnbindAll();
+            columnColouringEnabled.UnbindAll();
 
-            foreach (var bindable in colorBindables.Values)
+            foreach (var bindable in typeBindables.Values)
                 bindable.UnbindAll();
 
-            previewState?.SuggestedKeyMode.UnbindAll();
+            suggestedKeyMode?.UnbindAll();
             base.Dispose(isDisposing);
         }
 
@@ -141,7 +143,7 @@ namespace osu.Game.EzOsuGame.Edit.Settings.Sections
 
         private void updateBaseColour(Color4 newColor, string type)
         {
-            if (!colorSettingsEnabled.Value)
+            if (!columnColouringEnabled.Value)
                 return;
 
             foreach (var selector in columnsContainer.ChildrenOfType<EzSelectorColour>())
@@ -150,7 +152,7 @@ namespace osu.Game.EzOsuGame.Edit.Settings.Sections
 
         private void updateKeyModeFromPreview()
         {
-            int? suggested = previewState?.SuggestedKeyMode.Value;
+            int? suggested = previewState.SuggestedKeyMode.Value;
 
             if (suggested == null || !available_key_modes.Contains(suggested.Value))
                 return;
@@ -168,7 +170,7 @@ namespace osu.Game.EzOsuGame.Edit.Settings.Sections
 
         private void updateColumnsTypeInternal(int keyModeForList)
         {
-            if (!IsLoaded || !colorSettingsEnabled.Value)
+            if (!IsLoaded || !columnColouringEnabled.Value)
                 return;
 
             if (columnSelectorCache.TryGetValue(keyModeForList, out var cachedSelectors))
@@ -225,11 +227,11 @@ namespace osu.Game.EzOsuGame.Edit.Settings.Sections
 
         private Dictionary<string, Color4> createColorMapping() => new Dictionary<string, Color4>
         {
-            [EzConstants.COLUMN_TYPE_A] = colorBindables[Ez2Setting.ColumnTypeA].Value,
-            [EzConstants.COLUMN_TYPE_B] = colorBindables[Ez2Setting.ColumnTypeB].Value,
-            [EzConstants.COLUMN_TYPE_S] = colorBindables[Ez2Setting.ColumnTypeS].Value,
-            [EzConstants.COLUMN_TYPE_E] = colorBindables[Ez2Setting.ColumnTypeE].Value,
-            [EzConstants.COLUMN_TYPE_P] = colorBindables[Ez2Setting.ColumnTypeP].Value,
+            [EzConstants.COLUMN_TYPE_A] = typeBindables[Ez2Setting.ColumnTypeA].Value,
+            [EzConstants.COLUMN_TYPE_B] = typeBindables[Ez2Setting.ColumnTypeB].Value,
+            [EzConstants.COLUMN_TYPE_S] = typeBindables[Ez2Setting.ColumnTypeS].Value,
+            [EzConstants.COLUMN_TYPE_E] = typeBindables[Ez2Setting.ColumnTypeE].Value,
+            [EzConstants.COLUMN_TYPE_P] = typeBindables[Ez2Setting.ColumnTypeP].Value,
         };
 
         private EzSelectorColour createColumnSelector(int keyMode, int columnIndex, string[] columnTypes, Dictionary<string, Color4> colorMapping)
