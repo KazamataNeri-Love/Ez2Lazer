@@ -21,7 +21,6 @@ using osu.Game.Database;
 using osu.Game.Input.Bindings;
 using osu.Game.Input.Handlers;
 using osu.Game.EzOsuGame.Configuration;
-using osu.Game.EzOsuGame.Layout;
 using osu.Game.EzOsuGame.Mods;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.Replays;
@@ -30,7 +29,6 @@ using osu.Game.Rulesets.Mania.Configuration;
 using osu.Game.Rulesets.Mania.EzMania;
 using osu.Game.Rulesets.Mania.EzMania.ReplayInputNotes;
 using osu.Game.Rulesets.Mania.EzMania.ReplayJudge;
-using osu.Game.Rulesets.Mania.EzMania.Tilt;
 using osu.Game.Rulesets.Mania.Objects;
 using osu.Game.Rulesets.Mania.Objects.EzCurrentHitObject;
 using osu.Game.Rulesets.Mania.Replays;
@@ -42,7 +40,6 @@ using osu.Game.Rulesets.Objects.Drawables;
 using osu.Game.Rulesets.Scoring;
 using osu.Game.Rulesets.UI;
 using osu.Game.Rulesets.UI.Scrolling;
-using osu.Game.Rulesets.UI.Scrolling.Algorithms;
 using osu.Game.Scoring;
 using osu.Game.Screens.Play;
 using osu.Game.Skinning;
@@ -98,35 +95,6 @@ namespace osu.Game.Rulesets.Mania.UI
 
         [Resolved]
         private Ez2ConfigManager ezConfig { get; set; } = null!;
-
-        [Resolved]
-        private EzConfigLayoutStore layoutStore { get; set; } = null!;
-
-        /// <summary>
-        /// 斜轨生效值。舞台设置的 layout 值写进这里；Tilted Track 选中时同一条通道被 Mod 覆盖。
-        /// 横向收窄（playfield 容器）与纵向距离律（滚动算法）都读它，保证两个维度同源。
-        /// </summary>
-        public BindableFloat TiltAngle { get; } = new BindableFloat
-        {
-            MinValue = 0,
-            MaxValue = EzTiltModel.MAX_ANGLE,
-            Precision = 1,
-        };
-
-        public BindableFloat TiltCompensation { get; } = new BindableFloat
-        {
-            MinValue = 0,
-            MaxValue = 1,
-            Precision = 0.01f,
-        };
-
-        private IScrollAlgorithm? untiltAlgorithm;
-        private bool tiltOverriddenByMod;
-
-        /// <summary>
-        /// 当前生效的纵向距离律强度 k（0 = 无斜轨）。note 缩放组件读它，与滚动算法共用同一个值。
-        /// </summary>
-        public float TiltStrength { get; private set; }
 
         [Resolved]
         private RealmAccess realm { get; set; } = null!;
@@ -293,86 +261,6 @@ namespace osu.Game.Rulesets.Mania.UI
                 FrameStableComponents.Add(HoldTailSpeedTracker = new EzBeatmapSpeedTracker());
 
             setupReplayInputNotes(replayPlayer);
-
-            setupTiltScrolling();
-            setupTiltNoteScalers();
-        }
-
-        /// <summary>
-        /// 斜轨生效值接线：默认取舞台 layout，Mod 覆盖后不再跟随 layout。角度或补偿变化时重装滚动算法。
-        /// </summary>
-        private void setupTiltScrolling()
-        {
-            var layout = layoutStore.PlayfieldLayout;
-
-            layout.TiltAngle.BindValueChanged(e =>
-            {
-                if (!tiltOverriddenByMod)
-                    TiltAngle.Value = e.NewValue;
-            });
-
-            layout.TiltCompensation.BindValueChanged(e =>
-            {
-                if (!tiltOverriddenByMod)
-                    TiltCompensation.Value = e.NewValue;
-            });
-
-            if (!tiltOverriddenByMod)
-            {
-                TiltAngle.Value = layout.TiltAngle.Value;
-                TiltCompensation.Value = layout.TiltCompensation.Value;
-            }
-
-            TiltAngle.BindValueChanged(_ => applyTiltScroll());
-            TiltCompensation.BindValueChanged(_ => applyTiltScroll());
-
-            applyTiltScroll();
-        }
-
-        /// <summary>
-        /// Tilted Track 选中时由 Mod 接管斜轨参数：横向收窄与纵向距离律同时改用 Mod 的值。
-        /// </summary>
-        public void SetTiltOverride(float angle, float compensation)
-        {
-            tiltOverriddenByMod = true;
-            TiltAngle.Value = angle;
-            TiltCompensation.Value = compensation;
-        }
-
-        /// <summary>
-        /// 把纵向距离律装进 <see cref="ScrollingInfo"/>。角度为 0 时还原布局期算法，保持零开销路径。
-        /// </summary>
-        private void applyTiltScroll()
-        {
-            if (ScrollingInfo.Algorithm is not Bindable<IScrollAlgorithm> algorithm)
-                return;
-
-            untiltAlgorithm ??= algorithm.Value;
-
-            if (TiltAngle.Value <= 0)
-            {
-                TiltStrength = 0f;
-
-                if (!ReferenceEquals(algorithm.Value, untiltAlgorithm))
-                    algorithm.Value = untiltAlgorithm;
-
-                return;
-            }
-
-            TiltStrength = EzTiltModel.DistanceStrength(TiltAngle.Value, TiltCompensation.Value);
-            algorithm.Value = new EzTiltScrollAlgorithm(untiltAlgorithm, TiltStrength);
-        }
-
-        /// <summary>
-        /// 每列挂一个尺寸缩放组件；k 为 0 时它在第一帧就返回，不产生遍历开销。
-        /// </summary>
-        private void setupTiltNoteScalers()
-        {
-            foreach (var stage in Playfield.Stages)
-            {
-                foreach (var column in stage.Columns)
-                    column.TopLevelContainer.Add(new EzTiltNoteScaler(column, this));
-            }
         }
 
         /// <summary>

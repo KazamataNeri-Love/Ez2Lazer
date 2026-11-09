@@ -29,6 +29,10 @@ namespace osu.Game.Rulesets.Mania.UI
 
         private readonly DrawableManiaRuleset drawableManiaRuleset;
         private BindableFloat tiltAngle = null!;
+        private BindableFloat tiltCompensation = null!;
+
+        private (float angle, float compensation)? modOverride;
+        private bool bindingsReady;
 
         [Resolved]
         private EzConfigLayoutStore layoutStore { get; set; } = null!;
@@ -88,17 +92,39 @@ namespace osu.Game.Rulesets.Mania.UI
         [BackgroundDependencyLoader]
         private void load()
         {
-            // 斜轨的生效值由 ruleset 统一持有：舞台设置与 Tilted Track 覆盖都写在那里，
-            // 横向收窄（这里）与纵向距离律（EzTiltScrollAlgorithm）因此共用同一个角度。
-            tiltAngle = drawableManiaRuleset.TiltAngle;
+            tiltAngle = playfieldLayout.TiltAngle;
+            tiltCompensation = playfieldLayout.TiltCompensation;
 
             tiltAngle.BindValueChanged(_ => updatePerspective());
+            tiltCompensation.BindValueChanged(_ => updatePerspective());
+
+            bindingsReady = true;
             updatePerspective();
+        }
+
+        /// <summary>
+        /// Tilted Track 选中时由 Mod 覆盖皮肤值：投影始终只有一层容器，Mod 同时充当皮肤级斜轨不可用时的兜底入口。
+        /// </summary>
+        public void SetModOverride(float angle, float compensation)
+        {
+            modOverride = (angle, compensation);
+
+            if (bindingsReady)
+                updatePerspective();
         }
 
         private void updatePerspective()
         {
-            tiltContainer?.ApplyTilt(tiltAngle.Value);
+            if (tiltContainer == null)
+                return;
+
+            if (modOverride is { } over)
+            {
+                tiltContainer.ApplyTilt(over.angle, over.compensation);
+                return;
+            }
+
+            tiltContainer.ApplyTilt(tiltAngle.Value, tiltCompensation.Value);
         }
 
         protected override void Update()
