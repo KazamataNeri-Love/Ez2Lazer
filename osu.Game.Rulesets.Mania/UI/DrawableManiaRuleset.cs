@@ -123,6 +123,11 @@ namespace osu.Game.Rulesets.Mania.UI
         private IScrollAlgorithm? untiltAlgorithm;
         private bool tiltOverriddenByMod;
 
+        /// <summary>
+        /// 当前生效的纵向距离律强度 k（0 = 无斜轨）。note 缩放组件读它，与滚动算法共用同一个值。
+        /// </summary>
+        public float TiltStrength { get; private set; }
+
         [Resolved]
         private RealmAccess realm { get; set; } = null!;
 
@@ -290,6 +295,7 @@ namespace osu.Game.Rulesets.Mania.UI
             setupReplayInputNotes(replayPlayer);
 
             setupTiltScrolling();
+            setupTiltNoteScalers();
         }
 
         /// <summary>
@@ -345,13 +351,28 @@ namespace osu.Game.Rulesets.Mania.UI
 
             if (TiltAngle.Value <= 0)
             {
+                TiltStrength = 0f;
+
                 if (!ReferenceEquals(algorithm.Value, untiltAlgorithm))
                     algorithm.Value = untiltAlgorithm;
 
                 return;
             }
 
-            algorithm.Value = new EzTiltScrollAlgorithm(untiltAlgorithm, EzTiltModel.DistanceStrength(TiltAngle.Value, TiltCompensation.Value));
+            TiltStrength = EzTiltModel.DistanceStrength(TiltAngle.Value, TiltCompensation.Value);
+            algorithm.Value = new EzTiltScrollAlgorithm(untiltAlgorithm, TiltStrength);
+        }
+
+        /// <summary>
+        /// 每列挂一个尺寸缩放组件；k 为 0 时它在第一帧就返回，不产生遍历开销。
+        /// </summary>
+        private void setupTiltNoteScalers()
+        {
+            foreach (var stage in Playfield.Stages)
+            {
+                foreach (var column in stage.Columns)
+                    column.TopLevelContainer.Add(new EzTiltNoteScaler(column, this));
+            }
         }
 
         /// <summary>
