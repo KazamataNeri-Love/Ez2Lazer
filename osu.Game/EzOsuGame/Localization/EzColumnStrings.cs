@@ -15,6 +15,16 @@ namespace osu.Game.EzOsuGame.Localization
             "通过透视映射模拟轨道旋转。0为关闭（需要重载游戏场景），角度越大越明显（上窄下宽）。",
             "Simulate lane rotation using perspective mapping. 0° is the original look, larger angles increase the effect (narrower top and wider bottom).");
 
+        public static readonly LocalisableString END_SPEED_RATIO = new EzLocalizationManager.EzLocalisableString(
+            "末速度",
+            "End speed");
+
+        public static readonly LocalisableString END_SPEED_RATIO_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "落到判定线时的瞬时速度占常规速度的比例。100% 为匀速，越低落地前越慢、越高越快。"
+            + "\n只改屏幕上的分布，不改判定时刻。",
+            "The instantaneous speed at the judgement line as a percentage of the normal speed. 100% is uniform; lower decelerates towards the line, higher accelerates."
+            + "\nOnly the on-screen distribution changes; judgement timing is untouched.");
+
         public static readonly LocalisableString STAGE_POSITION_X = new EzLocalizationManager.EzLocalisableString(
             "Mania Stage 水平位置",
             "Mania Stage X position");

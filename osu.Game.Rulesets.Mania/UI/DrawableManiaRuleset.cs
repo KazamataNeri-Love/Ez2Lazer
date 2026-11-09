@@ -40,6 +40,8 @@ using osu.Game.Rulesets.Objects.Drawables;
 using osu.Game.Rulesets.Scoring;
 using osu.Game.Rulesets.UI;
 using osu.Game.Rulesets.UI.Scrolling;
+using osu.Game.Rulesets.UI.Scrolling.Algorithms;
+using osu.Game.Rulesets.Mania.EzMania.Scrolling;
 using osu.Game.Scoring;
 using osu.Game.Screens.Play;
 using osu.Game.Skinning;
@@ -92,6 +94,9 @@ namespace osu.Game.Rulesets.Mania.UI
         private readonly Track speedAdjustmentTrack = new TrackVirtual(0);
 
         private ISkinSource currentSkin = null!;
+
+        private IScrollAlgorithm? baseScrollAlgorithm;
+        private Bindable<double> endSpeedRatio = null!;
 
         [Resolved]
         private Ez2ConfigManager ezConfig { get; set; } = null!;
@@ -261,6 +266,38 @@ namespace osu.Game.Rulesets.Mania.UI
                 FrameStableComponents.Add(HoldTailSpeedTracker = new EzBeatmapSpeedTracker());
 
             setupReplayInputNotes(replayPlayer);
+
+            setupEndSpeedScrolling();
+        }
+
+        /// <summary>
+        /// 斜轨下落变速：包住布局期设定的滚动算法。比例 1 时还原原算法，保持零开销。
+        /// </summary>
+        private void setupEndSpeedScrolling()
+        {
+            if (ScrollingInfo.Algorithm is not Bindable<IScrollAlgorithm> algorithm)
+                return;
+
+            baseScrollAlgorithm ??= algorithm.Value;
+
+            endSpeedRatio = ezConfig.GetBindable<double>(Ez2Setting.ManiaEndSpeedRatio);
+            endSpeedRatio.BindValueChanged(_ => applyEndSpeedScrolling(algorithm), true);
+        }
+
+        private void applyEndSpeedScrolling(Bindable<IScrollAlgorithm> algorithm)
+        {
+            if (baseScrollAlgorithm == null)
+                return;
+
+            if (Math.Abs(endSpeedRatio.Value - 1.0) < 1e-3)
+            {
+                if (!ReferenceEquals(algorithm.Value, baseScrollAlgorithm))
+                    algorithm.Value = baseScrollAlgorithm;
+
+                return;
+            }
+
+            algorithm.Value = new EzEndSpeedScrollAlgorithm(baseScrollAlgorithm, (float)endSpeedRatio.Value);
         }
 
         /// <summary>

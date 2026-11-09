@@ -86,6 +86,14 @@ namespace osu.Game.EzOsuGame.Edit.Settings.Sections
                     KeyboardStep = 1f,
                     DisplayAsPercentage = false,
                 },
+                new SettingsSlider<double>
+                {
+                    LabelText = EzColumnStrings.END_SPEED_RATIO,
+                    TooltipText = EzColumnStrings.END_SPEED_RATIO_TOOLTIP,
+                    Current = ezSkinConfig.GetBindable<double>(Ez2Setting.ManiaEndSpeedRatio),
+                    KeyboardStep = 0.01f,
+                    DisplayAsPercentage = true,
+                },
             };
         }
     }
