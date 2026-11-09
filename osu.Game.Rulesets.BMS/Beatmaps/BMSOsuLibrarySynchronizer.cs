@@ -6,6 +6,7 @@ using osu.Framework.Platform;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.ExternalLibraries;
 using osu.Game.Database;
+using osu.Game.EzOsuGame.Analysis;
 using osu.Game.Models;
 using Realms;
 
@@ -156,9 +157,9 @@ namespace osu.Game.Rulesets.BMS.Beatmaps
             registerExternalSetFile(realmFileStore, realm, destinationSet, contentRoot, syncSet.Song.StageFilePath);
 
             HashSet<Guid> deletedBeatmapIds = changes.Where(change => change.Kind == BmsRealmSyncChangeKind.Delete)
-                                                    .Select(change => change.BeatmapId)
-                                                    .Where(id => !targetBeatmaps.ContainsKey(id))
-                                                    .ToHashSet();
+                                                     .Select(change => change.BeatmapId)
+                                                     .Where(id => !targetBeatmaps.ContainsKey(id))
+                                                     .ToHashSet();
 
             foreach (BeatmapInfo deletedBeatmap in destinationSet.Beatmaps.Where(beatmap => deletedBeatmapIds.Contains(beatmap.ID)).ToList())
             {
@@ -177,7 +178,7 @@ namespace osu.Game.Rulesets.BMS.Beatmaps
         /// <summary>
         /// Song-select baseline fields written by <see cref="UI.BmsSongSelect.Analytics.BmsAnalyticsRealmWriteback"/>.
         /// </summary>
-        public readonly record struct PersistedSongSelectBaseline(double StarRating, double XxyStarRating, double PerformancePoints);
+        public readonly record struct PersistedSongSelectBaseline(double StarRating, double SunnySR, double PerformancePoints);
 
         /// <summary>
         /// Exposed for unit tests validating Realm re-import retains song-select baseline.
@@ -200,7 +201,7 @@ namespace osu.Game.Rulesets.BMS.Beatmaps
 
             foreach (var beatmap in existingSet.Beatmaps)
             {
-                result[beatmap.ID] = new PersistedSongSelectBaseline(beatmap.StarRating, beatmap.XxyStarRating, beatmap.PerformancePoints);
+                result[beatmap.ID] = new PersistedSongSelectBaseline(beatmap.StarRating, beatmap.EzRatingData.SunnySR, beatmap.PerformancePoints);
             }
 
             return result;
@@ -214,8 +215,8 @@ namespace osu.Game.Rulesets.BMS.Beatmaps
             if (persisted.StarRating >= 0)
                 beatmap.StarRating = persisted.StarRating;
 
-            if (persisted.XxyStarRating >= 0)
-                beatmap.XxyStarRating = persisted.XxyStarRating;
+            if (persisted.SunnySR >= 0)
+                EzRatingWriter.WriteSR(beatmap, EzAnalysisSystem.SSR, persisted.SunnySR);
 
             if (persisted.PerformancePoints >= 0)
                 beatmap.PerformancePoints = persisted.PerformancePoints;

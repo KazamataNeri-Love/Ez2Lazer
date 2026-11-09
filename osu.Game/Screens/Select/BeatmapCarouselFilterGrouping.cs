@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using osu.Framework.Extensions.IEnumerableExtensions;
 using osu.Game.Beatmaps;
 using osu.Game.Collections;
+using osu.Game.EzOsuGame.Analysis;
 using osu.Game.Graphics.Carousel;
 using osu.Game.Localisation;
 using osu.Game.Rulesets;
@@ -50,6 +51,7 @@ namespace osu.Game.Screens.Select
         public required Func<HashSet<int>> GetFavouriteBeatmapSets { get; init; }
         public required Func<IEnumerable<BeatmapInfo>, CancellationToken, Task<IReadOnlyDictionary<BeatmapInfo, double>>> GetDifficultiesForOperationsAsync { get; init; }
         public required Func<IEnumerable<BeatmapInfo>, CancellationToken, Task<IReadOnlyDictionary<BeatmapInfo, double>>> GetPpForOperationsAsync { get; init; }
+        public Func<IEnumerable<BeatmapInfo>, EzAnalysisSystem, string, CancellationToken, Task<IReadOnlyDictionary<BeatmapInfo, double>>>? GetSkillAxisForOperationsAsync { get; init; }
 
         public async Task<List<CarouselItem>> Run(IEnumerable<CarouselItem> items, CancellationToken cancellationToken)
         {
@@ -67,13 +69,18 @@ namespace osu.Game.Screens.Select
                 IReadOnlyDictionary<BeatmapInfo, double>? operationDifficulties = null;
                 IReadOnlyDictionary<BeatmapInfo, double>? operationPpValues = null;
 
-                // xxy_SR is only required when difficulty is the active grouping key.
-                // For 0/1 item, grouping key does not affect output.
-                bool useXxyStarRatingGrouping = itemList.Count > 1
-                                                && criteria.Group == GroupMode.XxyStarRating;
+                // Difficulty and PP grouping read the analysis system the beatmap's ruleset is set to.
+                bool useDifficultyGrouping = itemList.Count > 1
+                                             && criteria.Group == GroupMode.Difficulty;
                 bool usePpGrouping = criteria.Group == GroupMode.PP && itemList.Count > 0;
+                bool useSkillAxisGrouping = criteria.Group == GroupMode.SkillAxis
+                                            && !string.IsNullOrEmpty(criteria.SkillAxisGroupId)
+                                            && criteria.SkillAxisGroupSystem != EzAnalysisSystem.None
+                                            && itemList.Count > 0;
 
-                if (useXxyStarRatingGrouping)
+                IReadOnlyDictionary<BeatmapInfo, double>? operationSkillAxisValues = null;
+
+                if (useDifficultyGrouping)
                 {
                     var uniqueBeatmaps = itemList.Select(i => (BeatmapInfo)i.Model).Distinct().ToList();
                     operationDifficulties = GetDifficultiesForOperationsAsync(uniqueBeatmaps, cancellationToken)
@@ -89,6 +96,18 @@ namespace osu.Game.Screens.Select
                                         .GetResult();
                 }
 
+                if (useSkillAxisGrouping && GetSkillAxisForOperationsAsync != null)
+                {
+                    var uniqueBeatmaps = itemList.Select(i => (BeatmapInfo)i.Model).Distinct().ToList();
+                    operationSkillAxisValues = GetSkillAxisForOperationsAsync(
+                                                   uniqueBeatmaps,
+                                                   criteria.SkillAxisGroupSystem,
+                                                   criteria.SkillAxisGroupId!,
+                                                   cancellationToken)
+                                               .GetAwaiter()
+                                               .GetResult();
+                }
+
                 BeatmapSetsGroupedTogether = ShouldGroupBeatmapsTogether(criteria);
 
                 double getDifficulty(BeatmapInfo beatmap)
@@ -96,10 +115,7 @@ namespace osu.Game.Screens.Select
                     if (operationDifficulties != null && operationDifficulties.TryGetValue(beatmap, out double difficulty))
                         return difficulty;
 
-                    if (criteria.Group == GroupMode.XxyStarRating)
-                        return beatmap.XxyStarRating;
-
-                    return beatmap.StarRating;
+                    return EzRulesetReadout.SelectedValues(beatmap).Star ?? beatmap.StarRating;
                 }
 
                 double? getPp(BeatmapInfo beatmap)
@@ -110,7 +126,15 @@ namespace osu.Game.Screens.Select
                     return null;
                 }
 
-                var groups = getGroups(itemList, criteria, getDifficulty, getPp);
+                double? getSkillAxis(BeatmapInfo beatmap)
+                {
+                    if (operationSkillAxisValues != null && operationSkillAxisValues.TryGetValue(beatmap, out double value))
+                        return value;
+
+                    return null;
+                }
+
+                var groups = getGroups(itemList, criteria, getDifficulty, getPp, getSkillAxis);
                 int displayedBeatmapsCount = 0;
 
                 foreach (var (group, itemsInGroup) in groups)
@@ -202,8 +226,8 @@ namespace osu.Game.Screens.Select
         {
             // In certain cases, we intentionally split out difficulties
             // where it's more relevant or convenient to view them as individual items.
-            if (criteria.Sort is SortMode.Difficulty or SortMode.XxyStarRating
-                || criteria.Group is GroupMode.Difficulty or GroupMode.XxyStarRating or GroupMode.PP)
+            if (criteria.Sort is SortMode.Difficulty or SortMode.SkillAxis
+                || criteria.Group is GroupMode.Difficulty or GroupMode.PP or GroupMode.SkillAxis)
                 return false;
             if (criteria.Sort == SortMode.LastPlayed && criteria.Group == GroupMode.LastPlayed)
                 return false;
@@ -214,7 +238,8 @@ namespace osu.Game.Screens.Select
             return true;
         }
 
-        private List<GroupMapping> getGroups(List<CarouselItem> items, FilterCriteria criteria, Func<BeatmapInfo, double> getDifficulty, Func<BeatmapInfo, double?> getPp)
+        private List<GroupMapping> getGroups(List<CarouselItem> items, FilterCriteria criteria, Func<BeatmapInfo, double> getDifficulty, Func<BeatmapInfo, double?> getPp,
+                                             Func<BeatmapInfo, double?> getSkillAxis)
         {
             switch (criteria.Group)
             {
@@ -254,11 +279,13 @@ namespace osu.Game.Screens.Select
                     return getGroupsBy(b => defineGroupByBPM(FormatUtils.RoundBPM(b.BPM)), items);
 
                 case GroupMode.Difficulty:
-                case GroupMode.XxyStarRating:
                     return getGroupsBy(b => defineGroupByStars(getDifficulty(b)), items);
 
                 case GroupMode.PP:
                     return getGroupsBy(b => defineGroupByPp(getPp(b)), items);
+
+                case GroupMode.SkillAxis:
+                    return getGroupsBy(b => defineGroupBySkillAxis(getSkillAxis(b), criteria.SkillAxisGroupSystem), items);
 
                 case GroupMode.Length:
                     return getGroupsBy(b => defineGroupByLength(b.Length), items);
@@ -454,6 +481,25 @@ namespace osu.Game.Screens.Select
 
             int bucketStart = Math.Max(0, (int)Math.Floor(value / 100d) * 100);
             return new GroupDefinition(bucketStart, $"{bucketStart} - {bucketStart + 100} PP").Yield();
+        }
+
+        private IEnumerable<GroupDefinition> defineGroupBySkillAxis(double? axisValue, EzAnalysisSystem system)
+        {
+            if (axisValue is not double value || !double.IsFinite(value))
+                return new GroupDefinition(int.MaxValue, "Unanalysed").Yield();
+
+            // Mina MSD and CSI scores live near star-scale / 0-1; PPP axes are star-like. One-star buckets keep
+            // the group headers readable without a per-system table.
+            double step = system == EzAnalysisSystem.CSI ? 0.2 : 1.0;
+            int bucket = (int)Math.Floor(Math.Max(0, value) / step);
+            double bucketStart = bucket * step;
+            double bucketEnd = bucketStart + step;
+
+            string label = system == EzAnalysisSystem.CSI
+                ? $"{bucketStart:0.0} - {bucketEnd:0.0}"
+                : $"{bucketStart:0} - {bucketEnd:0}";
+
+            return new GroupDefinition(-bucket, label).Yield();
         }
 
         private IEnumerable<GroupDefinition> defineGroupBySource(BeatmapInfo beatmap)

@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using osu.Game.Beatmaps;
 using osu.Game.Collections;
+using osu.Game.EzOsuGame.Analysis;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Filter;
 using osu.Game.Rulesets.Mods;
@@ -19,6 +20,21 @@ namespace osu.Game.Screens.Select
     {
         public GroupMode Group;
         public SortMode Sort;
+
+        /// <summary>System owning <see cref="SkillAxisSortId"/> when <see cref="Sort"/> is <see cref="SortMode.SkillAxis"/>.</summary>
+        public EzAnalysisSystem SkillAxisSortSystem;
+
+        /// <summary>Bare chart skill axis id used for sorting (e.g. <c>stream</c>).</summary>
+        public string? SkillAxisSortId;
+
+        /// <summary>System owning <see cref="SkillAxisGroupId"/> when <see cref="Group"/> is <see cref="GroupMode.SkillAxis"/>.</summary>
+        public EzAnalysisSystem SkillAxisGroupSystem;
+
+        /// <summary>Bare chart skill axis id used for grouping.</summary>
+        public string? SkillAxisGroupId;
+
+        /// <summary>CSI / pattern tags to match (exact id). Populated by <c>skill:</c> / <c>pattern:</c> / <c>csi:</c> queries.</summary>
+        public List<OptionalTextFilter> SkillTags = [];
 
         public BeatmapSetInfo? SelectedBeatmapSet;
 
@@ -206,11 +222,10 @@ namespace osu.Game.Screens.Select
             /// </summary>
             public bool InvertRange;
 
-            public bool Equals(OptionalRange<T> other)
-                => EqualityComparer<T?>.Default.Equals(Min, other.Min)
-                   && EqualityComparer<T?>.Default.Equals(Max, other.Max)
-                   && IsLowerInclusive.Equals(other.IsLowerInclusive)
-                   && IsUpperInclusive.Equals(other.IsUpperInclusive);
+            public bool Equals(OptionalRange<T> other) => EqualityComparer<T?>.Default.Equals(Min, other.Min)
+                                                          && EqualityComparer<T?>.Default.Equals(Max, other.Max)
+                                                          && IsLowerInclusive.Equals(other.IsLowerInclusive)
+                                                          && IsUpperInclusive.Equals(other.IsUpperInclusive);
         }
 
         public struct OptionalTextFilter : IEquatable<OptionalTextFilter>
@@ -300,6 +315,14 @@ namespace osu.Game.Screens.Select
             if (Sort != newCriteria.Sort)
                 return true;
 
+            // Axis identity is part of the sort key; a change must re-order even when SortMode stays SkillAxis.
+            if (Sort == SortMode.SkillAxis
+                && (SkillAxisSortSystem != newCriteria.SkillAxisSortSystem
+                    || !string.Equals(SkillAxisSortId, newCriteria.SkillAxisSortId, StringComparison.Ordinal)))
+            {
+                return true;
+            }
+
             switch (Sort)
             {
                 // Some sorts are stable across all other changes.
@@ -321,8 +344,8 @@ namespace osu.Game.Screens.Select
                 case SortMode.BPM:
                 case SortMode.Length:
                 case SortMode.Difficulty:
-                case SortMode.XxyStarRating:
                 case SortMode.PP:
+                case SortMode.SkillAxis:
                     return true;
 
                 default:

@@ -18,7 +18,7 @@ using osuTK.Graphics;
 namespace osu.Game.EzOsuGame.LocalProfile
 {
     /// <summary>
-    /// Horizontal rounded bar list for bucketed play counts (official star, xxy SR, etc.).
+    /// Horizontal rounded bar list for bucketed play counts (official star, SunnySR, etc.).
     /// </summary>
     public partial class EzLocalProfileBucketBars : FillFlowContainer
     {
@@ -63,11 +63,11 @@ namespace osu.Game.EzOsuGame.LocalProfile
         public static EzLocalProfileBucketBars FromStarPlayCounts(IEnumerable<EzLocalProfileStarPlayCount> stars) =>
             createFixedBuckets(stars.Select(s => (s.StarBucket, s.Count)), "★");
 
-        public static EzLocalProfileBucketBars FromXxyPlayCounts(IEnumerable<EzLocalProfileXxyPlayCount> plays) =>
-            createFixedBuckets(plays.Select(s => (s.StarBucket, s.Count)), "xxy");
+        public static EzLocalProfileBucketBars FromSunnySRPlayCounts(IEnumerable<EzLocalProfileSunnySRPlayCount> plays) =>
+            createFixedBuckets(plays.Select(s => (s.StarBucket, s.Count)), "SR");
 
         /// <summary>
-        /// 常驻 11 个星级分类桶（0-1…9-10、10+），局数为 0 的桶也显示；官方星与 xxy 星同规则。
+        /// 常驻 11 个星级分类桶（0-1…9-10、10+），局数为 0 的桶也显示；官方星与 SunnySR 星同规则。
         /// </summary>
         private static EzLocalProfileBucketBars createFixedBuckets(IEnumerable<(int bucket, int count)> plays, string suffix)
         {

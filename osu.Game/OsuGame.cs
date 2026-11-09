@@ -1304,6 +1304,7 @@ namespace osu.Game
             loadComponentSingleFile(chatOverlay = new ChatOverlay(), overlayContent.Add, true);
             loadComponentSingleFile(new MessageNotifier(), Add, true);
             loadComponentSingleFile(new EzExternalRulesetManagerDialog(), overlayContent.Add, true);
+            loadComponentSingleFile(new EzDataRebuildDialog(), overlayContent.Add, true);
             loadComponentSingleFile(new EzFontSettingsOverlay(), topMostOverlayContent.Add, true);
             loadComponentSingleFile(Settings = new SettingsOverlay(), leftFloatingOverlayContent.Add, true);
             loadComponentSingleFile(changelogOverlay = new ChangelogOverlay(), overlayContent.Add, true);

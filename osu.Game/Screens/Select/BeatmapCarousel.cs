@@ -1,5 +1,7 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
+
+// ReSharper disable RedundantUsingDirective
 
 using System;
 using System.Collections.Generic;
@@ -27,10 +29,10 @@ using osu.Game.Configuration;
 using osu.Game.Database;
 using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Skills;
 using osu.Game.EzOsuGame.UI;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Carousel;
-// ReSharper disable RedundantUsingDirective
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Online.API;
@@ -61,7 +63,8 @@ namespace osu.Game.Screens.Select
 
         private IBindableList<BeatmapSetInfo> detachedBeatmaps = null!;
         private Bindable<bool> ezAnalysisFilter = null!;
-        private Bindable<bool> ezAnalysisSqliteEnabled = null!; // PP 等 sqlite 消费端；不 gate xxy SR
+        private Bindable<string> analysisSystemSelection = null!;
+        private Bindable<bool> ezAnalysisSqliteEnabled = null!; // PP 等 sqlite 消费端；不 gate SunnySR
         private Bindable<EzMaterialUiMode> materialUiMode = null!;
         private IBindable<int> activeSongsBranchVersion = null!;
         private readonly AsyncLocal<Dictionary<Guid, double>?> operationDifficultyCache = new AsyncLocal<Dictionary<Guid, double>?>();
@@ -137,8 +140,8 @@ namespace osu.Game.Screens.Select
 
             Filters = new ICarouselFilter[]
             {
-                new BeatmapCarouselFilterMatching(() => Criteria!, getDifficultiesForOperationsAsync, getPpValuesForOperationsAsync),
-                new BeatmapCarouselFilterSorting(() => Criteria!, getDifficultiesForOperationsAsync, getPpValuesForOperationsAsync),
+                new BeatmapCarouselFilterMatching(() => Criteria!, getDifficultiesForOperationsAsync, getPpValuesForOperationsAsync, getSkillTagsForOperationsAsync),
+                new BeatmapCarouselFilterSorting(() => Criteria!, getDifficultiesForOperationsAsync, getPpValuesForOperationsAsync, getSkillAxisForOperationsAsync),
                 grouping = new BeatmapCarouselFilterGrouping
                 {
                     GetCriteria = () => Criteria!,
@@ -147,6 +150,7 @@ namespace osu.Game.Screens.Select
                     GetFavouriteBeatmapSets = GetFavouriteBeatmapSets,
                     GetDifficultiesForOperationsAsync = getDifficultiesForOperationsAsync,
                     GetPpForOperationsAsync = getPpValuesForOperationsAsync,
+                    GetSkillAxisForOperationsAsync = getSkillAxisForOperationsAsync,
                 }
             };
 
@@ -175,6 +179,8 @@ namespace osu.Game.Screens.Select
             detachedBeatmaps = beatmapStore.GetBeatmapSets(cancellationToken);
             loadSamples(audio);
             ezAnalysisFilter = ezConfig.GetBindable<bool>(Ez2Setting.EzAnalysisFilter);
+            analysisSystemSelection = ezConfig.GetBindable<string>(Ez2Setting.AnalysisSystemSelection);
+            analysisSystemSelection.BindValueChanged(_ => Scheduler.AddOnce(refilterForAnalysisSystemChange));
             ezAnalysisSqliteEnabled = ezConfig.GetBindable<bool>(Ez2Setting.EzAnalysisSqliteEnabled);
             materialUiMode = ezConfig.GetBindable<EzMaterialUiMode>(Ez2Setting.MaterialUiMode);
             config.BindWith(OsuSetting.RandomSelectAlgorithm, randomAlgorithm);
@@ -182,44 +188,84 @@ namespace osu.Game.Screens.Select
 
         private bool useActiveSongsBranchAsBeatmapSource => ezAnalysisCache.IsActiveSongsBranchFor(ruleset.Value, Criteria?.Mods);
 
-        private bool useEzAnalysisBranchForXxyOperations => useActiveSongsBranchAsBeatmapSource && ezAnalysisFilter.Value;
+        private bool useEzAnalysisBranchForSunnySROperations => useActiveSongsBranchAsBeatmapSource && ezAnalysisFilter.Value;
 
-        private static bool usesXxyStarRatingOperations(FilterCriteria criteria)
-            => criteria.Sort == SortMode.XxyStarRating || criteria.Group == GroupMode.XxyStarRating;
+        /// <summary>
+        /// Whether the active system for this ruleset is the Sunny one and a branch snapshot with mods is in play,
+        /// in which case its star has to come from the branch rather than the NoMod column.
+        /// </summary>
+        private bool usesSunnyBranchOperations => useEzAnalysisBranchForSunnySROperations
+                                                  && EzRulesetReadout.Selected(ruleset.Value?.OnlineID ?? -1)?.Id == EzRulesetReadout.SUNNY;
 
         private Task<IReadOnlyDictionary<BeatmapInfo, double>> getDifficultiesForOperationsAsync(IEnumerable<BeatmapInfo> beatmaps, CancellationToken cancellationToken)
         {
             if (Criteria == null)
                 return Task.FromResult(empty_operation_difficulties);
 
-            if (!usesXxyStarRatingOperations(Criteria))
-                return Task.FromResult(empty_operation_difficulties);
-
-            if (useEzAnalysisBranchForXxyOperations)
+            if (usesSunnyBranchOperations)
                 return getStrictActiveBranchDifficultiesAsync(beatmaps.Distinct().ToList(), Criteria.Mods, cancellationToken);
 
-            return getRealmXxyStarRatingsAsync(beatmaps, cancellationToken);
+            return Task.FromResult(empty_operation_difficulties);
         }
 
-        private Task<IReadOnlyDictionary<BeatmapInfo, double>> getRealmXxyStarRatingsAsync(IEnumerable<BeatmapInfo> beatmaps, CancellationToken cancellationToken)
+        private Task<IReadOnlyDictionary<BeatmapInfo, double>> getSkillAxisForOperationsAsync(
+            IEnumerable<BeatmapInfo> beatmaps,
+            EzAnalysisSystem system,
+            string axisId,
+            CancellationToken cancellationToken)
         {
-            if (!EzXxyStarRatingSupport.SupportsRuleset(ruleset.Value))
-                return Task.FromResult(empty_operation_difficulties);
-
             var beatmapList = beatmaps.Distinct().ToList();
 
-            if (beatmapList.Count == 0)
+            if (beatmapList.Count == 0 || ezSkillProvider == null || system == EzAnalysisSystem.None || string.IsNullOrEmpty(axisId))
                 return Task.FromResult(empty_operation_difficulties);
 
-            var resolvedValues = new Dictionary<BeatmapInfo, double>(beatmapList.Count);
-
-            foreach (var beatmap in beatmapList)
+            return Task.Run(() =>
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                resolvedValues[beatmap] = beatmap.XxyStarRating;
-            }
+                int rulesetOnlineId = ruleset.Value?.OnlineID ?? -1;
+                var byHash = ezSkillProvider.GetBeatmapSkillAxisForHashes(
+                    beatmapList.Select(static b => b.Hash),
+                    system,
+                    axisId,
+                    rulesetOnlineId);
 
-            return Task.FromResult<IReadOnlyDictionary<BeatmapInfo, double>>(resolvedValues);
+                var resolved = new Dictionary<BeatmapInfo, double>(beatmapList.Count);
+
+                foreach (var beatmap in beatmapList)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    if (byHash.TryGetValue(beatmap.Hash, out double value))
+                        resolved[beatmap] = value;
+                }
+
+                return (IReadOnlyDictionary<BeatmapInfo, double>)resolved;
+            }, cancellationToken);
+        }
+
+        private Task<IReadOnlyDictionary<BeatmapInfo, string[]>> getSkillTagsForOperationsAsync(
+            IEnumerable<BeatmapInfo> beatmaps,
+            CancellationToken cancellationToken)
+        {
+            var beatmapList = beatmaps.Distinct().ToList();
+
+            if (beatmapList.Count == 0 || ezSkillProvider == null)
+                return Task.FromResult<IReadOnlyDictionary<BeatmapInfo, string[]>>(new Dictionary<BeatmapInfo, string[]>());
+
+            return Task.Run(() =>
+            {
+                var byHash = ezSkillProvider.GetChartSkillTagsForHashes(beatmapList.Select(static b => b.Hash));
+                var resolved = new Dictionary<BeatmapInfo, string[]>(beatmapList.Count);
+
+                foreach (var beatmap in beatmapList)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    if (byHash.TryGetValue(beatmap.Hash, out var tags))
+                        resolved[beatmap] = tags;
+                }
+
+                return (IReadOnlyDictionary<BeatmapInfo, string[]>)resolved;
+            }, cancellationToken);
         }
 
         private Task<IReadOnlyDictionary<BeatmapInfo, double>> getPpValuesForOperationsAsync(IEnumerable<BeatmapInfo> beatmaps, CancellationToken cancellationToken)
@@ -259,14 +305,16 @@ namespace osu.Game.Screens.Select
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (beatmap.PerformancePoints >= 0)
-                    resolvedValues[beatmap] = beatmap.PerformancePoints;
+                // NoMod PP of whichever system this beatmap's ruleset reads out under.
+                if (EzRulesetReadout.SelectedValues(beatmap).PerformancePoints is double pp)
+                    resolvedValues[beatmap] = pp;
             }
 
             return Task.FromResult<IReadOnlyDictionary<BeatmapInfo, double>>(resolvedValues);
         }
 
-        private Task<IReadOnlyDictionary<BeatmapInfo, double>> getStrictActiveBranchDifficultiesAsync(IReadOnlyList<BeatmapInfo> beatmaps, IReadOnlyList<Mod>? mods, CancellationToken cancellationToken)
+        private Task<IReadOnlyDictionary<BeatmapInfo, double>> getStrictActiveBranchDifficultiesAsync(IReadOnlyList<BeatmapInfo> beatmaps, IReadOnlyList<Mod>? mods,
+                                                                                                      CancellationToken cancellationToken)
         {
             var cachedDifficulties = operationDifficultyCache.Value ??= new Dictionary<Guid, double>();
             var uncachedBeatmaps = beatmaps.Where(b => !cachedDifficulties.ContainsKey(b.ID)).ToList();
@@ -279,8 +327,8 @@ namespace osu.Game.Screens.Select
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    if (activeSongsBranchValues.TryGetValue(beatmap.ID, out double xxySr))
-                        cachedDifficulties[beatmap.ID] = xxySr;
+                    if (activeSongsBranchValues.TryGetValue(beatmap.ID, out double sunnySR))
+                        cachedDifficulties[beatmap.ID] = sunnySR;
                 }
             }
 
@@ -290,8 +338,8 @@ namespace osu.Game.Screens.Select
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (cachedDifficulties.TryGetValue(beatmap.ID, out double xxySr))
-                    resolvedValues[beatmap] = xxySr;
+                if (cachedDifficulties.TryGetValue(beatmap.ID, out double sunnySR))
+                    resolvedValues[beatmap] = sunnySR;
             }
 
             return Task.FromResult<IReadOnlyDictionary<BeatmapInfo, double>>(resolvedValues);
@@ -315,8 +363,9 @@ namespace osu.Game.Screens.Select
                     if (Criteria == null)
                         return;
 
-                    // Avoid redundant filters when branch metadata changes but the carousel is not using that branch (or xxy sort/group).
-                    if (!useActiveSongsBranchAsBeatmapSource && !usesXxyStarRatingOperations(Criteria))
+                    // Avoid redundant filters when branch metadata changes but the carousel is not reading the
+                    // branch, which is the case unless the active system needs it.
+                    if (!useActiveSongsBranchAsBeatmapSource && !usesSunnyBranchOperations)
                         return;
 
                     Filter(Criteria, true);
@@ -503,8 +552,7 @@ namespace osu.Game.Screens.Select
 
         protected GroupedBeatmapSet? ExpandedBeatmapSet { get; private set; }
 
-        protected override bool ShouldActivateOnKeyboardSelection(CarouselItem item) =>
-            grouping.BeatmapSetsGroupedTogether && item.Model is GroupedBeatmap;
+        protected override bool ShouldActivateOnKeyboardSelection(CarouselItem item) => grouping.BeatmapSetsGroupedTogether && item.Model is GroupedBeatmap;
 
         /// <summary>
         /// The currently selected <see cref="GroupedBeatmap"/>.
@@ -988,6 +1036,25 @@ namespace osu.Game.Screens.Select
 
         public int FilterRuns => filterRuns;
 
+        /// <summary>
+        /// Re-runs the last filter after the per-ruleset analysis system changed, so difficulty / PP sorting,
+        /// grouping and ranges immediately reflect the newly selected baseline.
+        /// </summary>
+        private void refilterForAnalysisSystemChange()
+        {
+            if (Criteria is not { } criteria)
+                return;
+
+            bool usesSystem = criteria.Sort is SortMode.Difficulty or SortMode.PP or SortMode.SkillAxis
+                              || criteria.Group is GroupMode.Difficulty or GroupMode.PP or GroupMode.SkillAxis
+                              || criteria.StarDifficulty.HasFilter
+                              || criteria.Pp.HasFilter
+                              || criteria.SkillTags.Count > 0;
+
+            if (usesSystem)
+                Filter(criteria);
+        }
+
         public void Filter(FilterCriteria criteria, bool showLoadingImmediately = false)
         {
             bool resetDisplay = grouping.BeatmapSetsGroupedTogether != BeatmapCarouselFilterGrouping.ShouldGroupBeatmapsTogether(criteria);
@@ -1054,6 +1121,9 @@ namespace osu.Game.Screens.Select
 
         [Resolved]
         private EzAnalysisCache ezAnalysisCache { get; set; } = null!;
+
+        [Resolved(canBeNull: true)]
+        private EzSkillProvider? ezSkillProvider { get; set; }
 
         /// <remarks>
         /// FOOTGUN WARNING: this being sorted on the realm side before detaching is IMPORTANT.
@@ -1435,17 +1505,20 @@ namespace osu.Game.Screens.Select
     /// <summary>
     /// Defines a grouping header for a set of carousel items grouped by star difficulty.
     /// </summary>
-    public record StarDifficultyGroupDefinition(int Order, LocalisableString Title, StarDifficulty Difficulty) : GroupDefinition(Order, Title);
+    public record StarDifficultyGroupDefinition(int Order, LocalisableString Title, StarDifficulty Difficulty)
+        : GroupDefinition(Order, Title);
 
     /// <summary>
     /// Defines a grouping header for a set of carousel items grouped by achieved rank.
     /// </summary>
-    public record RankDisplayGroupDefinition(ScoreRank Rank) : GroupDefinition(-(int)Rank, Rank.GetLocalisableDescription());
+    public record RankDisplayGroupDefinition(ScoreRank Rank)
+        : GroupDefinition(-(int)Rank, Rank.GetLocalisableDescription());
 
     /// <summary>
     /// Defines a grouping header for a set of carousel items grouped by ranked status.
     /// </summary>
-    public record RankedStatusGroupDefinition(int Order, BeatmapOnlineStatus Status) : GroupDefinition(Order, Status.GetLocalisableDescription());
+    public record RankedStatusGroupDefinition(int Order, BeatmapOnlineStatus Status)
+        : GroupDefinition(Order, Status.GetLocalisableDescription());
 
     /// <summary>
     /// Used to represent a portion of a <see cref="BeatmapSetInfo"/> under a <see cref="GroupDefinition"/>.

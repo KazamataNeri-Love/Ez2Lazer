@@ -7,8 +7,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using osu.Game.Beatmaps;
+using osu.Game.EzOsuGame.Analysis;
 using osu.Game.Graphics.Carousel;
-using osu.Game.Screens.Select.Filter;
 using osu.Game.Utils;
 
 namespace osu.Game.Screens.Select
@@ -18,16 +18,20 @@ namespace osu.Game.Screens.Select
         private readonly Func<FilterCriteria> getCriteria;
         private readonly Func<IEnumerable<BeatmapInfo>, CancellationToken, Task<IReadOnlyDictionary<BeatmapInfo, double>>> getDifficultiesForOperationsAsync;
         private readonly Func<IEnumerable<BeatmapInfo>, CancellationToken, Task<IReadOnlyDictionary<BeatmapInfo, double>>> getPpForOperationsAsync;
+        private readonly Func<IEnumerable<BeatmapInfo>, CancellationToken, Task<IReadOnlyDictionary<BeatmapInfo, string[]>>> getSkillTagsForOperationsAsync;
 
         public int BeatmapItemsCount { get; private set; }
 
         public BeatmapCarouselFilterMatching(Func<FilterCriteria> getCriteria,
                                              Func<IEnumerable<BeatmapInfo>, CancellationToken, Task<IReadOnlyDictionary<BeatmapInfo, double>>> getDifficultiesForOperationsAsync,
-                                             Func<IEnumerable<BeatmapInfo>, CancellationToken, Task<IReadOnlyDictionary<BeatmapInfo, double>>> getPpForOperationsAsync)
+                                             Func<IEnumerable<BeatmapInfo>, CancellationToken, Task<IReadOnlyDictionary<BeatmapInfo, double>>> getPpForOperationsAsync,
+                                             Func<IEnumerable<BeatmapInfo>, CancellationToken, Task<IReadOnlyDictionary<BeatmapInfo, string[]>>>? getSkillTagsForOperationsAsync = null)
         {
             this.getCriteria = getCriteria;
             this.getDifficultiesForOperationsAsync = getDifficultiesForOperationsAsync;
             this.getPpForOperationsAsync = getPpForOperationsAsync;
+            this.getSkillTagsForOperationsAsync = getSkillTagsForOperationsAsync
+                                                  ?? ((_, _) => Task.FromResult<IReadOnlyDictionary<BeatmapInfo, string[]>>(new Dictionary<BeatmapInfo, string[]>()));
         }
 
         public async Task<List<CarouselItem>> Run(IEnumerable<CarouselItem> items, CancellationToken cancellationToken)
@@ -37,24 +41,27 @@ namespace osu.Game.Screens.Select
             int countMatching = 0;
             var matchedItems = new List<CarouselItem>();
 
-            bool useXxyForStarFilter = usesXxyStarRatingOperations(criteria);
-            bool requiresXxyForFiltering = useXxyForStarFilter
-                                           && (criteria.StarDifficulty.HasFilter || criteria.UserStarDifficulty.HasFilter);
+            bool requiresDifficultyForFiltering = criteria.StarDifficulty.HasFilter || criteria.UserStarDifficulty.HasFilter;
             bool requiresPpForFiltering = criteria.Pp.HasFilter;
+            bool requiresSkillTags = criteria.SkillTags.Count > 0;
 
             IReadOnlyDictionary<BeatmapInfo, double>? operationDifficulties = null;
             IReadOnlyDictionary<BeatmapInfo, double>? operationPpValues = null;
+            IReadOnlyDictionary<BeatmapInfo, string[]>? operationSkillTags = null;
 
             var uniqueBeatmaps = itemList.Select(i => (BeatmapInfo)i.Model)
                                          .Where(b => !b.Hidden)
                                          .Distinct()
                                          .ToList();
 
-            if (requiresXxyForFiltering)
+            if (requiresDifficultyForFiltering)
                 operationDifficulties = await getDifficultiesForOperationsAsync(uniqueBeatmaps, cancellationToken).ConfigureAwait(false);
 
             if (requiresPpForFiltering)
                 operationPpValues = await getPpForOperationsAsync(uniqueBeatmaps, cancellationToken).ConfigureAwait(false);
+
+            if (requiresSkillTags)
+                operationSkillTags = await getSkillTagsForOperationsAsync(uniqueBeatmaps, cancellationToken).ConfigureAwait(false);
 
             foreach (var item in itemList)
             {
@@ -65,12 +72,19 @@ namespace osu.Game.Screens.Select
                 if (beatmap.Hidden)
                     continue;
 
-                double starDifficultyForFilter = useXxyForStarFilter ? beatmap.XxyStarRating : beatmap.StarRating;
+                // The star and pp ranges filter on the analysis system this beatmap's ruleset is set to. A system
+                // whose baseline has not been written yet falls back to the official value so the range does not
+                // silently hide the whole library.
+                var values = EzRulesetReadout.SelectedValues(beatmap);
+                double starDifficultyForFilter = values.Star ?? beatmap.StarRating;
 
                 if (operationDifficulties != null && operationDifficulties.TryGetValue(beatmap, out double operationDifficulty))
                     starDifficultyForFilter = operationDifficulty;
 
-                if (!CheckCriteriaMatch(beatmap, criteria, starDifficultyForFilter, tryGetPpForFilter(beatmap, operationPpValues)))
+                string[]? skillTags = null;
+                operationSkillTags?.TryGetValue(beatmap, out skillTags);
+
+                if (!CheckCriteriaMatch(beatmap, criteria, starDifficultyForFilter, tryGetPpForFilter(beatmap, operationPpValues, values), skillTags))
                     continue;
 
                 countMatching++;
@@ -81,10 +95,8 @@ namespace osu.Game.Screens.Select
             return matchedItems;
         }
 
-        private static bool usesXxyStarRatingOperations(FilterCriteria criteria)
-            => criteria.Sort == SortMode.XxyStarRating || criteria.Group == GroupMode.XxyStarRating;
-
-        public static bool CheckCriteriaMatch(BeatmapInfo beatmap, FilterCriteria criteria, double starDifficultyForFilter, double? ppForFilter = null)
+        public static bool CheckCriteriaMatch(BeatmapInfo beatmap, FilterCriteria criteria, double starDifficultyForFilter, double? ppForFilter = null,
+                                              IReadOnlyList<string>? skillTags = null)
         {
             bool match = criteria.Ruleset == null || beatmap.AllowGameplayWithRuleset(criteria.Ruleset!, criteria.AllowConvertedBeatmaps);
 
@@ -187,6 +199,9 @@ namespace osu.Game.Screens.Select
             if (criteria.HasVideoOrStoryboard == true)
                 match &= beatmap.HasVideo == true || beatmap.HasStoryboard == true;
 
+            if (criteria.SkillTags.Count > 0)
+                match &= matchesSkillTags(skillTags, criteria.SkillTags);
+
             if (!match) return false;
 
             match &= criteria.CollectionBeatmapMD5Hashes?.Contains(beatmap.MD5Hash) ?? true;
@@ -202,12 +217,50 @@ namespace osu.Game.Screens.Select
             return match;
         }
 
-        private static double? tryGetPpForFilter(BeatmapInfo beatmap, IReadOnlyDictionary<BeatmapInfo, double>? operationPpValues)
+        private static double? tryGetPpForFilter(BeatmapInfo beatmap, IReadOnlyDictionary<BeatmapInfo, double>? operationPpValues,
+                                                 in EzReadoutValues selected)
         {
-            if (operationPpValues == null)
-                return null;
+            if (operationPpValues != null && operationPpValues.TryGetValue(beatmap, out double pp))
+                return pp;
 
-            return operationPpValues.TryGetValue(beatmap, out double pp) ? pp : null;
+            return selected.PerformancePoints;
+        }
+
+        /// <summary>
+        /// Exact tag-id match (ordinal ignore-case). Substring matching would let <c>jack</c> hit <c>chordjack</c>.
+        /// </summary>
+        private static bool matchesSkillTags(IReadOnlyList<string>? tags, List<FilterCriteria.OptionalTextFilter> filters)
+        {
+            tags ??= Array.Empty<string>();
+
+            foreach (var filter in filters)
+            {
+                if (!filter.HasFilter)
+                    continue;
+
+                bool anyMatched = false;
+
+                foreach (string tag in tags)
+                {
+                    if (string.Equals(tag, filter.SearchTerm, StringComparison.OrdinalIgnoreCase))
+                    {
+                        anyMatched = true;
+                        break;
+                    }
+                }
+
+                if (filter.ExcludeTerm)
+                {
+                    if (anyMatched)
+                        return false;
+                }
+                else if (!anyMatched)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 }

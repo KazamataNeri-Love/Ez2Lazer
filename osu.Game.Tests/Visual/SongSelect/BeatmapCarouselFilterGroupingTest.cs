@@ -11,6 +11,7 @@ using osu.Framework.Extensions.IEnumerableExtensions;
 using osu.Framework.Localisation;
 using osu.Game.Beatmaps;
 using osu.Game.Collections;
+using osu.Game.EzOsuGame.Analysis;
 using osu.Game.Graphics.Carousel;
 using osu.Game.Localisation;
 using osu.Game.Resources.Localisation.Web;
@@ -296,20 +297,20 @@ namespace osu.Game.Tests.Visual.SongSelect
 
         #endregion
 
-        #region xxy SR grouping
+        #region difficulty grouping by a supplied system
 
         [Test]
-        public async Task TestGroupingByXxyStarRating()
+        public async Task TestGroupingByDifficultyUsesTheSuppliedSystemValues()
         {
             int total = 0;
 
             var beatmapSets = new List<BeatmapSetInfo>();
-            addBeatmapSet(applyXxyStars(0.5, 5.0), beatmapSets, out var beatmapBelow1);
-            addBeatmapSet(applyXxyStars(1.9, 1.0), beatmapSets, out var beatmapAbove1);
-            addBeatmapSet(applyXxyStars(2.0, 9.0), beatmapSets, out var beatmap2);
-            addBeatmapSet(applyXxyStars(7.0, 2.0), beatmapSets, out var beatmap7);
+            addBeatmapSet(applySunnyStarRating(0.5, 5.0), beatmapSets, out var beatmapBelow1);
+            addBeatmapSet(applySunnyStarRating(1.9, 1.0), beatmapSets, out var beatmapAbove1);
+            addBeatmapSet(applySunnyStarRating(2.0, 9.0), beatmapSets, out var beatmap2);
+            addBeatmapSet(applySunnyStarRating(7.0, 2.0), beatmapSets, out var beatmap7);
 
-            var results = await runGrouping(GroupMode.XxyStarRating, beatmapSets, getXxy: resolveXxy);
+            var results = await runGrouping(GroupMode.Difficulty, beatmapSets, null, resolveSunnySR);
             assertGroup(results, 0, BeatmapCarouselFilterGroupingStrings.BelowStars(1), beatmapBelow1.Beatmaps, ref total);
             assertGroup(results, 1, BeatmapCarouselFilterGroupingStrings.Stars(1), beatmapAbove1.Beatmaps, ref total);
             assertGroup(results, 2, BeatmapCarouselFilterGroupingStrings.Stars(2), beatmap2.Beatmaps, ref total);
@@ -317,16 +318,16 @@ namespace osu.Game.Tests.Visual.SongSelect
             assertTotal(results, total);
         }
 
-        private Action<BeatmapSetInfo> applyXxyStars(double xxy, double starRating)
+        private Action<BeatmapSetInfo> applySunnyStarRating(double ssr, double starRating)
         {
             return s => s.Beatmaps.ForEach(b =>
             {
-                b.XxyStarRating = xxy;
+                b.EzRatingData.SunnySR = ssr;
                 b.StarRating = starRating;
             });
         }
 
-        private static double resolveXxy(BeatmapInfo beatmap) => beatmap.XxyStarRating >= 0 ? beatmap.XxyStarRating : beatmap.StarRating;
+        private static double resolveSunnySR(BeatmapInfo beatmap) => beatmap.EzRatingData.SunnySR >= 0 ? beatmap.EzRatingData.SunnySR : beatmap.StarRating;
 
         #endregion
 
@@ -474,19 +475,69 @@ namespace osu.Game.Tests.Visual.SongSelect
 
         #endregion
 
+        #region Skill axis grouping
+
+        [Test]
+        public async Task TestSkillAxisGroupingBucketsAndSinksMissing()
+        {
+            int total = 0;
+
+            var beatmapSets = new List<BeatmapSetInfo>();
+            addBeatmapSet(_ => { }, beatmapSets, out var high);
+            addBeatmapSet(_ => { }, beatmapSets, out var mid);
+            addBeatmapSet(_ => { }, beatmapSets, out var missing);
+
+            var axisValues = new Dictionary<BeatmapInfo, double>();
+            high.Beatmaps.ForEach(b => axisValues[b] = 12.5);
+            mid.Beatmaps.ForEach(b => axisValues[b] = 5.2);
+
+            var results = await runGrouping(
+                GroupMode.SkillAxis,
+                beatmapSets,
+                getSkillAxis: b => axisValues.TryGetValue(b, out double v) ? v : null,
+                skillAxisSystem: EzAnalysisSystem.Mina,
+                skillAxisId: "stream");
+
+            assertGroup(results, 0, "12 - 13", high.Beatmaps, ref total);
+            assertGroup(results, 1, "5 - 6", mid.Beatmaps, ref total);
+            assertGroup(results, 2, "Unanalysed", missing.Beatmaps, ref total);
+            assertTotal(results, total);
+        }
+
+        #endregion
+
         private HashSet<int> favouriteBeatmapSets = [];
 
-        private async Task<List<CarouselItem>> runGrouping(GroupMode group, List<BeatmapSetInfo> beatmapSets, Func<BeatmapInfo, double?>? getPp = null, Func<BeatmapInfo, double>? getXxy = null)
+        private async Task<List<CarouselItem>> runGrouping(
+            GroupMode group,
+            List<BeatmapSetInfo> beatmapSets,
+            Func<BeatmapInfo, double?>? getPp = null,
+            Func<BeatmapInfo, double>? getSunnySR = null,
+            Func<BeatmapInfo, double?>? getSkillAxis = null,
+            EzAnalysisSystem skillAxisSystem = EzAnalysisSystem.None,
+            string? skillAxisId = null)
         {
             var groupingFilter = new BeatmapCarouselFilterGrouping
             {
-                GetCriteria = () => new FilterCriteria { Group = group },
+                GetCriteria = () => new FilterCriteria
+                {
+                    Group = group,
+                    SkillAxisGroupSystem = skillAxisSystem,
+                    SkillAxisGroupId = skillAxisId,
+                },
                 GetCollections = () => new List<BeatmapCollection>(),
                 GetLocalUserTopRanks = _ => new Dictionary<Guid, ScoreRank>(),
                 GetFavouriteBeatmapSets = () => favouriteBeatmapSets,
                 GetDifficultiesForOperationsAsync = (beatmaps, _) => Task.FromResult<IReadOnlyDictionary<BeatmapInfo, double>>(
-                    beatmaps.ToDictionary(b => b, b => getXxy?.Invoke(b) ?? (b.XxyStarRating >= 0 ? b.XxyStarRating : b.StarRating))),
-                GetPpForOperationsAsync = (beatmaps, _) => Task.FromResult<IReadOnlyDictionary<BeatmapInfo, double>>(beatmaps.Where(b => (getPp?.Invoke(b)).HasValue).ToDictionary(b => b, b => getPp!.Invoke(b)!.Value)),
+                    getSunnySR == null
+                        ? new Dictionary<BeatmapInfo, double>()
+                        : beatmaps.ToDictionary(b => b, getSunnySR)),
+                GetPpForOperationsAsync = (beatmaps, _)
+                    => Task.FromResult<IReadOnlyDictionary<BeatmapInfo, double>>(beatmaps.Where(b => (getPp?.Invoke(b)).HasValue).ToDictionary(b => b, b => getPp!.Invoke(b)!.Value)),
+                GetSkillAxisForOperationsAsync = (beatmaps, _, _, _) => Task.FromResult<IReadOnlyDictionary<BeatmapInfo, double>>(
+                    getSkillAxis == null
+                        ? new Dictionary<BeatmapInfo, double>()
+                        : beatmaps.Where(b => getSkillAxis(b).HasValue).ToDictionary(b => b, b => getSkillAxis(b)!.Value)),
             };
 
             return await groupingFilter.Run(beatmapSets.SelectMany(s => s.Beatmaps.Select(b => new CarouselItem(b))).ToList(), CancellationToken.None);

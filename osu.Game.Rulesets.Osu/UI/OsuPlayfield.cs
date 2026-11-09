@@ -66,6 +66,15 @@ namespace osu.Game.Rulesets.Osu.UI
         public SmokeContainer Smoke { get; }
         public FollowPointRenderer FollowPoints { get; }
 
+        /// <summary>
+        /// 把自绘层插到 hit object 之下（负 Depth），供背景类 mod 使用。
+        /// </summary>
+        public void AddBackgroundLayer(Drawable layer)
+        {
+            layer.Depth = -1;
+            AddInternal(layer);
+        }
+
         public static readonly Vector2 BASE_SIZE = new Vector2(512, 384);
 
         protected override GameplayCursorContainer? CreateCursor() => new OsuCursorContainer();

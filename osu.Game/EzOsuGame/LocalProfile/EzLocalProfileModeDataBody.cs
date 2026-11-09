@@ -9,8 +9,8 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Localisation;
-using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Localization;
+using osu.Game.EzOsuGame.Skills.SSR;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Rulesets;
@@ -41,8 +41,8 @@ namespace osu.Game.EzOsuGame.LocalProfile
         private void load(RulesetStore rulesets)
         {
             var ruleset = rulesets.GetRuleset(rulesetId);
-            bool showXxy = rulesetId == EzLocalProfileConstants.MANIA_RULESET_ID
-                           || (ruleset != null && EzXxyStarRatingSupport.SupportsRuleset(ruleset));
+            bool showSunnySR = rulesetId == EzLocalProfileConstants.MANIA_RULESET_ID
+                           || (ruleset != null && EzSSRUnit.SupportsRuleset(ruleset.OnlineID));
 
             var lineSection = new FillFlowContainer
             {
@@ -53,8 +53,8 @@ namespace osu.Game.EzOsuGame.LocalProfile
             };
 
             addLineChart(lineSection, EzSettingsProfile.LOCAL_PROFILE_STAR_PLAY_LINE, createStarLineChart());
-            if (showXxy)
-                addLineChart(lineSection, EzSettingsProfile.LOCAL_PROFILE_XXY_PLAY_LINE, createXxyLineChart());
+            if (showSunnySR)
+                addLineChart(lineSection, EzSettingsProfile.LOCAL_PROFILE_SunnySR_PLAY_LINE, createSunnySRLineChart());
 
             if (rulesetId == EzLocalProfileConstants.MANIA_RULESET_ID)
                 addLineChart(lineSection, EzSettingsProfile.LOCAL_PROFILE_MANIA_AVG_KPS_LINE, createManiaKpsLineChart());
@@ -68,11 +68,11 @@ namespace osu.Game.EzOsuGame.LocalProfile
                     EzLocalProfileBucketBars.FromStarPlayCounts(snapshot.StarPlayCounts.Where(s => s.RulesetId == rulesetId)))
             };
 
-            if (showXxy)
+            if (showSunnySR)
             {
                 barColumns.Add(createBarColumn(
-                    EzSettingsProfile.LOCAL_PROFILE_XXY_PLAY_DISTRIBUTION,
-                    EzLocalProfileBucketBars.FromXxyPlayCounts(snapshot.XxyPlayCounts.Where(s => s.RulesetId == rulesetId))));
+                    EzSettingsProfile.LOCAL_PROFILE_SunnySR_PLAY_DISTRIBUTION,
+                    EzLocalProfileBucketBars.FromSunnySRPlayCounts(snapshot.SunnySRPlayCounts.Where(s => s.RulesetId == rulesetId))));
             }
 
             if (rulesetId == EzLocalProfileConstants.MANIA_RULESET_ID)
@@ -144,18 +144,18 @@ namespace osu.Game.EzOsuGame.LocalProfile
             return createFixedBucketLine(counts.Select(s => (s.StarBucket, s.Count)).ToList(), EzSettingsProfile.LOCAL_PROFILE_STAR_PLAY_LINE, FontAwesome.Solid.Star);
         }
 
-        private EzLocalProfileTrendChart? createXxyLineChart()
+        private EzLocalProfileTrendChart? createSunnySRLineChart()
         {
-            var counts = snapshot.XxyPlayCounts.Where(s => s.RulesetId == rulesetId).ToList();
+            var counts = snapshot.SunnySRPlayCounts.Where(s => s.RulesetId == rulesetId).ToList();
             if (counts.Count == 0)
                 return null;
 
-            return createFixedBucketLine(counts.Select(s => (s.StarBucket, s.Count)).ToList(), EzSettingsProfile.LOCAL_PROFILE_XXY_PLAY_LINE, FontAwesome.Solid.Moon);
+            return createFixedBucketLine(counts.Select(s => (s.StarBucket, s.Count)).ToList(), EzSettingsProfile.LOCAL_PROFILE_SunnySR_PLAY_LINE, FontAwesome.Solid.Moon);
         }
 
         /// <summary>
         /// 生成常驻 11 桶（0-1…9-10、10+）的趋势图，局数为 0 的桶也展示；
-        /// 官方星与 xxy 星同规则，多出的 10+ 桶合计所有 ≥10 的档位。
+        /// 官方星与 SunnySR 星同规则，多出的 10+ 桶合计所有 ≥10 的档位。
         /// </summary>
         private static EzLocalProfileTrendChart createFixedBucketLine(List<(int bucket, int count)> plays, LocalisableString title, IconUsage labelIcon)
         {
