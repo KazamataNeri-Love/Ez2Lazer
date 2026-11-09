@@ -1,9 +1,9 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
-using System;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Game.Rulesets.Mania.EzMania.Tilt;
 using osuTK;
 
 namespace osu.Game.Rulesets.Mania.UI
@@ -14,8 +14,6 @@ namespace osu.Game.Rulesets.Mania.UI
     /// </summary>
     public partial class TiltBufferContainer : BufferedContainer
     {
-        private const float max_angle = 90;
-
         /// <summary>
         /// 缓冲内容是预乘 alpha 的（子项混入透明缓冲）。默认的 SrcAlpha 合成会再乘一次 alpha，
         /// 导致叠加光效被压暗并呈现为 alpha 混色；预乘合成才能让「只加亮、不覆盖」的内容正确叠加。
@@ -39,25 +37,17 @@ namespace osu.Game.Rulesets.Mania.UI
         }
 
         /// <summary>
-        /// Applies the projection.
+        /// Applies the track projection.
         /// </summary>
-        /// <param name="angle">Track angle in degrees; 0 disables the projection.</param>
-        /// <param name="compensation">0 = full distance compression, 1 = keep the far end spacing.</param>
-        public void ApplyTilt(float angle, float compensation)
+        /// <param name="angle">Track angle in degrees; 0 leaves the content unwarped.</param>
+        /// <remarks>
+        /// 只做横向收窄：纵向间距与速度由 <see cref="EzTiltScrollAlgorithm"/> 在滚动层决定。
+        /// 两层各管一个维度，同一维度不会被压两次。
+        /// </remarks>
+        public void ApplyTilt(float angle)
         {
-            float t = Math.Clamp(angle / max_angle, 0f, 1f);
-
-            if (t <= 0)
-            {
-                VerticalPerspective = 0;
-                return;
-            }
-
-            // 顶部宽度收窄（形状）与顶部高度压缩（间距）分开：补偿只削弱间距压缩，形状收窄保持。
-            VerticalPerspective = t;
-            PerspectiveScale = new Vector2(
-                1f - t * 0.9f * (1f - Math.Clamp(compensation, 0f, 1f) * 0.7f),
-                1f - t * 0.8f);
+            VerticalPerspective = 0f;
+            PerspectiveScale = new Vector2(1f, EzTiltModel.TopWidthScale(angle));
             PerspectiveVerticalOffset = 0f;
         }
     }

@@ -20,8 +20,8 @@ namespace osu.Game.Rulesets.Mania.EzMania.Mods.LAsMods
     /// Judgement, input and skin resolution are untouched; only the rendered playfield is warped.
     /// </summary>
     /// <remarks>
-    /// 舞台斜轨（<c>ManiaPlayfieldLayoutConfig.TiltAngle</c>）存在时优先：本 Mod 只把参数交给皮肤级容器，不再自建容器。
-    /// 容器类型不匹配时退回自建，因此即使皮肤级斜轨被改动或移除，本 Mod 仍然单独可用。
+    /// 舞台斜轨（<c>ManiaPlayfieldLayoutConfig.TiltAngle</c>）的覆盖入口：本 Mod 只改 ruleset 上的生效值，
+    /// 横向收窄与纵向距离律都由 ruleset 统一下发；结构不是 <see cref="DrawableManiaRuleset"/> 时才退回自建容器。
     /// </remarks>
     public partial class ManiaModTiltedTrack : Mod, IApplicableToDrawableRuleset<ManiaHitObject>
     {
@@ -71,13 +71,14 @@ namespace osu.Game.Rulesets.Mania.EzMania.Mods.LAsMods
             if (TrackAngle.Value <= 0)
                 return;
 
-            // 皮肤级容器已经在场上时只交参数，避免再套一层 framebuffer。
-            if (drawableRuleset.PlayfieldAdjustmentContainer is ManiaPlayfieldAdjustmentContainer skinTilt)
+            // mania 的斜轨由 ruleset 统一持有：横向收窄与纵向距离律一起被覆盖，不再自建容器。
+            if (drawableRuleset is DrawableManiaRuleset maniaRuleset)
             {
-                skinTilt.SetModOverride(TrackAngle.Value, CompensationDistance.Value);
+                maniaRuleset.SetTiltOverride(TrackAngle.Value, CompensationDistance.Value);
                 return;
             }
 
+            // 结构不匹配时的兜底：只保留横向收窄，纵向距离律无处可装。
             var playfield = drawableRuleset.Playfield;
 
             if (playfield.Parent is not Container parent)
@@ -86,7 +87,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.Mods.LAsMods
             parent.Remove(playfield, false);
 
             var tilt = new TiltBufferContainer { Child = playfield };
-            tilt.ApplyTilt(TrackAngle.Value, CompensationDistance.Value);
+            tilt.ApplyTilt(TrackAngle.Value);
 
             parent.Add(tilt);
         }
