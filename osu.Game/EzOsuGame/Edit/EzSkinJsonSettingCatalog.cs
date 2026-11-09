@@ -24,6 +24,7 @@ namespace osu.Game.EzOsuGame.Edit
             Ez2Setting.JudgementLineName,
 
             // Stage
+            Ez2Setting.ManiaPseudo3DRotation,
             Ez2Setting.ColumnDim,
             Ez2Setting.ColumnBlur,
             Ez2Setting.StagePanelEnabled,

@@ -17,9 +17,6 @@ namespace osu.Game.EzOsuGame.Layout
         [JsonPropertyName("stage")]
         public ManiaStageLayout Stage { get; set; } = new ManiaStageLayout();
 
-        [JsonPropertyName("tilt")]
-        public ManiaTiltLayout Tilt { get; set; } = new ManiaTiltLayout();
-
         private static readonly JsonSerializerOptions serializer_options = new JsonSerializerOptions
         {
             WriteIndented = true,
@@ -53,17 +50,5 @@ namespace osu.Game.EzOsuGame.Layout
 
         [JsonPropertyName("y")]
         public float Y { get; set; }
-    }
-
-    /// <summary>
-    /// 斜轨 3D 图层。角度 0 关闭投影；补偿削弱远端间距压缩，保留形状收窄。
-    /// </summary>
-    public sealed class ManiaTiltLayout
-    {
-        [JsonPropertyName("angle")]
-        public float Angle { get; set; }
-
-        [JsonPropertyName("compensation")]
-        public float Compensation { get; set; }
     }
 }

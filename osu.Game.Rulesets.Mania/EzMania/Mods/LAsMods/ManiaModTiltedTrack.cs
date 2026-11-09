@@ -7,6 +7,7 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Localisation;
 using osu.Game.Configuration;
+using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.Rulesets.Mania.Objects;
 using osu.Game.Rulesets.Mania.UI;
@@ -20,8 +21,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.Mods.LAsMods
     /// Judgement, input and skin resolution are untouched; only the rendered playfield is warped.
     /// </summary>
     /// <remarks>
-    /// 舞台斜轨（<c>ManiaPlayfieldLayoutConfig.TiltAngle</c>）存在时优先：本 Mod 只把参数交给皮肤级容器，不再自建容器。
-    /// 容器类型不匹配时退回自建，因此即使皮肤级斜轨被改动或移除，本 Mod 仍然单独可用。
+    /// 自带透视容器，因此与皮肤级 <c>Ez2Setting.ManiaPseudo3DRotation</c> 互斥：后者已生效时本 Mod 不做任何事。
     /// </remarks>
     public partial class ManiaModTiltedTrack : Mod, IApplicableToDrawableRuleset<ManiaHitObject>
     {
@@ -71,12 +71,9 @@ namespace osu.Game.Rulesets.Mania.EzMania.Mods.LAsMods
             if (TrackAngle.Value <= 0)
                 return;
 
-            // 皮肤级容器已经在场上时只交参数，避免再套一层 framebuffer。
-            if (drawableRuleset.PlayfieldAdjustmentContainer is ManiaPlayfieldAdjustmentContainer skinTilt)
-            {
-                skinTilt.SetModOverride(TrackAngle.Value, CompensationDistance.Value);
+            // 皮肤级斜轨已生效时本 Mod 静默让位：两者都自带透视容器，叠加会形成双重投影。
+            if (GlobalConfigStore.EzConfig.Get<double>(Ez2Setting.ManiaPseudo3DRotation) > 0)
                 return;
-            }
 
             var playfield = drawableRuleset.Playfield;
 
@@ -95,7 +92,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.Mods.LAsMods
     public static class TiltedTrackStrings
     {
         public static readonly LocalisableString DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
-            "面板向后收窄的斜轨（Malody 轨道倾斜）。选中后覆盖皮肤的斜轨设置。", "The track recedes towards the distance. Overrides the skin's tilt settings.");
+            "面板向后收窄的斜轨（Malody 轨道倾斜）。", "The track recedes towards the distance.");
 
         public static readonly LocalisableString TRACK_ANGLE_LABEL = new EzLocalizationManager.EzLocalisableString(
             "轨道倾斜角", "Track angle");

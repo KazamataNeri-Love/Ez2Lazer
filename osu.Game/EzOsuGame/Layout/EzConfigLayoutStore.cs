@@ -54,8 +54,6 @@ namespace osu.Game.EzOsuGame.Layout
             reloadPlayfield();
             PlayfieldLayout.StageX.BindValueChanged(_ => queuePlayfieldSave());
             PlayfieldLayout.StageY.BindValueChanged(_ => queuePlayfieldSave());
-            PlayfieldLayout.TiltAngle.BindValueChanged(_ => queuePlayfieldSave());
-            PlayfieldLayout.TiltCompensation.BindValueChanged(_ => queuePlayfieldSave());
         }
 
         /// <summary>
@@ -158,8 +156,6 @@ namespace osu.Game.EzOsuGame.Layout
                     var layout = LoadManiaPlayfieldLayout();
                     layout.Stage.X = PlayfieldLayout.StageXFraction;
                     layout.Stage.Y = PlayfieldLayout.StageYFraction;
-                    layout.Tilt.Angle = PlayfieldLayout.TiltAngle.Value;
-                    layout.Tilt.Compensation = PlayfieldLayout.TiltCompensation.Value;
                     SaveManiaPlayfieldLayout(layout);
                 }
             });
