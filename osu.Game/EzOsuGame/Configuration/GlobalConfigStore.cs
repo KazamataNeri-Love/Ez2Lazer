@@ -6,6 +6,7 @@ using System.Threading;
 using osu.Framework.Platform;
 using osu.Framework.Testing;
 using osu.Game.Configuration;
+using osu.Game.EzOsuGame.Layout;
 
 namespace osu.Game.EzOsuGame.Configuration
 {
@@ -23,6 +24,12 @@ namespace osu.Game.EzOsuGame.Configuration
             get => ezConfig ?? EnsureInitialized();
             set => ezConfig = value;
         }
+
+        /// <summary>
+        /// 主题 layout 存储。依赖尚未注入的构造期需要读 layout（例如 playfield 容器决定是否建投影层）时从这里取；
+        /// 由 <see cref="OsuGameBase"/> 加载时写入。
+        /// </summary>
+        public static EzConfigLayoutStore? Layout { get; set; }
 
         /// <summary>
         /// When set, <see cref="OsuGameBase.CreateEndpoints"/> uses development API endpoints (dev.ppy.sh)

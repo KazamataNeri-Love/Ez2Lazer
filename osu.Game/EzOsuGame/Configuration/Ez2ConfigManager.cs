@@ -346,7 +346,6 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.ScoreBonusCrossMs, EzScoreBonusFormula.OFFSET_CROSS_MS, 11, 64, 1.0);
             SetDefault(Ez2Setting.ManiaBarLinesBool, true);
 
-            SetDefault(Ez2Setting.ManiaPseudo3DRotation, 0.0, 0.0, 75.0, 1.0);
             SetDefault(Ez2Setting.ManiaHoldTailAlpha, 1.0, 0.0, 1.0, 0.01);
             // UI 0-8，除 32 得到节拍；0 关闭投皮额外负担，默认 4 = 4/32 = 2/16。旧存档 >8 的像素值钳回默认 4。
             SetDefault(Ez2Setting.ManiaHoldTailMaskGradientHeight, 0.0, 0.0, 8.0, 1.0);
@@ -1488,7 +1487,6 @@ namespace osu.Game.EzOsuGame.Configuration
         ResultsCardBackgroundRevision,
 
         ManiaBarLinesBool,
-        ManiaPseudo3DRotation,
 
         ManiaHoldTailAlpha,
         /// <summary>

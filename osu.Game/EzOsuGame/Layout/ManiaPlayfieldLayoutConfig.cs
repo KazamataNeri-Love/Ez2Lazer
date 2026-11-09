@@ -35,6 +35,26 @@ namespace osu.Game.EzOsuGame.Layout
         };
 
         /// <summary>
+        /// 斜轨角度（度）。0 关闭投影；满强度按 90 度归一化。
+        /// </summary>
+        public BindableFloat TiltAngle { get; } = new BindableFloat
+        {
+            MinValue = 0,
+            MaxValue = 90,
+            Precision = 1,
+        };
+
+        /// <summary>
+        /// 斜轨距离补偿：削弱远端间距压缩，保留形状收窄。0 不补偿，1 最强。
+        /// </summary>
+        public BindableFloat TiltCompensation { get; } = new BindableFloat
+        {
+            MinValue = 0,
+            MaxValue = 1,
+            Precision = 0.01f,
+        };
+
+        /// <summary>
         /// <see cref="StageX"/> as a fraction of the free space beside the stage.
         /// </summary>
         public float StageXFraction => StageX.Value / percent_scale;
@@ -56,6 +76,8 @@ namespace osu.Game.EzOsuGame.Layout
         {
             StageX.Value = Math.Clamp(saved.Stage.X * percent_scale, -percent_scale * MAX_OFFSET, percent_scale * MAX_OFFSET);
             StageY.Value = Math.Clamp(saved.Stage.Y * percent_scale, -percent_scale * MAX_OFFSET, percent_scale * MAX_OFFSET);
+            TiltAngle.Value = Math.Clamp(saved.Tilt.Angle, TiltAngle.MinValue, TiltAngle.MaxValue);
+            TiltCompensation.Value = Math.Clamp(saved.Tilt.Compensation, TiltCompensation.MinValue, TiltCompensation.MaxValue);
         }
     }
 }

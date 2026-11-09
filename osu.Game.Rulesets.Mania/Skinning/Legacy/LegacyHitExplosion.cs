@@ -18,6 +18,20 @@ namespace osu.Game.Rulesets.Mania.Skinning.Legacy
     {
         public const double FADE_IN_DURATION = 80;
 
+        /// <summary>
+        /// 叠加但保留目标 alpha：光效只加亮、不覆盖底色。写入 alpha 会让黑底贴图在缓冲层里变成不透明黑块，
+        /// 也会让光效在预乘合成的缓冲里被当成 alpha 内容压暗。
+        /// </summary>
+        private static readonly BlendingParameters additive_preserve_alpha = new BlendingParameters
+        {
+            Source = BlendingType.SrcAlpha,
+            Destination = BlendingType.One,
+            SourceAlpha = BlendingType.Zero,
+            DestinationAlpha = BlendingType.One,
+            RGBEquation = BlendingEquation.Add,
+            AlphaEquation = BlendingEquation.Add,
+        };
+
         private readonly IBindable<ScrollingDirection> direction = new Bindable<ScrollingDirection>();
 
         private Drawable? explosion;
@@ -46,7 +60,7 @@ namespace osu.Game.Rulesets.Mania.Skinning.Legacy
             explosion = skin.GetAnimation(imageName, true, false, frameLength: frameLength)?.With(d =>
             {
                 d.Origin = Anchor.Centre;
-                d.Blending = BlendingParameters.Additive;
+                d.Blending = additive_preserve_alpha;
                 d.Scale = new Vector2(explosionScale);
             });
 

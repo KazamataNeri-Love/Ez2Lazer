@@ -7,6 +7,7 @@ using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Edit;
 using osu.Game.EzOsuGame.Layout;
 using osu.Game.Rulesets.Mania.EzMania;
 using osu.Game.Rulesets.UI;
@@ -20,13 +21,18 @@ namespace osu.Game.Rulesets.Mania.UI
 
         private readonly DrawSizePreservingFillContainer scalingContainer;
         private readonly Container positionContainer;
-        private readonly BufferedContainer? perspectiveContainer;
+
+        /// <summary>
+        /// 皮肤级斜轨。只在 <see cref="Ez3DTiltGate.RequiresBuffer"/> 成立时创建，否则为 null（零开销路径）。
+        /// </summary>
+        private readonly TiltBufferContainer? tiltContainer;
 
         private readonly DrawableManiaRuleset drawableManiaRuleset;
-        private Bindable<double> maniaPseudo3DRotation = null!;
+        private BindableFloat tiltAngle = null!;
+        private BindableFloat tiltCompensation = null!;
 
-        [Resolved]
-        private Ez2ConfigManager ezSkinConfig { get; set; } = null!;
+        private (float angle, float compensation)? modOverride;
+        private bool bindingsReady;
 
         [Resolved]
         private EzConfigLayoutStore layoutStore { get; set; } = null!;
@@ -60,19 +66,19 @@ namespace osu.Game.Rulesets.Mania.UI
                 RelativeSizeAxes = Axes.Both,
             };
 
-            var rotation = GlobalConfigStore.EzConfig.GetBindable<double>(Ez2Setting.ManiaPseudo3DRotation);
+            var layout = GlobalConfigStore.Layout?.PlayfieldLayout;
 
-            // 用实际角度而非 IsDefault：皮肤编辑器的对比快照会把 Default 改写成当前值，
-            // 那时 IsDefault 为 true 会导致透视容器不被创建，斜轨角度整局失效。
-            if (rotation.Value > 0)
+            // 用实际角度而非默认值判断：皮肤编辑器的对比快照会把 Default 改写成当前值，
+            // 那时按默认值判断会导致投影容器不被创建，斜轨角度整局失效。
+            // 容器只能在构造期创建（运行期换父会崩），因此编辑器场景无条件建，换取拖滑块即时生效；
+            // 其余场合只在真的会用到斜轨时才建。
+            if (Ez3DTiltGate.RequiresBuffer(EzSkinEditorActiveState.Active, layout?.TiltAngle.Value ?? 0, drawableManiaRuleset.Mods))
             {
-                positionContainer.Child = perspectiveContainer = new BufferedContainer(pixelSnapping: true)
+                positionContainer.Child = tiltContainer = new TiltBufferContainer
                 {
                     Anchor = Anchor.BottomCentre,
                     Origin = Anchor.BottomCentre,
-                    RelativeSizeAxes = Axes.Both,
-                    DrawOriginal = false,
-                    Child = Content
+                    Child = Content,
                 };
             }
             else
@@ -86,26 +92,39 @@ namespace osu.Game.Rulesets.Mania.UI
         [BackgroundDependencyLoader]
         private void load()
         {
-            maniaPseudo3DRotation = ezSkinConfig.GetBindable<double>(Ez2Setting.ManiaPseudo3DRotation);
-            maniaPseudo3DRotation.BindValueChanged(_ => updatePerspective(), true);
+            tiltAngle = playfieldLayout.TiltAngle;
+            tiltCompensation = playfieldLayout.TiltCompensation;
+
+            tiltAngle.BindValueChanged(_ => updatePerspective());
+            tiltCompensation.BindValueChanged(_ => updatePerspective());
+
+            bindingsReady = true;
+            updatePerspective();
+        }
+
+        /// <summary>
+        /// Tilted Track 选中时由 Mod 覆盖皮肤值：投影始终只有一层容器，Mod 同时充当皮肤级斜轨不可用时的兜底入口。
+        /// </summary>
+        public void SetModOverride(float angle, float compensation)
+        {
+            modOverride = (angle, compensation);
+
+            if (bindingsReady)
+                updatePerspective();
         }
 
         private void updatePerspective()
         {
-            float angle = (float)maniaPseudo3DRotation.Value;
-            float t = angle / 75f;
+            if (tiltContainer == null)
+                return;
 
-            if (perspectiveContainer == null) return;
-
-            if (t <= 0)
+            if (modOverride is { } over)
             {
-                perspectiveContainer.VerticalPerspective = 0;
+                tiltContainer.ApplyTilt(over.angle, over.compensation);
                 return;
             }
 
-            perspectiveContainer.VerticalPerspective = t;
-            perspectiveContainer.PerspectiveScale = new Vector2(1.0f - t * 0.9f, 1.0f - t * 0.8f);
-            perspectiveContainer.PerspectiveVerticalOffset = 0.0f;
+            tiltContainer.ApplyTilt(tiltAngle.Value, tiltCompensation.Value);
         }
 
         protected override void Update()

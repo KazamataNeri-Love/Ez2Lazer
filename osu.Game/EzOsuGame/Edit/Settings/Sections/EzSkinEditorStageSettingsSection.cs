@@ -78,13 +78,21 @@ namespace osu.Game.EzOsuGame.Edit.Settings.Sections
                     KeyboardStep = 1f,
                     DisplayAsPercentage = true,
                 },
-                new SettingsSlider<double>
+                new SettingsSlider<float>
                 {
-                    LabelText = EzColumnStrings.STAGE_DIAGONAL_LANE_ANGLE,
-                    TooltipText = EzColumnStrings.STAGE_DIAGONAL_LANE_ANGLE_TOOLTIP,
-                    Current = ezSkinConfig.GetBindable<double>(Ez2Setting.ManiaPseudo3DRotation),
+                    LabelText = EzColumnStrings.TILT_3D_ANGLE,
+                    TooltipText = EzColumnStrings.TILT_3D_ANGLE_TOOLTIP,
+                    Current = playfieldLayout.TiltAngle,
                     KeyboardStep = 1f,
                     DisplayAsPercentage = false,
+                },
+                new SettingsSlider<float>
+                {
+                    LabelText = EzColumnStrings.TILT_3D_COMPENSATION,
+                    TooltipText = EzColumnStrings.TILT_3D_COMPENSATION_TOOLTIP,
+                    Current = playfieldLayout.TiltCompensation,
+                    KeyboardStep = 0.01f,
+                    DisplayAsPercentage = true,
                 },
             };
         }

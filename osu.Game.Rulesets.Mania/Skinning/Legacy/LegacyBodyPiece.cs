@@ -21,6 +21,19 @@ namespace osu.Game.Rulesets.Mania.Skinning.Legacy
 {
     public partial class LegacyBodyPiece : LegacyManiaColumnElement
     {
+        /// <summary>
+        /// 叠加但保留目标 alpha：光效只加亮、不覆盖底色（黑底贴图不会变成不透明黑块）。
+        /// </summary>
+        private static readonly BlendingParameters additive_preserve_alpha = new BlendingParameters
+        {
+            Source = BlendingType.SrcAlpha,
+            Destination = BlendingType.One,
+            SourceAlpha = BlendingType.Zero,
+            DestinationAlpha = BlendingType.One,
+            RGBEquation = BlendingEquation.Add,
+            AlphaEquation = BlendingEquation.Add,
+        };
+
         private DrawableHoldNote holdNote = null!;
 
         private readonly IBindable<ScrollingDirection> direction = new Bindable<ScrollingDirection>();
@@ -61,7 +74,7 @@ namespace osu.Game.Rulesets.Mania.Skinning.Legacy
             light = skin.GetAnimation(lightImage, true, true, frameLength: frameLength)?.With(d =>
             {
                 d.Origin = Anchor.Centre;
-                d.Blending = BlendingParameters.Additive;
+                d.Blending = additive_preserve_alpha;
                 d.Scale = new Vector2(lightScale);
             });
 

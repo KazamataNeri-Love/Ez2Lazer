@@ -7,13 +7,21 @@ namespace osu.Game.EzOsuGame.Localization
 {
     public static class EzColumnStrings
     {
-        public static readonly LocalisableString STAGE_DIAGONAL_LANE_ANGLE = new EzLocalizationManager.EzLocalisableString(
-            "Mania 斜轨角度",
-            "Mania Stage Diagonal lane angle");
+        public static readonly LocalisableString TILT_3D_ANGLE = new EzLocalizationManager.EzLocalisableString(
+            "斜轨角度",
+            "Tilted track angle");
 
-        public static readonly LocalisableString STAGE_DIAGONAL_LANE_ANGLE_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
-            "通过透视映射模拟轨道旋转。0为关闭（需要重载游戏场景），角度越大越明显（上窄下宽）。",
-            "Simulate lane rotation using perspective mapping. 0° is the original look, larger angles increase the effect (narrower top and wider bottom).");
+        public static readonly LocalisableString TILT_3D_ANGLE_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "通过透视映射模拟轨道倾斜。0 为关闭，数值越大越明显（上窄下宽）。",
+            "Simulate track tilt using perspective mapping. 0 disables the effect; larger angles are stronger (narrower top and wider bottom).");
+
+        public static readonly LocalisableString TILT_3D_COMPENSATION = new EzLocalizationManager.EzLocalisableString(
+            "斜轨距离补偿",
+            "Tilt distance compensation");
+
+        public static readonly LocalisableString TILT_3D_COMPENSATION_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "削弱远端（顶部）的间距压缩，保留形状收窄。0 不补偿，1 削弱最多。",
+            "Reduces the spacing compression at the far end while keeping the narrowing shape. 0 is no compensation, 1 is the strongest.");
 
         public static readonly LocalisableString STAGE_POSITION_X = new EzLocalizationManager.EzLocalisableString(
             "Mania Stage 水平位置",
