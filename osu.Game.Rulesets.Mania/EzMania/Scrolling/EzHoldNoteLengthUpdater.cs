@@ -14,9 +14,10 @@ namespace osu.Game.Rulesets.Mania.EzMania.Scrolling
     /// 挂在列内最后一个容器，更新时机晚于滚动容器。
     /// </summary>
     /// <remarks>
-    /// 滚动容器只在对象首次布局时算一次 <c>Height</c>（<c>LengthAtTime</c> 还以尾端为参考），
-    /// 开启速度补偿后这两个前提都不成立：长度既被冻结、参考点也不对。这里改用当前时刻分别取两端位置，
-    /// 让头尾各自绝对定位。
+    /// 滚动容器只在对象首次布局时算一次几何：长条的 <c>Height</c> 用 <c>LengthAtTime</c>，
+    /// 嵌套的尾标再用"以头部为原点"的静态偏移定位。两者都等价于把这段时长放在判定线上量像素，
+    /// 匀速下平移不变所以处处正确，开启速度补偿后只剩判定线一处正确。这里改用当前时刻分别取两端位置，
+    /// 让长度和尾标都按真实几何走。
     /// </remarks>
     internal partial class EzHoldNoteLengthUpdater : Drawable
     {
@@ -59,10 +60,18 @@ namespace osu.Game.Rulesets.Mania.EzMania.Scrolling
                 float tailY = container.PositionAtTime(duration.EndTime);
                 float length = MathF.Abs(tailY - headY);
 
-                if (MathF.Abs(hold.Height - length) < write_threshold)
-                    continue;
+                if (MathF.Abs(hold.Height - length) >= write_threshold)
+                    hold.Height = length;
 
-                hold.Height = length;
+                // 尾标是嵌套对象，Y 相对头部。容器给的是"尾端贴着判定线"的静态偏移，
+                // 不逐帧同步的话它会按最慢速度匀速下落，跑进长条中间，直到触碰判定线才与末端重合。
+                if (hold.Tail != null)
+                {
+                    float tailOffset = tailY - headY;
+
+                    if (MathF.Abs(hold.Tail.Y - tailOffset) >= write_threshold)
+                        hold.Tail.Y = tailOffset;
+                }
             }
         }
     }
