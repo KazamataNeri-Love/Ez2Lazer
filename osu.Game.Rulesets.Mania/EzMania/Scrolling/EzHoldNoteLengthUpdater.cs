@@ -15,7 +15,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.Scrolling
     /// </summary>
     /// <remarks>
     /// 滚动容器只在对象首次布局时算一次 <c>Height</c>（<c>LengthAtTime</c> 还以尾端为参考），
-    /// 开启运动补偿后这两个前提都不成立：长度既被冻结、参考点也不对。这里改用当前时刻分别取两端位置，
+    /// 开启速度补偿后这两个前提都不成立：长度既被冻结、参考点也不对。这里改用当前时刻分别取两端位置，
     /// 让头尾各自绝对定位。
     /// </remarks>
     internal partial class EzHoldNoteLengthUpdater : Drawable
@@ -38,8 +38,8 @@ namespace osu.Game.Rulesets.Mania.EzMania.Scrolling
         {
             base.Update();
 
-            // 没有运动补偿在跑时长度恒定，交给滚动容器的首次布局即可。
-            if (column.ScrollingInfo.Algorithm.Value is not EzMotionCompensationScrollAlgorithm)
+            // 没有速度补偿在跑时长度恒定，交给滚动容器的首次布局即可。
+            if (column.ScrollingInfo.Algorithm.Value is not EzSpeedCompensationScrollAlgorithm)
                 return;
 
             var container = column.HitObjectContainer;

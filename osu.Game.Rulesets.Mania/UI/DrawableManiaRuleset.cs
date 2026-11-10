@@ -96,7 +96,7 @@ namespace osu.Game.Rulesets.Mania.UI
         private ISkinSource currentSkin = null!;
 
         private IScrollAlgorithm? baseScrollAlgorithm;
-        private Bindable<double> motionCompensation = null!;
+        private Bindable<double> speedCompensation = null!;
 
         [Resolved]
         private Ez2ConfigManager ezConfig { get; set; } = null!;
@@ -267,12 +267,12 @@ namespace osu.Game.Rulesets.Mania.UI
 
             setupReplayInputNotes(replayPlayer);
 
-            setupMotionCompensation();
+            setupSpeedCompensation();
             setupHoldNoteLengthUpdaters();
         }
 
         /// <summary>
-        /// 每列挂一个长条长度更新组件；没有运动补偿时它在第一帧就返回。
+        /// 每列挂一个长条长度更新组件；没有速度补偿时它在第一帧就返回。
         /// </summary>
         private void setupHoldNoteLengthUpdaters()
         {
@@ -284,25 +284,25 @@ namespace osu.Game.Rulesets.Mania.UI
         }
 
         /// <summary>
-        /// 斜轨运动补偿：包住布局期设定的滚动算法。倍率 1 时还原原算法，保持零开销。
+        /// 速度补偿：包住布局期设定的滚动算法。倍率 1 时还原原算法，保持零开销。
         /// </summary>
-        private void setupMotionCompensation()
+        private void setupSpeedCompensation()
         {
             if (ScrollingInfo.Algorithm is not Bindable<IScrollAlgorithm> algorithm)
                 return;
 
             baseScrollAlgorithm ??= algorithm.Value;
 
-            motionCompensation = ezConfig.GetBindable<double>(Ez2Setting.ManiaTrackMotionCompensation);
-            motionCompensation.BindValueChanged(_ => applyMotionCompensation(algorithm), true);
+            speedCompensation = ezConfig.GetBindable<double>(Ez2Setting.ManiaSpeedCompensation);
+            speedCompensation.BindValueChanged(_ => applySpeedCompensation(algorithm), true);
         }
 
-        private void applyMotionCompensation(Bindable<IScrollAlgorithm> algorithm)
+        private void applySpeedCompensation(Bindable<IScrollAlgorithm> algorithm)
         {
             if (baseScrollAlgorithm == null)
                 return;
 
-            if (Math.Abs(motionCompensation.Value - 1.0) < 1e-3)
+            if (Math.Abs(speedCompensation.Value - 1.0) < 1e-3)
             {
                 if (!ReferenceEquals(algorithm.Value, baseScrollAlgorithm))
                     algorithm.Value = baseScrollAlgorithm;
@@ -310,7 +310,7 @@ namespace osu.Game.Rulesets.Mania.UI
                 return;
             }
 
-            algorithm.Value = new EzMotionCompensationScrollAlgorithm(baseScrollAlgorithm, (float)motionCompensation.Value);
+            algorithm.Value = new EzSpeedCompensationScrollAlgorithm(baseScrollAlgorithm, (float)speedCompensation.Value);
         }
 
         /// <summary>

@@ -19,14 +19,14 @@ namespace osu.Game.Rulesets.Mania.EzMania.Scrolling
     /// 端点保持（0→0，1→1），导数为 r 在 u=0、2−r 在 u=1；容器外按端点速度线性延伸，避免反演折叠。
     /// r = 1 时与原算法完全等价。
     /// </remarks>
-    public sealed class EzMotionCompensationScrollAlgorithm : IScrollAlgorithm
+    public sealed class EzSpeedCompensationScrollAlgorithm : IScrollAlgorithm
     {
         private const float degenerate_epsilon = 1e-3f;
 
         private readonly IScrollAlgorithm inner;
         private readonly float compensation;
 
-        public EzMotionCompensationScrollAlgorithm(IScrollAlgorithm inner, float compensation)
+        public EzSpeedCompensationScrollAlgorithm(IScrollAlgorithm inner, float compensation)
         {
             this.inner = inner;
             this.compensation = Math.Clamp(compensation, 0.2f, 1.8f);

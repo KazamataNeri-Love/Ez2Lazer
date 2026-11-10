@@ -130,9 +130,9 @@ namespace osu.Game.EzOsuGame.Screens
                     },
                     new SettingsSlider<double>
                     {
-                        LabelText = EzColumnStrings.TRACK_MOTION_COMPENSATION,
-                        TooltipText = EzColumnStrings.TRACK_MOTION_COMPENSATION_TOOLTIP,
-                        Current = ezSkinConfig.GetBindable<double>(Ez2Setting.ManiaTrackMotionCompensation),
+                        LabelText = EzColumnStrings.SPEED_COMPENSATION,
+                        TooltipText = EzColumnStrings.SPEED_COMPENSATION_TOOLTIP,
+                        Current = ezSkinConfig.GetBindable<double>(Ez2Setting.ManiaSpeedCompensation),
                         KeyboardStep = 0.01f,
                         DisplayAsPercentage = true
                     },
