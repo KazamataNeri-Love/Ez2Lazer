@@ -15,15 +15,15 @@ namespace osu.Game.EzOsuGame.Localization
             "通过透视映射模拟轨道旋转。0为关闭（需要重载游戏场景），角度越大越明显（上窄下宽）。",
             "Simulate lane rotation using perspective mapping. 0° is the original look, larger angles increase the effect (narrower top and wider bottom).");
 
-        public static readonly LocalisableString END_SPEED_RATIO = new EzLocalizationManager.EzLocalisableString(
-            "末速度",
-            "End speed");
+        public static readonly LocalisableString TRACK_MOTION_COMPENSATION = new EzLocalizationManager.EzLocalisableString(
+            "Mania 斜轨运动补偿",
+            "Mania track motion compensation");
 
-        public static readonly LocalisableString END_SPEED_RATIO_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
-            "落到判定线时的瞬时速度占常规速度的比例。100% 为匀速，越低落地前越慢、越高越快。"
-            + "\n只改屏幕上的分布，不改判定时刻。",
-            "The instantaneous speed at the judgement line as a percentage of the normal speed. 100% is uniform; lower decelerates towards the line, higher accelerates."
-            + "\nOnly the on-screen distribution changes; judgement timing is untouched.");
+        public static readonly LocalisableString TRACK_MOTION_COMPENSATION_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "斜轨下落的运动补偿。100% 为不补偿（匀速下落）；低于 100% 时远端运动加快、落线变慢，高于 100% 时相反。"
+            + "\n只改变运动在屏幕上的分布，判定时刻不变。",
+            "Motion compensation for the tilted track. 100% leaves the fall uniform; below 100% speeds up the far end and slows the approach to the line, above 100% does the opposite."
+            + "\nOnly the on-screen motion distribution changes; judgement timing is untouched.");
 
         public static readonly LocalisableString STAGE_POSITION_X = new EzLocalizationManager.EzLocalisableString(
             "Mania Stage 水平位置",

@@ -8,7 +8,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.Scrolling
 {
     /// <summary>
     /// 在既有滚动算法上叠一层匀变速下落：速度随时间线性变化，面积守恒，
-    /// 因此走完整容器的总时长不变，改变的只是时间在屏幕上的分布。
+    /// 因此走完整容器的总时长不变，改变的只是运动在屏幕上的分布。
     /// </summary>
     /// <remarks>
     /// 令 r 为"到判定线速度 / 常规速度"，位置律（u 为距判定线的归一化位置，1 = 容器顶）：
@@ -19,17 +19,17 @@ namespace osu.Game.Rulesets.Mania.EzMania.Scrolling
     /// 端点保持（0→0，1→1），导数为 r 在 u=0、2−r 在 u=1；容器外按端点速度线性延伸，避免反演折叠。
     /// r = 1 时与原算法完全等价。
     /// </remarks>
-    public sealed class EzEndSpeedScrollAlgorithm : IScrollAlgorithm
+    public sealed class EzMotionCompensationScrollAlgorithm : IScrollAlgorithm
     {
         private const float degenerate_epsilon = 1e-3f;
 
         private readonly IScrollAlgorithm inner;
-        private readonly float endRatio;
+        private readonly float compensation;
 
-        public EzEndSpeedScrollAlgorithm(IScrollAlgorithm inner, float endRatio)
+        public EzMotionCompensationScrollAlgorithm(IScrollAlgorithm inner, float compensation)
         {
             this.inner = inner;
-            this.endRatio = Math.Clamp(endRatio, 0.2f, 1.8f);
+            this.compensation = Math.Clamp(compensation, 0.2f, 1.8f);
         }
 
         public double GetDisplayStartTime(double originTime, float offset, double timeRange, float scrollLength)
@@ -49,36 +49,36 @@ namespace osu.Game.Rulesets.Mania.EzMania.Scrolling
 
         private float project(float position, float scrollLength)
         {
-            if (scrollLength <= 0f || Math.Abs(endRatio - 1f) < degenerate_epsilon)
+            if (scrollLength <= 0f || Math.Abs(compensation - 1f) < degenerate_epsilon)
                 return position;
 
             float u = position / scrollLength;
 
             if (u < 0f)
-                return scrollLength * (endRatio * u);
+                return scrollLength * (compensation * u);
 
             if (u > 1f)
-                return scrollLength * (1f + (2f - endRatio) * (u - 1f));
+                return scrollLength * (1f + (2f - compensation) * (u - 1f));
 
             float w = 1f - u;
-            return scrollLength * (1f - ((2f - endRatio) * w + (endRatio - 1f) * w * w));
+            return scrollLength * (1f - ((2f - compensation) * w + (compensation - 1f) * w * w));
         }
 
         private float unproject(float position, float scrollLength)
         {
-            if (scrollLength <= 0f || Math.Abs(endRatio - 1f) < degenerate_epsilon)
+            if (scrollLength <= 0f || Math.Abs(compensation - 1f) < degenerate_epsilon)
                 return position;
 
             float v = position / scrollLength;
 
             if (v < 0f)
-                return scrollLength * (v / endRatio);
+                return scrollLength * (v / compensation);
 
             if (v > 1f)
-                return scrollLength * (1f + (v - 1f) / (2f - endRatio));
+                return scrollLength * (1f + (v - 1f) / (2f - compensation));
 
-            float a = endRatio - 1f;
-            float b = 2f - endRatio;
+            float a = compensation - 1f;
+            float b = 2f - compensation;
             float c = v - 1f;
             float discriminant = b * b - 4f * a * c;
 

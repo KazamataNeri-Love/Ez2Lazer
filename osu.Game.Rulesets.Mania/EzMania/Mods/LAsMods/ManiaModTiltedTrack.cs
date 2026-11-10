@@ -17,7 +17,7 @@ using osu.Game.Rulesets.UI;
 namespace osu.Game.Rulesets.Mania.EzMania.Mods.LAsMods
 {
     /// <summary>
-    /// Projects the mania playfield into a receding track (Malody-style track angle / distance compensation).
+    /// Projects the mania playfield into a receding track (track angle / distance compensation).
     /// Judgement, input and skin resolution are untouched; only the rendered playfield is warped.
     /// </summary>
     /// <remarks>
@@ -92,7 +92,7 @@ namespace osu.Game.Rulesets.Mania.EzMania.Mods.LAsMods
     public static class TiltedTrackStrings
     {
         public static readonly LocalisableString DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
-            "面板向后收窄的斜轨（Malody 轨道倾斜）。", "The track recedes towards the distance.");
+            "面板向后收窄的斜轨。", "The track recedes towards the distance.");
 
         public static readonly LocalisableString TRACK_ANGLE_LABEL = new EzLocalizationManager.EzLocalisableString(
             "轨道倾斜角", "Track angle");

@@ -88,9 +88,9 @@ namespace osu.Game.EzOsuGame.Edit.Settings.Sections
                 },
                 new SettingsSlider<double>
                 {
-                    LabelText = EzColumnStrings.END_SPEED_RATIO,
-                    TooltipText = EzColumnStrings.END_SPEED_RATIO_TOOLTIP,
-                    Current = ezSkinConfig.GetBindable<double>(Ez2Setting.ManiaEndSpeedRatio),
+                    LabelText = EzColumnStrings.TRACK_MOTION_COMPENSATION,
+                    TooltipText = EzColumnStrings.TRACK_MOTION_COMPENSATION_TOOLTIP,
+                    Current = ezSkinConfig.GetBindable<double>(Ez2Setting.ManiaTrackMotionCompensation),
                     KeyboardStep = 0.01f,
                     DisplayAsPercentage = true,
                 },
