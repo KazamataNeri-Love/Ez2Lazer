@@ -54,6 +54,7 @@ namespace osu.Game.Rulesets.Mania.UI
             }
 
             // 顶部宽度收窄（形状）与顶部高度压缩（间距）分开：补偿只削弱间距压缩，形状收窄保持。
+            // 分量顺序：shader 的 g_Scale 是 (TopHeightScale, TopWidthScale)，即 .x 纵向、.y 横向。
             VerticalPerspective = t;
             PerspectiveScale = new Vector2(
                 1f - t * 0.9f * (1f - Math.Clamp(compensation, 0f, 1f) * 0.7f),

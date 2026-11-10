@@ -104,6 +104,8 @@ namespace osu.Game.Rulesets.Mania.UI
             }
 
             perspectiveContainer.VerticalPerspective = t;
+            // 分量顺序易错：shader 的 g_Scale 是 (TopHeightScale, TopWidthScale)，
+            // 因此 .x 是远端纵向比例（决定间距压缩），.y 是远端横向比例（决定梯形收窄）。
             perspectiveContainer.PerspectiveScale = new Vector2(1.0f - t * 0.9f, 1.0f - t * 0.8f);
             perspectiveContainer.PerspectiveVerticalOffset = 0.0f;
         }
