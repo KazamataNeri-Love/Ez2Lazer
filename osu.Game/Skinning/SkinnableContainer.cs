@@ -79,12 +79,19 @@ namespace osu.Game.Skinning
             {
                 LoadComponentAsync(content, wrapper =>
                 {
+                    foreach (var component in wrapper.Children.OfType<ISerialisableDrawable>().ToArray())
+                    {
+                        if (component.CanBePlaced(components))
+                            components.Add(component);
+                        else
+                            wrapper.Remove((Drawable)component, true);
+                    }
+
                     ExternalTarget.Clear();
                     // Add the wrapper itself rather than re-parenting its children,
                     // to avoid "May not add a drawable to multiple containers" errors
                     // when children are already parented by the async loading pipeline.
                     ExternalTarget.Add(wrapper);
-                    components.AddRange(wrapper.Children.OfType<ISerialisableDrawable>());
                     ComponentsLoaded = true;
                     OnComponentsLoaded?.Invoke(this);
                 }, (cancellationSource = new CancellationTokenSource()).Token);
@@ -93,8 +100,15 @@ namespace osu.Game.Skinning
             {
                 LoadComponentAsync(content, wrapper =>
                 {
+                    foreach (var component in wrapper.Children.OfType<ISerialisableDrawable>().ToArray())
+                    {
+                        if (component.CanBePlaced(components))
+                            components.Add(component);
+                        else
+                            wrapper.Remove((Drawable)component, true);
+                    }
+
                     AddInternal(wrapper);
-                    components.AddRange(wrapper.Children.OfType<ISerialisableDrawable>());
                     ComponentsLoaded = true;
                     OnComponentsLoaded?.Invoke(this);
                 }, (cancellationSource = new CancellationTokenSource()).Token);

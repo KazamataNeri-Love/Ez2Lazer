@@ -8,6 +8,7 @@ using System.Drawing;
 using System.Text;
 using System.Threading;
 using JetBrains.Annotations;
+using osu.Framework.Audio;
 using osu.Framework.Bindables;
 using osu.Framework.Configuration;
 using osu.Framework.Development;
@@ -218,10 +219,11 @@ namespace osu.Game.EzOsuGame.Configuration
 
             #region 音频与输入
 
-            SetDefault(Ez2Setting.AsioSampleRate, 48000);
+            SetDefault(Ez2Setting.AsioSampleRate, AudioOutputDefaults.DEFAULT_SAMPLE_RATE);
             SetDefault(Ez2Setting.AsioBitDepth, 24);
-            SetDefault(Ez2Setting.AsioBufferSize, 128);
+            SetDefault(Ez2Setting.AsioBufferSize, AudioOutputDefaults.DEFAULT_ASIO_BUFFER_SIZE);
             SetDefault(Ez2Setting.AsioUseExternalPCM, true);
+            SetDefault(Ez2Setting.WasapiExclusiveBufferMs, AudioOutputDefaults.WASAPI_EXCLUSIVE_AUTO);
 
             SetDefault(Ez2Setting.OffsetPlusMania, 0.0, -200.0, 200.0, 1.0);
             SetDefault(Ez2Setting.OffsetPlusNonMania, 0.0, -200.0, 200.0, 1.0);
@@ -233,6 +235,7 @@ namespace osu.Game.EzOsuGame.Configuration
 
             SetDefault(Ez2Setting.GlobalTextureName, 4);
             SetDefault(Ez2Setting.GameThemeName, EzGameThemeNames.DEFAULT);
+            SetDefault(Ez2Setting.LayoutSetName, EzModifyPath.LAYOUT_SET_DEFAULT);
             SetDefault(Ez2Setting.NoteSetName, "lucenteclat");
             SetDefault(Ez2Setting.StageName, "Celeste_Lumiere");
             SetDefault(Ez2Setting.StagePanelEnabled, true);
@@ -255,6 +258,7 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.HitPosition, DefaultHitPosition, 0, 500, 1.0);
             SetDefault(Ez2Setting.HitTargetFloatFixed, 6, 0, 10, 0.1);
             SetDefault(Ez2Setting.HitTargetAlpha, 0.6, 0, 1, 0.01);
+            SetDefault(Ez2Setting.HitTargetColouringEnabled, false);
             SetDefault(Ez2Setting.NoteHeightScaleToWidth, 1, 0.1, 10, 0.1);
             SetDefault(Ez2Setting.NoteCornerRadius, 5, 0.0, 80, 1);
             SetDefault(Ez2Setting.NoteTrackLineHeight, 300, 0, 1000, 5.0);
@@ -279,6 +283,7 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.ColumnBlur, 0.3, 0.0, 1, 0.01);
 
             SetDefault(Ez2Setting.ColorSettingsEnabled, true);
+            SetDefault(Ez2Setting.ColouringMode, EzColouringMode.Direct);
             SetDefault(Ez2Setting.ColumnTypeA, Colour4.FromHex("#F5F5F5"));
             SetDefault(Ez2Setting.ColumnTypeB, Colour4.FromHex("#648FFF"));
             SetDefault(Ez2Setting.ColumnTypeS, Colour4.FromHex("#FF4A4A"));
@@ -340,6 +345,9 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.EzScoreRaceServiceEnabled, true);
             SetDefault(Ez2Setting.EzScoreRaceFeedMode, EzReplayFeedMode.BatchAllEvents);
             SetDefault(Ez2Setting.EzHudCameraEnabled, false);
+            SetDefault(Ez2Setting.DisplayOutputMode, EzDisplayOutputMode.Standard);
+            SetDefault(Ez2Setting.DisplayOutputSdrExposure, 1.0, 0.5, 2.0, 0.01);
+            SetDefault(Ez2Setting.DisplayOutputHdrPaperWhiteNits, 0.0, 0.0, 10000.0, 1.0);
 
             // 本地账户名接管
             SetDefault(Ez2Setting.LocalAccountName, string.Empty);
@@ -1433,6 +1441,7 @@ namespace osu.Game.EzOsuGame.Configuration
         AsioBitDepth,
         AsioBufferSize,
         AsioUseExternalPCM,
+        WasapiExclusiveBufferMs,
         OffsetPlusMania,
         OffsetPlusNonMania,
         StdJudgeMode,
@@ -1454,6 +1463,11 @@ namespace osu.Game.EzOsuGame.Configuration
         EnableScriptedSkins,
         GlobalTextureName,
         GameThemeName,
+
+        /// <summary>
+        /// Active theme layout pack under <c>EzResources/Config/</c> (<c>layout</c> or <c>layout-*</c>).
+        /// </summary>
+        LayoutSetName,
 
         NoteSetName,
         StageName,
@@ -1497,6 +1511,12 @@ namespace osu.Game.EzOsuGame.Configuration
 
         HitTargetFloatFixed,
         HitTargetAlpha,
+
+        /// <summary>
+        /// 命中靶是否套用列色。关闭时靶固定白色贴图原色；只影响 EzPro / Ez2 这类有浮动靶的内置皮肤。
+        /// </summary>
+        HitTargetColouringEnabled,
+
         NoteHeightScaleToWidth,
         NoteTrackLineHeight,
 
@@ -1548,11 +1568,13 @@ namespace osu.Game.EzOsuGame.Configuration
         ManiaSpeedCompensation,
 
         ManiaHoldTailAlpha,
+
         /// <summary>
         /// LN 投皮距离档位。UI 0-8，除 32 得到节拍；0 关闭投皮额外负担，默认 4 = 4/32 = 2/16。进局 Get 一次快照。
         /// </summary>
         ManiaHoldTailMaskGradientHeight,
         ManiaLNGradientEnable,
+
         /// <summary>
         /// 动态投皮。进局时 Get 一次快照，局内不跟随设置变更；开启后按 tracker 当前拍长调整投皮距离。
         /// </summary>
@@ -1561,6 +1583,12 @@ namespace osu.Game.EzOsuGame.Configuration
 
         // 列着色与配色系统
         ColorSettingsEnabled,
+
+        /// <summary>
+        /// 着色算法。所有走列色 / 节拍线色的着色点共用；只改颜色计算，不改贴图选择。
+        /// </summary>
+        ColouringMode,
+
         ColumnDim,
         ColumnBlur,
 
@@ -1635,6 +1663,15 @@ namespace osu.Game.EzOsuGame.Configuration
         /// <summary>摄像头 HUD 总开关。关闭时不加载采集后端、不枚举设备、不打开摄像头、不上传纹理。</summary>
         EzHudCameraEnabled,
 
+        /// <summary>显示输出（10-bit / HDR）。交换链在进程启动时确定，见 <c>osu.Desktop/EzDisplayOutputBootstrap</c>。</summary>
+        DisplayOutputMode,
+
+        /// <summary>SDR 明暗度倍数；present 立即使用。</summary>
+        DisplayOutputSdrExposure,
+
+        /// <summary>HDR 纸白亮度（nits）；0 表示显示器全屏持续亮度。present 立即使用。</summary>
+        DisplayOutputHdrPaperWhiteNits,
+
         // Ez 技能
         /// <summary>
         /// ChartDan「LN 半」判定的绝对门槛（hold 物件数）：大于此值即认定 LN，无需达到比例线。
@@ -1665,6 +1702,16 @@ namespace osu.Game.EzOsuGame.Configuration
         S,
         E,
         P
+    }
+
+    /// <summary>
+    /// 显示输出模式（进程启动期确定，改动需重启）。见 <c>osu.Desktop/EzDisplayOutputBootstrap</c>。
+    /// </summary>
+    public enum EzDisplayOutputMode
+    {
+        Standard,
+        Native10Bit,
+        Hdr10,
     }
 
     /// <summary>

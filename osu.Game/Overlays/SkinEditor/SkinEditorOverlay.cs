@@ -62,10 +62,10 @@ namespace osu.Game.Overlays.SkinEditor
         private readonly ExternalEditOverlay externalEditOverlay = new ExternalEditOverlay();
 
         [Resolved]
-        private OsuGame game { get; set; } = null!;
+        private OsuGame? game { get; set; }
 
-        [Resolved]
-        private EzSkinEditorOverlay ezSkinEditor { get; set; } = null!;
+        [Resolved(canBeNull: true)]
+        private EzSkinEditorOverlay? ezSkinEditor { get; set; }
 
         [Resolved]
         private MusicController music { get; set; } = null!;
@@ -191,6 +191,9 @@ namespace osu.Game.Overlays.SkinEditor
         /// </summary>
         public void ToggleEzSkinEditor()
         {
+            if (ezSkinEditor == null)
+                return;
+
             Hide();
             ezSkinEditor.Toggle();
         }
@@ -376,16 +379,16 @@ namespace osu.Game.Overlays.SkinEditor
             {
                 Scheduler.AddOnce(updateScreenSizing);
 
-                game.Toolbar.Hide();
+                game?.Toolbar.Hide();
                 if (externalEditOverlay.State.Value != Visibility.Visible)
-                    game.CloseAllOverlays();
+                    game?.CloseAllOverlays();
             }
             else
             {
                 scalingContainer.SetCustomRect(null);
 
                 if (LastTargetScreen?.HideOverlaysOnEnter != true)
-                    game.Toolbar.Show();
+                    game?.Toolbar.Show();
             }
         }
 

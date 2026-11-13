@@ -348,6 +348,7 @@ namespace osu.Game.Screens.Select
             Selected.BindValueChanged(s =>
             {
                 Expanded.Value = s.NewValue;
+                ezDisplayTag.Selected = s.NewValue;
             }, true);
         }
 
@@ -491,13 +492,14 @@ namespace osu.Game.Screens.Select
             if (Item == null)
                 return;
 
+            updateEzDisplay();
+
             if (!EzSongSelectAnalysisDisplay.ShouldApplyPanelKpsUpdate(ezAnalysisResult, mods.Value))
                 return;
 
             var metrics = EzSongSelectAnalysisDisplay.Resolve(beatmap, ezAnalysisResult, mods.Value);
             applyPanelKps(metrics);
 
-            // The pills exist for every ruleset; only mania's live summary carries KPC and scratch on top of them.
             updateEzDisplay();
 
             if (!supportsEzAnalysis || !beatmap.SupportsSunnyStarRating())

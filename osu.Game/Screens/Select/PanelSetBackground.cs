@@ -63,8 +63,7 @@ namespace osu.Game.Screens.Select
 
                 working = value;
 
-                loadCancellation?.Cancel();
-                loadCancellation = null;
+                cancelLoad();
 
                 sprite?.Expire();
                 sprite = null;
@@ -151,11 +150,15 @@ namespace osu.Game.Screens.Select
 
             materialUiMode.BindValueChanged(e =>
             {
-                if (EzMaterialOverlayAlpha.IsEnabled(e.NewValue))
+                bool material = EzMaterialOverlayAlpha.IsEnabled(e.NewValue);
+
+                // 穿透材质时封面和渐变都不画，父级 Panel 已经圆角裁剪，这里的 Masking 是空跑。
+                Masking = !material;
+
+                if (material)
                 {
                     // Penetrate to the global song-select background — drop panel cover art.
-                    loadCancellation?.Cancel();
-                    loadCancellation = null;
+                    cancelLoad();
                     sprite?.Expire();
                     sprite = null;
                 }
@@ -163,8 +166,7 @@ namespace osu.Game.Screens.Select
                 {
                     // Restore classic cover art after acrylic is turned off.
                     timeSinceUnpool = 0;
-                    loadCancellation?.Cancel();
-                    loadCancellation = null;
+                    cancelLoad();
                 }
             }, true);
         }
@@ -220,6 +222,19 @@ namespace osu.Game.Screens.Select
                 bool spriteOnScreen = beatmapCarousel?.ScreenSpaceDrawQuad.Intersects(sprite.ScreenSpaceDrawQuad) != false;
                 sprite.FadeInFromZero(spriteOnScreen ? 400 : 0, Easing.OutQuint);
             }, loadCancellation.Token);
+        }
+
+        private void cancelLoad()
+        {
+            loadCancellation?.Cancel();
+            loadCancellation?.Dispose();
+            loadCancellation = null;
+        }
+
+        protected override void Dispose(bool isDisposing)
+        {
+            cancelLoad();
+            base.Dispose(isDisposing);
         }
 
         public partial class PanelBeatmapBackground : Sprite

@@ -15,12 +15,12 @@
          回收直接暂停主线程，表现为启动后数秒卡顿。Server GC 用后台回收降低暂停。 -->
     <ServerGarbageCollection>true</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <CETCompat>false</CETCompat>
   </PropertyGroup>
 
   <!-- Required for deployment. -->
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <StartupHookSupport>false</StartupHookSupport>
-    <CETCompat>false</CETCompat>
   </PropertyGroup>
 
   <!-- Windows x64 Release 走 ReadyToRun：把首启的方法 JIT 编译量换到发布期。
@@ -79,7 +79,7 @@
     <ProjectReference Include="..\osu.Game.Rulesets.BMS\osu.Game.Rulesets.BMS.csproj" />
   </ItemGroup>
   <ItemGroup Label="Package References">
-    <PackageReference Include="System.IO.Packaging" Version="10.0.12" />
+    <PackageReference Include="System.IO.Packaging" Version="11.0.0" />
     <!-- Held back due to invite bug in newer versions. See https://github.com/Lachee/discord-rpc-csharp/issues/286 -->
     <PackageReference Include="DiscordRichPresence" Version="1.5.0.51" />
     <PackageReference Include="Velopack" Version="1.2.158" />

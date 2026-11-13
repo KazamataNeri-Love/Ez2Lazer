@@ -38,6 +38,7 @@ namespace osu.Game.EzOsuGame.Edit
             Ez2Setting.HitPosition,
             Ez2Setting.HitTargetFloatFixed,
             Ez2Setting.HitTargetAlpha,
+            Ez2Setting.HitTargetColouringEnabled,
             Ez2Setting.NoteHeightScaleToWidth,
 
             // Skin-specific
@@ -50,6 +51,7 @@ namespace osu.Game.EzOsuGame.Edit
 
             // Colour
             Ez2Setting.ColorSettingsEnabled,
+            Ez2Setting.ColouringMode,
             Ez2Setting.ColumnTypeListSelect,
             Ez2Setting.ColumnTypeA,
             Ez2Setting.ColumnTypeB,

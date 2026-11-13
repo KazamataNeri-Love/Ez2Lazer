@@ -13,6 +13,7 @@ using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Localisation;
+using osu.Game.Screens.Footer;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Utils;
 
@@ -48,11 +49,9 @@ namespace osu.Game.Overlays.Mods
             // with additive blending children elements.
             AddInternal(new Container
             {
-                Anchor = Anchor.BottomRight,
-                Origin = Anchor.BottomRight,
                 RelativeSizeAxes = Axes.Both,
                 Shear = OsuGame.SHEAR,
-                CornerRadius = ShearedButton.CORNER_RADIUS,
+                CornerRadius = ScreenFooterButton.CORNER_RADIUS,
                 Masking = true,
                 Children = new Drawable[]
                 {

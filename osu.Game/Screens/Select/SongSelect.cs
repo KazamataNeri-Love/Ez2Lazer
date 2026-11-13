@@ -140,6 +140,8 @@ namespace osu.Game.Screens.Select
         private SkinnableContainer skinnableContent = null!;
 
         private GridContainer mainGridContainer = null!;
+        private float lastLeftColumnMaxSize = float.NaN;
+        private float lastRightColumnMaxSize = float.NaN;
 
         private NoResultsPlaceholder noResultsPlaceholder = null!;
 
@@ -523,13 +525,21 @@ namespace osu.Game.Screens.Select
             detailsArea.Height = wedgesContainer.ChildSize.Y - titleWedge.LayoutSize.Y - 4;
 
             float widescreenBonusWidth = Math.Max(0, DrawWidth / DrawHeight - 2f);
+            float leftMax = 700 + widescreenBonusWidth * 100;
+            float rightMax = 700 + widescreenBonusWidth * 300;
 
-            mainGridContainer.ColumnDimensions = new[]
+            // GridContainer.ColumnDimensions uses array reference equality; Dimension is a class.
+            if (leftMax != lastLeftColumnMaxSize || rightMax != lastRightColumnMaxSize)
             {
-                new Dimension(GridSizeMode.Relative, 0.5f, maxSize: 700 + widescreenBonusWidth * 100),
-                new Dimension(),
-                new Dimension(GridSizeMode.Relative, 0.5f, minSize: 500, maxSize: 700 + widescreenBonusWidth * 300),
-            };
+                lastLeftColumnMaxSize = leftMax;
+                lastRightColumnMaxSize = rightMax;
+                mainGridContainer.ColumnDimensions = new[]
+                {
+                    new Dimension(GridSizeMode.Relative, 0.5f, maxSize: leftMax),
+                    new Dimension(),
+                    new Dimension(GridSizeMode.Relative, 0.5f, minSize: 500, maxSize: rightMax),
+                };
+            }
 
             if (this.IsCurrentScreen())
                 updateDebounce();
@@ -713,7 +723,11 @@ namespace osu.Game.Screens.Select
         /// </summary>
         /// <param name="beatmap">The beatmap which should be selected. If not provided, the current globally selected beatmap will be used.</param>
         /// <param name="startAction">The action to perform if conditions are met to be able to proceed. May not be invoked if in an invalid state.</param>
-        protected void SelectAndRun(BeatmapInfo beatmap, Action startAction)
+        /// <param name="refetchWorkingBeatmap">
+        /// Whether to force a new <see cref="WorkingBeatmap"/> from the database before <paramref name="startAction"/>.
+        /// Required for the editor so difficulty files are re-read. Gameplay leaves this false so <see cref="PlayerLoader"/> can appear first.
+        /// </param>
+        protected void SelectAndRun(BeatmapInfo beatmap, Action startAction, bool refetchWorkingBeatmap = false)
         {
             if (!this.IsCurrentScreen())
                 return;
@@ -725,8 +739,7 @@ namespace osu.Game.Screens.Select
             // Carousel selection will update to the forced selection via a call of `ensureGlobalBeatmapValid` below, or when song select becomes current again.
             cancelDebounceSelection();
 
-            // Forced refetch is important here to guarantee correct invalidation across all difficulties (editor specific).
-            Beatmap.Value = beatmaps.GetWorkingBeatmap(beatmap, true);
+            Beatmap.Value = beatmaps.GetWorkingBeatmap(beatmap, refetchWorkingBeatmap);
 
             if (Beatmap.IsDefault)
                 return;
@@ -775,7 +788,13 @@ namespace osu.Game.Screens.Select
             {
                 var id = Beatmap.Value.BeatmapInfo.ID;
 
-                if (beatmaps.QueryBeatmap(b => b.ID == id) == null)
+                bool stillPresent = realm.Run(r =>
+                {
+                    var found = r.Find<BeatmapInfo>(id);
+                    return found?.BeatmapSet is { DeletePending: false };
+                });
+
+                if (!stillPresent)
                 {
                     Beatmap.SetDefault();
                     performDebounceSelection();
@@ -1170,15 +1189,13 @@ namespace osu.Game.Screens.Select
 
                 // [Ez] Only while acrylic UI is on: apply gameplay DimLevel / BlurLevel.
                 // Off = official IgnoreUserSettings path (fixed 0.1 dim; SongSelectBackgroundBlur only).
+                // 关掉用户变暗后仍回到选歌的 0.1。亚克力开着时选歌本身用用户设置，但这个回退值要留着。
+                backgroundModeBeatmap.DimWhenUserSettingsIgnored.Value = 0.1f;
+
                 if (EzMaterialOverlayAlpha.IsEnabled(materialUiMode.Value))
-                {
                     backgroundModeBeatmap.IgnoreUserSettings.Value = false;
-                }
                 else
-                {
                     backgroundModeBeatmap.IgnoreUserSettings.Value = true;
-                    backgroundModeBeatmap.DimWhenUserSettingsIgnored.Value = 0.1f;
-                }
 
                 // Required to undo results screen dimming the background.
                 // Probably needs more thought because this needs to be in every `ApplyToBackground` currently to restore sane defaults.
@@ -1498,6 +1515,7 @@ namespace osu.Game.Screens.Select
                 return;
 
             onlineLookupCancellation?.Cancel();
+            onlineLookupCancellation?.Dispose();
             onlineLookupCancellation = null;
 
             if (onlineSetId < 0)
@@ -1691,6 +1709,9 @@ namespace osu.Game.Screens.Select
         {
             base.Dispose(isDisposing);
             modSelectOverlayRegistration?.Dispose();
+            onlineLookupCancellation?.Cancel();
+            onlineLookupCancellation?.Dispose();
+            onlineLookupCancellation = null;
         }
     }
 }

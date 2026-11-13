@@ -7,6 +7,7 @@ using osu.Framework.Graphics.Colour;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Game.Graphics.UserInterface;
+using osu.Game.Screens.Footer;
 using osuTK;
 using osuTK.Graphics;
 
@@ -33,12 +34,10 @@ namespace osu.Game.Overlays.Mods
 
             InternalChild = Content = new Container
             {
-                Origin = Anchor.BottomRight,
-                Anchor = Anchor.BottomRight,
                 AutoSizeAxes = Axes.X,
                 Height = ShearedButton.DEFAULT_HEIGHT,
                 Shear = OsuGame.SHEAR,
-                CornerRadius = ShearedButton.CORNER_RADIUS,
+                CornerRadius = ScreenFooterButton.CORNER_RADIUS,
                 BorderThickness = ShearedButton.BORDER_THICKNESS,
                 Masking = true,
                 Children = new Drawable[]
@@ -61,7 +60,7 @@ namespace osu.Game.Overlays.Mods
                                 AutoSizeAxes = Axes.X,
                                 RelativeSizeAxes = Axes.Y,
                                 BorderThickness = ShearedButton.BORDER_THICKNESS,
-                                CornerRadius = ShearedButton.CORNER_RADIUS,
+                                CornerRadius = ScreenFooterButton.CORNER_RADIUS,
                                 Masking = true,
                                 Children = new Drawable[]
                                 {

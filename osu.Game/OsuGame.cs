@@ -53,6 +53,7 @@ using osu.Game.EzOsuGame.Playback;
 using osu.Game.EzOsuGame.Pets;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.EzOsuGame.Screens.Play;
+using osu.Game.EzOsuGame.Wiki;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.UserInterface;
@@ -1125,6 +1126,7 @@ namespace osu.Game
             // todo: all archive managers should be able to be looped here.
             SkinManager.PostNotification = n => Notifications.Post(n);
             SkinManager.PresentImport = items => PresentSkin(items.First().Value);
+            waitForReady(() => dialogOverlay, overlay => SkinManager.IntroduceLegacySkinStorage(overlay));
 
             BeatmapManager.PostNotification = n => Notifications.Post(n);
             BeatmapManager.PresentImport = items => PresentBeatmap(items.First().Value);
@@ -1311,7 +1313,7 @@ namespace osu.Game
             loadComponentSingleFile(userProfile = new UserProfileOverlay(), overlayContent.Add, true);
             loadComponentSingleFile(ezLocalProfile = new EzLocalProfileOverlay(), overlayContent.Add, true);
             loadComponentSingleFile(beatmapSetOverlay = new BeatmapSetOverlay(), overlayContent.Add, true);
-            loadComponentSingleFile(wikiOverlay = new WikiOverlay(), overlayContent.Add, true);
+            loadComponentSingleFile(wikiOverlay = new EzWikiOverlay(), overlayContent.Add, true);
             // Above screens, below logo / footer / sheared overlays (higher Depth = further back).
             loadComponentSingleFile(new EzLayoutLayer { Depth = 0.5f }, screenCaptureContent.Add, true);
             // Ez 编辑器须先于官方 SkinEditor 入树，供 SkinEditorOverlay [Resolved] 注入。
@@ -1344,6 +1346,7 @@ namespace osu.Game
 
             // 缓存供 realm重算 使用，必须在 BackgroundDataStoreProcessor 之前注册。
             loadComponentSingleFile(new BackgroundDataStoreProcessor(), Add, true);
+            cacheDetachedBeatmapStoreSyncPolicy();
             loadComponentSingleFile<BeatmapStore>(detachedBeatmapStore = new RealmDetachedBeatmapStore(), Add, true);
             loadComponentSingleFile(new QueueController(), Add, true);
 
@@ -1578,7 +1581,7 @@ namespace osu.Game
             if (entry.Message?.Contains("Please ensure that you are using the latest version of the official game releases", StringComparison.OrdinalIgnoreCase) == true)
                 return;
 
-            if (entry.Message?.Contains("Your score will not be submitted", StringComparison.OrdinalIgnoreCase) == true)
+            if (entry.Message?.Contains("score will not be submitted", StringComparison.OrdinalIgnoreCase) == true)
                 return;
 
             if (entry.Message?.Contains("This is not an official build of the game", StringComparison.OrdinalIgnoreCase) == true)
@@ -2005,10 +2008,15 @@ namespace osu.Game
             }
         }
 
-        private void screenPushed(IScreen lastScreen, IScreen newScreen) => ScreenChanged((OsuScreen)lastScreen, (OsuScreen)newScreen);
+        private void screenPushed(IScreen lastScreen, IScreen newScreen)
+        {
+            onEzDetachedBeatmapStoreScreenPushed(lastScreen, newScreen);
+            ScreenChanged((OsuScreen)lastScreen, (OsuScreen)newScreen);
+        }
 
         private void screenExited(IScreen lastScreen, IScreen newScreen)
         {
+            onEzDetachedBeatmapStoreScreenExited(lastScreen, newScreen);
             ScreenChanged((OsuScreen)lastScreen, (OsuScreen)newScreen);
             startupSongSelectPreload((OsuScreen)lastScreen, (OsuScreen)newScreen);
 

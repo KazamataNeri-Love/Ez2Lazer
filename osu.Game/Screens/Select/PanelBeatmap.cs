@@ -17,7 +17,6 @@ using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Localisation;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.Drawables;
-using osu.Game.Configuration;
 using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Beatmaps;
 using osu.Game.EzOsuGame.Configuration;
@@ -78,9 +77,6 @@ namespace osu.Game.Screens.Select
 
         [Resolved]
         private Ez2ConfigManager ezConfig { get; set; } = null!;
-
-        [Resolved]
-        private OsuConfigManager config { get; set; } = null!;
 
         [Resolved]
         private EzAnalysisCache ezAnalysisCache { get; set; } = null!;
@@ -356,6 +352,9 @@ namespace osu.Game.Screens.Select
                     updateEzDisplay();
             });
             ezAnalysisFilter.BindValueChanged(_ => updateStarFilterIcon(), true);
+
+            // Only the selected card runs the live chart-skill recheck; the rest read the session cache.
+            Selected.BindValueChanged(s => ezDisplayTag.Selected = s.NewValue, true);
         }
 
         protected override void PrepareForUse()
@@ -492,13 +491,15 @@ namespace osu.Game.Screens.Select
             if (Item == null)
                 return;
 
+            // L3 may finish before KPS is ready under mods; star/pp pills still need the live cache entry.
+            updateEzDisplay();
+
             if (!EzSongSelectAnalysisDisplay.ShouldApplyPanelKpsUpdate(ezAnalysisResult, mods.Value))
                 return;
 
             var metrics = EzSongSelectAnalysisDisplay.Resolve(beatmap, ezAnalysisResult, mods.Value);
             applyPanelKps(metrics);
 
-            // The pills exist for every ruleset; only mania's live summary carries KPC and scratch on top of them.
             updateEzDisplay();
 
             if (!supportsEzAnalysis || !beatmap.SupportsSunnyStarRating())
@@ -549,7 +550,7 @@ namespace osu.Game.Screens.Select
                     return;
 
                 applyPanelDifficulty(starDifficulty.NewValue);
-            });
+            }, true);
         }
 
         private void applyPanelDifficulty(in StarDifficulty starDifficulty)
