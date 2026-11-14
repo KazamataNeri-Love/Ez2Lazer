@@ -195,6 +195,7 @@
 - 不受 `FrameStabilityContainer` 的时间稳定性影响
 - 支持皮肤编辑器发现和皮肤组件加载
 - 通过 `SkinnableContainer.ExternalTarget` 代理机制，将皮肤组件渲染到独立容器
+- 分为**全局**与**规则集专属**两套布局（`Background.json` 的 `global` 与各模式桶），编辑器下拉中分别显示为 `Background` 与 `Background ("模式" only)`；两者叠加显示，模式层绘制在上
 - 可用于放置舞台背景、动态光效等不参与游戏判定的纯视觉元素
 
 **涉及文件：**
