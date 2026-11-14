@@ -20,8 +20,8 @@ using osu.Game.Skinning;
 namespace osu.Game.EzOsuGame.Edit.Components
 {
     /// <summary>
-    /// Ez 皮肤编辑器 HUD 蓝图层。只把 Ez 布局层（<see cref="EzLayoutLayer"/>）的容器作为可编辑目标，
-    /// 皮肤层 HUD 只在 layer 开关下临时显隐，既不建蓝图也不写回皮肤。
+    /// Ez 皮肤编辑器 HUD 蓝图层。Ez 层编辑 <see cref="EzLayoutLayer"/> 容器；Skin 层编辑当前屏上
+    /// 的皮肤 <see cref="SkinnableContainer"/>，写回当前皮肤 JSON。
     /// </summary>
     public partial class EzSkinEditorHudLayer : CompositeDrawable, IEditorChangeHandler
     {
@@ -109,6 +109,16 @@ namespace osu.Game.EzOsuGame.Edit.Components
         private OsuScreen? liveScreen;
         private EzEditorSceneType scene = EzEditorSceneType.GameplayHud;
         private EzHUDLayer layer = EzHUDLayer.EzHud;
+        private bool skinLayoutDirty;
+        private Guid dirtySkinId;
+
+        /// <summary>
+        /// Pending skin HUD layout writes not yet flushed to disk.
+        /// </summary>
+        public bool HasPendingSkinLayoutSave => skinLayoutDirty;
+
+        [Resolved]
+        private SkinManager skins { get; set; } = null!;
 
         public EzSkinEditorHudLayer()
         {
@@ -129,8 +139,7 @@ namespace osu.Game.EzOsuGame.Edit.Components
         }
 
         /// <summary>
-        /// Binds the editor HUD to a scene. Only <paramref name="ezLayout"/> contributes editable targets;
-        /// <paramref name="screen"/> is used to reach the skin layer HUD for temporary visibility only.
+        /// Binds the editor HUD to a scene and the live screen that owns skin containers.
         /// </summary>
         public void Apply(EzEditorSceneType scene, OsuScreen? screen, EzLayoutLayer? ezLayout) => Apply(scene, screen, ezLayout, layer);
 
@@ -230,7 +239,7 @@ namespace osu.Game.EzOsuGame.Edit.Components
             ChangeHandler?.Dispose();
             ChangeHandler = null;
 
-            EzLayoutContainer? target = ActiveTarget;
+            SkinnableContainer? target = ActiveTarget;
 
             if (target == null)
                 return;
@@ -242,35 +251,66 @@ namespace osu.Game.EzOsuGame.Edit.Components
         }
 
         /// <summary>
-        /// Persists every layout container edited by the editor. Used on apply/save.
+        /// Persists every Ez layout container and flushes pending skin layout writes. Used on apply/save.
         /// </summary>
         public void PersistAllLayouts()
         {
-            if (layoutLayer == null)
-                return;
+            if (layoutLayer != null)
+            {
+                foreach (var target in layoutLayer.AllLayoutContainers)
+                    layoutLayer.Store.Save(target);
+            }
 
-            foreach (var target in layoutLayer.AllLayoutContainers)
-                layoutLayer.Store.Save(target);
+            FlushSkinLayoutSave();
         }
 
         /// <summary>
-        /// Ez 布局层中属于当前场景/当前编辑层的容器。可编辑目标由
-        /// <see cref="EzSkinEditorSceneRegistry"/> 与 <see cref="EzSkinEditorLayerOptions"/> 解析，
-        /// 本层不再自行维护场景到目标的映射。只匹配精确 lookup（Lookup + Ruleset 均相等），
-        /// 保证只编辑所选层，其余层保持可见但不进蓝图。
+        /// Writes skin HUD layout JSON when skin layers were edited this session.
         /// </summary>
-        public IEnumerable<EzLayoutContainer> EnumerateTargets()
+        public void FlushSkinLayoutSave()
         {
-            if (layoutLayer == null)
-                yield break;
+            if (!skinLayoutDirty)
+                return;
 
-            // HUD 关闭层不建立任何蓝图；Results 场景同时编辑 HUD 与背景两个容器，
-            // 其余场景按所选层（含 ruleset 作用域）精确匹配。
+            FlushPendingForSkin(skins.CurrentSkin.Value);
+        }
+
+        /// <summary>
+        /// Writes pending layout JSON for <paramref name="skin"/> when it matches the dirty session skin.
+        /// </summary>
+        public void FlushPendingForSkin(Skin skin)
+        {
+            if (!skinLayoutDirty)
+                return;
+
+            if (dirtySkinId != Guid.Empty && skin.SkinInfo.Value.ID != dirtySkinId)
+                return;
+
+            skins.Save(skin);
+            skinLayoutDirty = false;
+            dirtySkinId = Guid.Empty;
+        }
+
+        public void DiscardPendingSkinLayoutSave()
+        {
+            skinLayoutDirty = false;
+            dirtySkinId = Guid.Empty;
+        }
+
+        /// <summary>
+        /// Containers belonging to the current scene and active edit layer.
+        /// </summary>
+        public IEnumerable<SkinnableContainer> EnumerateTargets()
+        {
+            // HUD 关闭层不建立任何蓝图；Results 场景同时编辑 HUD 与背景两个容器。
             if (layer == EzHUDLayer.HudOff)
                 yield break;
 
             if (scene == EzEditorSceneType.Results)
             {
+                if (layoutLayer == null)
+                    yield break;
+
                 IReadOnlyList<GlobalSkinnableContainers> resultsTargets = EzSkinEditorSceneRegistry.ResolveLayoutTargets(scene);
 
                 foreach (var container in layoutLayer.AllLayoutContainers)
@@ -287,14 +327,29 @@ namespace osu.Game.EzOsuGame.Edit.Components
             if (wanted == null)
                 yield break;
 
-            foreach (var container in layoutLayer.LayoutContainers.Where(c => c.Lookup.Equals(wanted)))
-                yield return container;
+            if (EzSkinEditorLayerOptions.UsesEzLayoutStore(layer))
+            {
+                if (layoutLayer == null)
+                    yield break;
+
+                foreach (var container in layoutLayer.LayoutContainers.Where(c => c.Lookup.Equals(wanted)))
+                    yield return container;
+            }
+            else
+            {
+                if (liveScreen == null || !liveScreen.IsLoaded)
+                    yield break;
+
+                foreach (var container in liveScreen.ChildrenOfType<SkinnableContainer>()
+                             .Where(c => c is not EzLayoutContainer && c.Lookup.Equals(wanted)))
+                    yield return container;
+            }
         }
 
         public void PersistLayoutToCurrentSkin()
         {
             foreach (var target in EnumerateTargets())
-                layoutLayer?.Store.Save(target);
+                persistTarget(target);
         }
 
         /// <summary>
@@ -350,7 +405,7 @@ namespace osu.Game.EzOsuGame.Edit.Components
             foreach (var instance in instances)
             {
                 // Pasted components carry their serialised transform, so placement must not reset it.
-                if (ActiveTarget?.TryPlace(instance, false) == true)
+                if (ActiveTarget != null && EzSkinEditorContainerPlacement.TryPlace(ActiveTarget, instance, false))
                     selectedComponents.Add(instance);
             }
 
@@ -372,15 +427,33 @@ namespace osu.Game.EzOsuGame.Edit.Components
 
         private void persistActiveTarget()
         {
-            if (ActiveTarget != null)
-                layoutLayer?.Store.Save(ActiveTarget);
+            var target = ActiveTarget;
+
+            if (target != null)
+                persistTarget(target);
+        }
+
+        private void persistTarget(SkinnableContainer target)
+        {
+            if (target is EzLayoutContainer ezLayout)
+                layoutLayer?.Store.Save(ezLayout);
+            else
+                persistSkinTarget(target);
+        }
+
+        private void persistSkinTarget(SkinnableContainer target)
+        {
+            skins.EnsureMutableSkin();
+            skins.CurrentSkin.Value.UpdateDrawableTarget(target);
+            skinLayoutDirty = true;
+            dirtySkinId = skins.CurrentSkinInfo.Value.ID;
         }
 
         /// <summary>
         /// The container currently being edited (the active layer's only target), or null when the
         /// layer has no editable container. Used as the dependency source for library previews.
         /// </summary>
-        public EzLayoutContainer? ActiveTarget => EnumerateTargets().FirstOrDefault();
+        public SkinnableContainer? ActiveTarget => EnumerateTargets().FirstOrDefault();
 
         /// <summary>
         /// The ruleset active in the editor; drives which library (global / mode) can be edited.
@@ -411,18 +484,18 @@ namespace osu.Game.EzOsuGame.Edit.Components
         /// </param>
         public bool TryPlaceComponent(ISerialisableDrawable component, bool applyDefaults = true)
         {
-            EzLayoutContainer? target = ActiveTarget;
+            SkinnableContainer? target = ActiveTarget;
 
             if (target == null)
                 return false;
 
-            if (!target.TryPlace(component, applyDefaults))
+            if (!EzSkinEditorContainerPlacement.TryPlace(target, component, applyDefaults))
                 return false;
 
             selectedComponents.Clear();
             selectedComponents.Add(component);
 
-            layoutLayer?.Store.Save(target);
+            persistTarget(target);
             return true;
         }
 
@@ -446,7 +519,7 @@ namespace osu.Game.EzOsuGame.Edit.Components
             if (screen == null || !screen.IsLoaded)
                 return;
 
-            foreach (var container in screen.ChildrenOfType<SkinnableContainer>())
+            foreach (var container in screen.ChildrenOfType<SkinnableContainer>().Where(c => c is not EzLayoutContainer))
             {
                 if (Math.Abs(container.Alpha - alpha) > 0.001f)
                     container.FadeTo(alpha, hud_fade_duration, Easing.OutQuint);
@@ -458,7 +531,7 @@ namespace osu.Game.EzOsuGame.Edit.Components
             if (screen == null || !screen.IsLoaded)
                 return;
 
-            foreach (var container in screen.ChildrenOfType<SkinnableContainer>())
+            foreach (var container in screen.ChildrenOfType<SkinnableContainer>().Where(c => c is not EzLayoutContainer))
                 container.Alpha = 1;
         }
 
