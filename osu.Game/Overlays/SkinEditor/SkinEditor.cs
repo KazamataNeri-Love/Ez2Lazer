@@ -100,6 +100,7 @@ namespace osu.Game.Overlays.SkinEditor
         private EzEditorSettingsSidebar settingsSidebar = null!;
 
         private SkinEditorChangeHandler? changeHandler;
+        private bool layoutDirty;
         private readonly IBindableList<ISerialisableDrawable> components = new BindableList<ISerialisableDrawable>();
 
         private EditorMenuItem undoMenuItem = null!;
@@ -321,6 +322,7 @@ namespace osu.Game.Overlays.SkinEditor
                     trySaveLayout(val.OldValue);
 
                 HasBegunMutating = false;
+                layoutDirty = false;
                 Scheduler.AddOnce(OnSkinChanged);
             }, true);
 
@@ -433,7 +435,7 @@ namespace osu.Game.Overlays.SkinEditor
         }
 
         public bool HasUnsavedLayoutChanges() =>
-            State.Value == Visibility.Visible && (changeHandler?.CanUndo.Value ?? false);
+            State.Value == Visibility.Visible && layoutDirty;
 
         /// <summary>
         /// Ends the session after optional save/discard confirmation (same contract as exiting to the menu).
@@ -461,6 +463,7 @@ namespace osu.Game.Overlays.SkinEditor
                 onContinued();
             }, () =>
             {
+                layoutDirty = false;
                 skins.CurrentSkinInfo.TriggerChange();
                 HasBegunMutating = false;
                 onContinued();
@@ -578,7 +581,13 @@ namespace osu.Game.Overlays.SkinEditor
             void bindSkinnableContainer(SkinnableContainer skinnableContainer)
             {
                 changeHandler = new SkinEditorChangeHandler(skinnableContainer);
-                changeHandler.CanUndo.BindValueChanged(v => undoMenuItem.Action.Disabled = !v.NewValue, true);
+                changeHandler.CanUndo.BindValueChanged(v =>
+                {
+                    undoMenuItem.Action.Disabled = !v.NewValue;
+
+                    if (v.NewValue)
+                        layoutDirty = true;
+                }, true);
                 changeHandler.CanRedo.BindValueChanged(v => redoMenuItem.Action.Disabled = !v.NewValue, true);
 
                 components.UnbindBindings();
@@ -831,6 +840,9 @@ namespace osu.Game.Overlays.SkinEditor
 
             bool saved = skins.Save(skin);
             LastLayoutSaveSucceeded = saved;
+
+            if (saved)
+                layoutDirty = false;
 
             if (saved || userTriggered)
                 onScreenDisplay?.Display(new SkinEditorToast(ToastStrings.SkinSaved, skin.SkinInfo.ToString() ?? "Unknown"));
