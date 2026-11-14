@@ -1090,6 +1090,7 @@ namespace osu.Game
         {
             base.Dispose(isDisposing);
 
+            EzResourceStore?.Dispose();
             ezAnalysisPersistentStore?.Dispose();
             ezCameraHost?.Dispose();
 
