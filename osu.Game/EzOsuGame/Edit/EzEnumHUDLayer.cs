@@ -24,6 +24,12 @@ namespace osu.Game.EzOsuGame.Edit
         /// <summary>Ez layout layer, ruleset-specific playfield components.</summary>
         EzPlayfieldRuleset,
 
+        /// <summary>Ez layout layer, global (non-ruleset) background components.</summary>
+        EzBackground,
+
+        /// <summary>Ez layout layer, ruleset-specific background components.</summary>
+        EzBackgroundRuleset,
+
         /// <summary>Current skin layout, global (non-ruleset) HUD components.</summary>
         SkinHud,
 

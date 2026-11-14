@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.IO.Serialization;
@@ -32,6 +33,12 @@ namespace osu.Game.EzOsuGame.Layout
         };
 
         private const int playfield_save_debounce_ms = 200;
+
+        /// <summary>
+        /// Component type that used to be placeable but is now a fixed footer element. Loaded layouts are
+        /// stripped of it once and rewritten, so no stale entry keeps failing to instantiate.
+        /// </summary>
+        private const string retired_footer_image_type = "EzSongSelectImage";
 
         private readonly Storage gameStorage;
         private readonly Lock playfieldSaveLock = new Lock();
@@ -81,12 +88,64 @@ namespace osu.Game.EzOsuGame.Layout
 
             try
             {
+                json = stripRetiredComponents(layoutFile, json);
                 return JsonConvert.DeserializeObject<SkinLayoutInfo>(json, json_settings) ?? new SkinLayoutInfo();
             }
             catch (Exception ex)
             {
                 Logger.Error(ex, $"Failed to load Ez layout {layoutFile}");
                 return new SkinLayoutInfo();
+            }
+        }
+
+        /// <summary>
+        /// Drops entries of components that were retired from the layout format and persists the result,
+        /// so the file stops carrying a type that no longer exists.
+        /// </summary>
+        private string stripRetiredComponents(string layoutFile, string json)
+        {
+            try
+            {
+                JObject root = JObject.Parse(json);
+
+                if (root["DrawableInfo"] is not JObject buckets)
+                    return json;
+
+                bool changed = false;
+
+                foreach (JProperty bucket in buckets.Properties())
+                {
+                    if (bucket.Value is not JArray entries)
+                        continue;
+
+                    for (int i = entries.Count - 1; i >= 0; i--)
+                    {
+                        if (entries[i] is not JObject entry)
+                            continue;
+
+                        string? typeName = entry["Type"]?.Value<string>();
+
+                        if (typeName == null || !typeName.Contains(retired_footer_image_type, StringComparison.Ordinal))
+                            continue;
+
+                        entries.RemoveAt(i);
+                        changed = true;
+                    }
+                }
+
+                if (!changed)
+                    return json;
+
+                string migrated = root.ToString(Formatting.None);
+                writeText(layoutFile, migrated);
+                Logger.Log($"Ez layout {layoutFile} migrated: retired '{retired_footer_image_type}' entries removed.", LoggingTarget.Runtime, LogLevel.Debug);
+
+                return migrated;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, $"Failed to migrate Ez layout {layoutFile}");
+                return json;
             }
         }
 

@@ -201,17 +201,37 @@ namespace osu.Game.Rulesets.UI
                 }
             };
 
+            // Global and ruleset-scoped background components get separate hosts: a
+            // SkinnableContainer clears its ExternalTarget on every reload, so two proxies
+            // sharing one host would erase each other's components.
+            var globalBackgroundHost = new Container { RelativeSizeAxes = Axes.Both };
+            var rulesetBackgroundHost = new Container { RelativeSizeAxes = Axes.Both };
+
+            BackgroundLayer.Add(globalBackgroundHost);
+            BackgroundLayer.Add(rulesetBackgroundHost);
+            BackgroundLayer.Add(EzGlobalBackgroundHost);
+            BackgroundLayer.Add(EzRulesetBackgroundHost);
+
             // BackgroundLayer is added outside FrameStabilityContainer
             // to avoid interfering with its frame-stable pipeline timing.
             AddInternal(BackgroundLayer);
 
-            // Register a SkinnableContainer proxy for editor discovery.
-            // Alpha=0 keeps it out of the draw traversal; ExternalTarget
-            // proxies Add/Remove/Reload to the real BackgroundLayer.
+            // Register SkinnableContainer proxies for editor discovery. Alpha=0 keeps them out
+            // of the draw traversal; ExternalTarget proxies Add/Remove/Reload to the matching host.
+            // Child order doubles as z-order here, so the global host is added first to keep
+            // ruleset-scoped components above it (same layering as the HUD's global/ruleset pair).
             AddInternal(new SkinnableContainer(
                 new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.Background))
             {
-                ExternalTarget = BackgroundLayer,
+                ExternalTarget = globalBackgroundHost,
+                Alpha = 0,
+                AlwaysPresent = false,
+            });
+
+            AddInternal(new SkinnableContainer(
+                new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.Background, Ruleset.RulesetInfo))
+            {
+                ExternalTarget = rulesetBackgroundHost,
                 Alpha = 0,
                 AlwaysPresent = false,
             });
@@ -490,6 +510,15 @@ namespace osu.Game.Rulesets.UI
         /// test project for no benefit.
         /// </remarks>
         public virtual Container BackgroundLayer { get; } = new Container { RelativeSizeAxes = Axes.Both, Depth = float.MaxValue };
+
+        /// <summary>
+        /// Hosts for Ez layout background components. Kept apart from the skin hosts because a
+        /// skinnable container clears its external target on every reload, so sharing one host would
+        /// erase the other provider's components.
+        /// </summary>
+        internal Container EzGlobalBackgroundHost { get; } = new Container { RelativeSizeAxes = Axes.Both };
+
+        internal Container EzRulesetBackgroundHost { get; } = new Container { RelativeSizeAxes = Axes.Both };
 
         /// <summary>
         /// Components to be run potentially multiple times in line with frame-stable gameplay.

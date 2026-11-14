@@ -353,6 +353,10 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly LocalisableString LAYER_EZ_PLAYFIELD_RULESET = new EzLocalizationManager.EzLocalisableString("Ez Playfield（{0}）", "Ez Playfield ({0})");
 
+        public static readonly LocalisableString LAYER_EZ_BACKGROUND = new EzLocalizationManager.EzLocalisableString("Ez Background", "Ez Background");
+
+        public static readonly LocalisableString LAYER_EZ_BACKGROUND_RULESET = new EzLocalizationManager.EzLocalisableString("Ez Background（{0}）", "Ez Background ({0})");
+
         public static readonly LocalisableString LAYER_SKIN_HUD = new EzLocalizationManager.EzLocalisableString("Skin HUD", "Skin HUD");
 
         public static readonly LocalisableString LAYER_SKIN_HUD_RULESET = new EzLocalizationManager.EzLocalisableString("Skin HUD（{0}）", "Skin HUD ({0})");

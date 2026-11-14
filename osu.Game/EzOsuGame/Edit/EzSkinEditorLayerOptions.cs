@@ -99,7 +99,24 @@ namespace osu.Game.EzOsuGame.Edit
         private static readonly EzSkinEditorLayerDefinition[] gameplay_layers =
         {
             HUD_OFF, EZ_HUD, EZ_HUD_RULESET, EZ_PLAYFIELD_RULESET,
+            EZ_BACKGROUND, EZ_BACKGROUND_RULESET,
             SKIN_HUD, SKIN_HUD_RULESET, SKIN_PLAYFIELD_RULESET,
+        };
+
+        public static readonly EzSkinEditorLayerDefinition EZ_BACKGROUND = new EzSkinEditorLayerDefinition
+        {
+            Layer = EzHUDLayer.EzBackground,
+            RulesetScoped = false,
+            Target = GlobalSkinnableContainers.Background,
+            UsesEzLayoutStore = true,
+        };
+
+        public static readonly EzSkinEditorLayerDefinition EZ_BACKGROUND_RULESET = new EzSkinEditorLayerDefinition
+        {
+            Layer = EzHUDLayer.EzBackgroundRuleset,
+            RulesetScoped = true,
+            Target = GlobalSkinnableContainers.Background,
+            UsesEzLayoutStore = true,
         };
 
         /// <summary>
@@ -119,6 +136,8 @@ namespace osu.Game.EzOsuGame.Edit
             EzHUDLayer.EzHud => EZ_HUD,
             EzHUDLayer.EzHudRuleset => EZ_HUD_RULESET,
             EzHUDLayer.EzPlayfieldRuleset => EZ_PLAYFIELD_RULESET,
+            EzHUDLayer.EzBackground => EZ_BACKGROUND,
+            EzHUDLayer.EzBackgroundRuleset => EZ_BACKGROUND_RULESET,
             EzHUDLayer.SkinHud => SKIN_HUD,
             EzHUDLayer.SkinHudRuleset => SKIN_HUD_RULESET,
             EzHUDLayer.SkinPlayfieldRuleset => SKIN_PLAYFIELD_RULESET,
@@ -175,6 +194,12 @@ namespace osu.Game.EzOsuGame.Edit
 
                 case EzHUDLayer.EzPlayfieldRuleset:
                     return LocalisableString.Format(EzEditorStrings.LAYER_EZ_PLAYFIELD_RULESET.ToString(), getRulesetName(ruleset));
+
+                case EzHUDLayer.EzBackground:
+                    return EzEditorStrings.LAYER_EZ_BACKGROUND;
+
+                case EzHUDLayer.EzBackgroundRuleset:
+                    return LocalisableString.Format(EzEditorStrings.LAYER_EZ_BACKGROUND_RULESET.ToString(), getRulesetName(ruleset));
 
                 case EzHUDLayer.SkinHud:
                     return EzEditorStrings.LAYER_SKIN_HUD;

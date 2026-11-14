@@ -51,6 +51,7 @@ using osu.Game.Rulesets.Scoring;
 using osu.Game.Rulesets.UI;
 using osu.Game.Rulesets.UI.Scrolling;
 using osu.Game.Scoring;
+using osu.Game.Screens.Backgrounds;
 using osu.Game.Screens.Ranking;
 using osu.Game.Skinning;
 using osu.Game.Users;
@@ -1350,6 +1351,12 @@ namespace osu.Game.Screens.Play
 
         private FailAnimationContainer failAnimationContainer;
 
+        /// <summary>
+        /// The screen-stack background currently hidden while gameplay draws its own copy under the black underlay.
+        /// Restored on suspend/exit so returning screens keep their background.
+        /// </summary>
+        private BackgroundScreenBeatmap? hiddenBackgroundScreen;
+
         private bool onFail()
         {
             // Failing after the quit sequence has started may cause weird side effects with the fail animation / effects.
@@ -1536,6 +1543,11 @@ namespace osu.Game.Screens.Play
                 b.StoryboardReplacesBackground.BindTo(StoryboardReplacesBackground);
 
                 failAnimationContainer.Background = b;
+
+                // The underlay we built is fully opaque and already covers this background, so its full-screen
+                // draw (and any user blur pass on it) is wasted while gameplay is current.
+                hiddenBackgroundScreen = b;
+                b.Hide();
             });
 
             HUDOverlay.IsPlaying.BindTo(localUserPlaying);
@@ -1598,6 +1610,7 @@ namespace osu.Game.Screens.Play
             exitOverlay?.RemoveAndDisposeImmediately();
 
             fadeOut();
+            restoreBackgroundScreen();
             base.OnSuspending(e);
         }
 
@@ -1651,8 +1664,26 @@ namespace osu.Game.Screens.Play
             musicController.ResetTrackAdjustments();
 
             fadeOut();
+            restoreBackgroundScreen();
 
             return base.OnExiting(e);
+        }
+
+        public override void OnResuming(ScreenTransitionEvent e)
+        {
+            base.OnResuming(e);
+
+            ApplyToBackground(b =>
+            {
+                hiddenBackgroundScreen = b;
+                b.Hide();
+            });
+        }
+
+        private void restoreBackgroundScreen()
+        {
+            hiddenBackgroundScreen?.Show();
+            hiddenBackgroundScreen = null;
         }
 
         /// <summary>

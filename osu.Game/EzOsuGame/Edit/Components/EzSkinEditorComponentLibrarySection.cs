@@ -143,6 +143,7 @@ namespace osu.Game.EzOsuGame.Edit.Components
 
             bool layerAllows = rulesetScoped
                 ? layer is EzHUDLayer.EzHudRuleset or EzHUDLayer.EzPlayfieldRuleset
+                    or EzHUDLayer.EzBackgroundRuleset
                     or EzHUDLayer.SkinHudRuleset or EzHUDLayer.SkinPlayfieldRuleset
                 : layer != EzHUDLayer.HudOff;
 
