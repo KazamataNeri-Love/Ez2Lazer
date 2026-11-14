@@ -827,12 +827,12 @@ namespace osu.Game.Overlays.SkinEditor
             if (TargetScreen?.IsLoaded != true)
                 return false;
 
-            SkinnableContainer[] targetContainers = AvailableTargets.ToArray();
+            SkinnableContainer? target = GetTarget(SelectedTarget.Value) ?? GetFirstTarget();
 
-            if (targetContainers.Length == 0)
+            if (target == null)
                 return false;
 
-            if (!targetContainers.All(c => c.ComponentsLoaded))
+            if (!target.ComponentsLoaded)
             {
                 if (userTriggered)
                     Logger.Log(EzEditorStrings.NOTIFY_SKIN_LAYOUT_SAVE_CONTAINERS_LOADING, LoggingTarget.Runtime, LogLevel.Important);
@@ -841,9 +841,7 @@ namespace osu.Game.Overlays.SkinEditor
             }
 
             LastLayoutSaveAttempted = true;
-
-            foreach (var t in targetContainers)
-                skin.UpdateDrawableTarget(t);
+            PersistInMemoryLayout(skin);
 
             bool saved = skins.Save(skin);
             LastLayoutSaveSucceeded = saved;
@@ -988,7 +986,7 @@ namespace osu.Game.Overlays.SkinEditor
             game?.UnregisterImportHandler(this);
         }
 
-        protected partial class SkinEditorToast : Toast
+        public partial class SkinEditorToast : Toast
         {
             public SkinEditorToast(LocalisableString value, string skinDisplayName)
                 : base(SkinSettingsStrings.SkinLayoutEditor, value)
