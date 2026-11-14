@@ -103,13 +103,6 @@ namespace osu.Game.Overlays.Mods
 
         protected virtual ModColumn CreateModColumn(ModType modType) => new ModColumn(modType, false);
 
-        /// <summary>
-        /// 置顶栏数据源；为 <see langword="null"/> 时不显示置顶栏。
-        /// </summary>
-        protected virtual EzPinnedModsController? PinnedModsController => null;
-
-        private PinnedModColumn? pinnedColumn;
-
         protected virtual IReadOnlyList<Mod> ComputeNewModsFromSelection(IReadOnlyList<Mod> oldSelection, IReadOnlyList<Mod> newSelection) => newSelection;
 
         protected virtual IReadOnlyList<Mod> ComputeActiveMods() => SelectedMods.Value;
@@ -144,9 +137,6 @@ namespace osu.Game.Overlays.Mods
         [BackgroundDependencyLoader]
         private void load(OsuGameBase game, AudioManager audio, OsuConfigManager configManager)
         {
-            if (PinnedModsController != null && Dependencies is DependencyContainer dependencyContainer)
-                dependencyContainer.CacheAs(PinnedModsController);
-
             // Header.Title = ModSelectOverlayStrings.ModSelectTitle;
             // Header.Description = ModSelectOverlayStrings.ModSelectDescription;
             Header.Alpha = 0;
@@ -240,9 +230,6 @@ namespace osu.Game.Overlays.Mods
             globalAvailableMods.BindValueChanged(_ => createLocalMods(), true);
 
             base.LoadComplete();
-
-            if (PinnedModsController != null)
-                PinnedModsController.Changed += updatePinnedColumn;
 
             State.BindValueChanged(_ => samplePlaybackDisabled.Value = State.Value == Visibility.Hidden, true);
 
@@ -347,14 +334,6 @@ namespace osu.Game.Overlays.Mods
                 });
             }
 
-            if (PinnedModsController != null)
-            {
-                yield return new ColumnDimContainer(pinnedColumn = new PinnedModColumn
-                {
-                    Margin = new MarginPadding { Right = 10 }
-                });
-            }
-
             yield return createModColumnContent(ModType.NeriMod);
             yield return createModColumnContent(ModType.LA_Mod);
             yield return createModColumnContent(ModType.CommunityMod);
@@ -405,25 +384,6 @@ namespace osu.Game.Overlays.Mods
             foreach (var column in columnFlow.Columns.OfType<ModColumn>())
                 column.AvailableMods = AvailableMods.Value.GetValueOrDefault(column.ModType, Array.Empty<ModState>());
 
-            updatePinnedColumn();
-        }
-
-        private void updatePinnedColumn()
-        {
-            if (pinnedColumn == null || PinnedModsController == null)
-                return;
-
-            var mods = new List<ModState>();
-
-            foreach (string key in PinnedModsController.Keys)
-            {
-                var state = AllAvailableMods.FirstOrDefault(s => EzPinnedModsController.GetKey(s.Mod) == key);
-
-                if (state != null)
-                    mods.Add(state);
-            }
-
-            pinnedColumn.AvailableMods = mods;
         }
 
         private protected void ReplaceModColumns(IEnumerable<ColumnDimContainer> columns)
@@ -769,14 +729,6 @@ namespace osu.Game.Overlays.Mods
         IBindable<bool> ISamplePlaybackDisabler.SamplePlaybackDisabled => samplePlaybackDisabled;
 
         #endregion
-
-        protected override void Dispose(bool isDisposing)
-        {
-            base.Dispose(isDisposing);
-
-            if (PinnedModsController != null)
-                PinnedModsController.Changed -= updatePinnedColumn;
-        }
 
         /// <summary>
         /// Manages horizontal scrolling of mod columns, along with the "active" states of each column based on visibility.

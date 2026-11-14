@@ -124,7 +124,6 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.MenuLogoBackdropBlur, 10.0, 0.0, 40.0, 1.0);
             SetDefault(Ez2Setting.MenuLogoBackdropOpacity, 1.0, 0.0, 1.0, 0.01);
             SetDefault(Ez2Setting.SongSelectUseEzBackground, false);
-            SetDefault(Ez2Setting.PinnedMods, string.Empty);
             SetDefault(Ez2Setting.NotificationBehaviour, EzNotificationBehaviour.Normal);
             SetDefault(Ez2Setting.ScreenshotAction, EzScreenshotAction.SaveAndCopy);
             SetDefault(Ez2Setting.HitObjectLifetimeUsesOwnTime, !DebugUtils.IsNUnitRunning);
@@ -1221,9 +1220,6 @@ namespace osu.Game.EzOsuGame.Configuration
         SongSelectUseEzBackground,
 
         /// <summary>
-        /// MOD 选择界面置顶栏的 Mod 类型名列表（逗号分隔，按显示顺序）。
-        /// </summary>
-        PinnedMods,
         NotificationBehaviour,
         ScreenshotAction,
         ManiaSkipEmptyEdgeColumns,

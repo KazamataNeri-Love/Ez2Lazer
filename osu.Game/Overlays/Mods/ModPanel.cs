@@ -1,27 +1,21 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
-using System;
 using System.Collections.Generic;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
-using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Effects;
-using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Localisation;
-using osu.Game.EzOsuGame.UserInterface;
 using osu.Game.Graphics;
-using osu.Game.Graphics.UserInterface;
-using osu.Game.Localisation;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.UI;
 using osuTK;
 
 namespace osu.Game.Overlays.Mods
 {
-    public partial class ModPanel : ModSelectPanel, IFilterable, IHasContextMenu
+    public partial class ModPanel : ModSelectPanel, IFilterable
     {
         public Mod Mod => modState.Mod;
         public override BindableBool Active => modState.Active;
@@ -118,25 +112,5 @@ namespace osu.Game.Overlays.Mods
 
         #endregion
 
-        #region Context menu
-
-        [Resolved(canBeNull: true)]
-        protected EzPinnedModsController? PinnedModsController { get; private set; }
-
-        public virtual MenuItem[] ContextMenuItems
-        {
-            get
-            {
-                if (PinnedModsController == null)
-                    return Array.Empty<MenuItem>();
-
-                if (PinnedModsController.IsPinned(Mod))
-                    return new MenuItem[] { new OsuMenuItem(ModSelectOverlayStrings.PinnedModRemove, MenuItemType.Standard, () => PinnedModsController.Unpin(Mod)) };
-
-                return new MenuItem[] { new OsuMenuItem(ModSelectOverlayStrings.PinnedModAdd, MenuItemType.Standard, () => PinnedModsController.Pin(Mod)) };
-            }
-        }
-
-        #endregion
     }
 }

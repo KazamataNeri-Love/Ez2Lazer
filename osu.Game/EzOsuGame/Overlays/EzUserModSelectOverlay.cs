@@ -12,9 +12,7 @@ namespace osu.Game.EzOsuGame.Overlays
     {
         public required EzModSelectionRestoreController RestoreController { get; init; }
 
-        public required EzPinnedModsController PinnedMods { get; init; }
 
-        protected override EzPinnedModsController? PinnedModsController => PinnedMods;
 
         public EzUserModSelectOverlay(OverlayColourScheme colourScheme = OverlayColourScheme.Green)
             : base(colourScheme)
