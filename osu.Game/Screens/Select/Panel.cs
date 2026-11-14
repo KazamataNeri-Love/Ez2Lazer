@@ -3,11 +3,9 @@
 
 using System;
 using osu.Framework.Allocation;
-using osu.Framework.Audio.Track;
 using osu.Framework.Bindables;
 using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Graphics;
-using osu.Framework.Graphics.Colour;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Effects;
@@ -15,7 +13,6 @@ using osu.Framework.Graphics.Pooling;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Events;
-using osu.Game.Beatmaps.ControlPoints;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.UI;
 using osu.Game.Graphics;
@@ -39,15 +36,9 @@ namespace osu.Game.Screens.Select
         protected float PanelXOffset { get; init; }
 
         private Container backgroundContainer = null!;
-        private Container iconContainer = null!;
 
         private Drawable activationFlash = null!;
         private Drawable hoverLayer = null!;
-
-        private Drawable keyboardSelectionLayer = null!;
-
-        private PulsatingBox selectionLayer = null!;
-        private SelectionGlowPulser selectionGlowPulser = null!;
 
         /// <summary>
         /// Full-bleed acrylic glass (N). Visibility is driven by <see cref="materialUiMode"/>;
@@ -63,11 +54,6 @@ namespace osu.Game.Screens.Select
         public Drawable Background
         {
             set => backgroundContainer.Child = value;
-        }
-
-        public Drawable Icon
-        {
-            set => iconContainer.Child = value;
         }
 
         private Color4? accentColour;
@@ -139,12 +125,6 @@ namespace osu.Game.Screens.Select
                     {
                         RelativeSizeAxes = Axes.Both,
                     },
-                    iconContainer = new Container
-                    {
-                        Anchor = Anchor.CentreLeft,
-                        Origin = Anchor.CentreLeft,
-                        AutoSizeAxes = Axes.Both,
-                    },
                     contentPaddingContainer = new Container
                     {
                         RelativeSizeAxes = Axes.Both,
@@ -163,26 +143,6 @@ namespace osu.Game.Screens.Select
                         Blending = BlendingParameters.Additive,
                         RelativeSizeAxes = Axes.Both,
                     },
-                    selectionLayer = new PulsatingBox
-                    {
-                        Alpha = 0,
-                        RelativeSizeAxes = Axes.Both,
-                        Width = 0.8f,
-                        Blending = BlendingParameters.Additive,
-                        Anchor = Anchor.TopRight,
-                        Origin = Anchor.TopRight,
-                    },
-                    selectionGlowPulser = new SelectionGlowPulser
-                    {
-                        RelativeSizeAxes = Axes.Both,
-                    },
-                    keyboardSelectionLayer = new Box
-                    {
-                        Alpha = 0,
-                        Colour = ColourInfo.GradientHorizontal(colourProvider.Highlight1.Opacity(0.1f), colourProvider.Highlight1.Opacity(0.4f)),
-                        Blending = BlendingParameters.Additive,
-                        RelativeSizeAxes = Axes.Both,
-                    },
                     activationFlash = new Box
                     {
                         Colour = Color4.White.Opacity(0.4f),
@@ -193,137 +153,6 @@ namespace osu.Game.Screens.Select
                     new HoverSounds(),
                 }
             };
-
-            selectionGlowPulser.GlowTarget = TopLevelContent;
-            selectionGlowPulser.GetGlowColour = () => accentColour ?? Color4Extensions.FromHex(@"4EBFFF");
-            // Acrylic-only outer glow pulse; classic UI uses PulsatingBox instead.
-            selectionGlowPulser.ShouldPulse = () => EzMaterialOverlayAlpha.IsEnabled(materialUiMode.Value) && (Expanded.Value || Selected.Value);
-        }
-
-        public partial class PulsatingBox : BeatSyncedContainer
-        {
-            public int DepthLayer;
-
-            private readonly Box box;
-
-            public PulsatingBox()
-            {
-                EarlyActivationMilliseconds = 40;
-
-                InternalChildren = new Drawable[]
-                {
-                    box = new Box
-                    {
-                        RelativeSizeAxes = Axes.Both,
-                    },
-                };
-            }
-
-            protected override void OnNewBeat(int beatIndex, TimingControlPoint timingPoint, EffectControlPoint effectPoint, ChannelAmplitudes amplitudes)
-            {
-                base.OnNewBeat(beatIndex, timingPoint, effectPoint, amplitudes);
-
-                if (beatIndex % getFlashInterval(timingPoint.TimeSignature.Numerator) != 0)
-                    return;
-
-                double length = timingPoint.BeatLength;
-
-                while (length < 250)
-                    length *= 2;
-
-                box
-                    .FadeTo(0.5f, 40, Easing.Out)
-                    .Then()
-                    .FadeTo(0.2f, length, Easing.Out);
-            }
-
-            /// <summary>
-            /// Returns the interval between flashes for this panel as a number of beats.
-            /// </summary>
-            /// <remarks>
-            /// Interval has the following properties:
-            /// <list type="number">
-            /// <item><description>stay bar aligned</description></item>
-            /// <item><description>higher DepthLayers flash less often than lower DepthLayers</description></item>
-            /// <item><description>higher DepthLayers only flash when lower DepthLayers flash as well</description></item>
-            /// <item><description>next smallest possible value to fulfill 1, 2 and 3</description></item>
-            /// </list>
-            /// </remarks>
-            private long getFlashInterval(int beatsPerBar)
-            {
-                long beatsPerFlash = 1;
-                int remainingBar = beatsPerBar;
-
-                for (int i = 0; i < DepthLayer; i++)
-                {
-                    int factor = smallestPrimeFactor(remainingBar);
-
-                    // when running out of prime factors, use 2 for higher multiple of beatsPerBar
-                    if (factor <= 1)
-                        factor = 2;
-
-                    beatsPerFlash *= factor;
-
-                    // divide out factor just used, so next iteration takes the next smallest prime factor
-                    if (remainingBar % factor == 0)
-                        remainingBar /= factor;
-                }
-
-                return beatsPerFlash;
-            }
-
-            private static int smallestPrimeFactor(int value)
-            {
-                for (int i = 2; i <= value / i; i++)
-                {
-                    if (value % i == 0)
-                        return i;
-                }
-
-                return value;
-            }
-        }
-
-        /// <summary>
-        /// BPM-syncs an outer glow on <see cref="GlowTarget"/> (acrylic selection feedback).
-        /// </summary>
-        public partial class SelectionGlowPulser : BeatSyncedContainer
-        {
-            public int FlashOffset;
-
-            public Container GlowTarget { get; set; } = null!;
-
-            public Func<Color4>? GetGlowColour { get; set; }
-
-            public Func<bool>? ShouldPulse { get; set; }
-
-            public SelectionGlowPulser()
-            {
-                EarlyActivationMilliseconds = 40;
-            }
-
-            protected override void OnNewBeat(int beatIndex, TimingControlPoint timingPoint, EffectControlPoint effectPoint, ChannelAmplitudes amplitudes)
-            {
-                base.OnNewBeat(beatIndex, timingPoint, effectPoint, amplitudes);
-
-                if (ShouldPulse?.Invoke() != true)
-                    return;
-
-                if (beatIndex % Math.Pow(2, FlashOffset) != 0)
-                    return;
-
-                double length = timingPoint.BeatLength;
-
-                while (length < 250)
-                    length *= 2;
-
-                var colour = GetGlowColour?.Invoke() ?? Color4.White;
-
-                GlowTarget
-                    .FadeEdgeEffectTo(colour.Opacity(0.25f), 40, Easing.Out)
-                    .Then()
-                    .FadeEdgeEffectTo(colour.Opacity(0.4f), length, Easing.Out);
-            }
         }
 
         protected override void LoadComplete()
@@ -342,19 +171,7 @@ namespace osu.Game.Screens.Select
                 updateXOffset();
             }, true);
 
-            KeyboardSelected.BindValueChanged(selected =>
-            {
-                if (selected.NewValue)
-                {
-                    keyboardSelectionLayer.FadeIn(80, Easing.Out)
-                                          .Then()
-                                          .FadeTo(0.5f, 2000, Easing.OutQuint);
-                }
-                else
-                    keyboardSelectionLayer.FadeOut(1000, Easing.OutQuint);
-
-                updateXOffset();
-            }, true);
+            KeyboardSelected.BindValueChanged(_ => updateXOffset(), true);
 
             // ON: show glass N. OFF: hide N. Classic overlays are hidden separately per-subclass.
             materialUiMode.BindValueChanged(e =>
@@ -371,9 +188,6 @@ namespace osu.Game.Screens.Select
 
             // Slightly offset the flash animation based on the panel depth.
             // This assumes a minimum depth of -2 (groups).
-            selectionLayer.DepthLayer = -Item!.DepthLayer;
-            selectionGlowPulser.FlashOffset = -Item!.DepthLayer;
-
             updateAccentColour();
 
             updateXOffset(animated: false);
@@ -413,10 +227,6 @@ namespace osu.Game.Screens.Select
 
         private void updateAccentColour()
         {
-            var backgroundColour = accentColour ?? Color4.White;
-
-            selectionLayer.Colour = ColourInfo.GradientHorizontal(backgroundColour.Opacity(0), backgroundColour.Opacity(0.3f));
-
             updateSelectedState(animated: false);
         }
 
@@ -428,8 +238,6 @@ namespace osu.Game.Screens.Select
             if (EzMaterialOverlayAlpha.IsEnabled(materialUiMode.Value))
             {
                 // Acrylic: hollow outer glow on selection; no drop shadows (they flicker on blur).
-                selectionLayer.FadeOut(animated ? 200 : 0, Easing.OutQuint);
-
                 if (selectedOrExpanded)
                 {
                     TopLevelContent.EdgeEffect = new EdgeEffectParameters
@@ -474,11 +282,6 @@ namespace osu.Game.Screens.Select
                 }
 
                 TopLevelContent.FadeEdgeEffectTo(selectedOrExpanded ? edgeEffectColour.Opacity(0.8f) : Color4.Black.Opacity(0.2f), duration, Easing.OutQuint);
-
-                if (selectedOrExpanded)
-                    selectionLayer.FadeIn(100, Easing.OutQuint);
-                else
-                    selectionLayer.FadeOut(200, Easing.OutQuint);
             }
         }
 
@@ -510,37 +313,6 @@ namespace osu.Game.Screens.Select
         {
             hoverLayer.FadeOut(1000, Easing.OutQuint);
             base.OnHoverLost(e);
-        }
-
-        protected override void Update()
-        {
-            base.Update();
-            contentPaddingContainer.Padding = contentPaddingContainer.Padding with { Left = iconContainer.DrawWidth };
-        }
-
-        /// <summary>
-        /// Under acrylic, keep an accent column that fades rightward into the frosted card so the
-        /// icon-strip join and Content corner radius do not read as a hard seam.
-        /// </summary>
-        protected void ApplyAcrylicIconStripBackground(Box background, bool acrylicEnabled, Color4 stripColour)
-        {
-            if (acrylicEnabled)
-            {
-                background.RelativeSizeAxes = Axes.Y;
-                background.Height = 1;
-                background.Width = Math.Max(iconContainer.DrawWidth, 1f) + CORNER_RADIUS;
-                background.Colour = ColourInfo.GradientHorizontal(stripColour.Opacity(0.8f), stripColour.Opacity(0).Darken(0.8f));
-            }
-            else
-            {
-                if (background.RelativeSizeAxes != Axes.Both)
-                {
-                    background.RelativeSizeAxes = Axes.Both;
-                    background.Width = 1;
-                }
-
-                background.Colour = stripColour;
-            }
         }
 
         public abstract MenuItem[]? ContextMenuItems { get; }

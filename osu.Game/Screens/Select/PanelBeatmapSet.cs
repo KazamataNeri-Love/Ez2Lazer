@@ -8,6 +8,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
+using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Extensions.LocalisationExtensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
@@ -42,13 +43,11 @@ namespace osu.Game.Screens.Select
 
         public Bindable<HashSet<BeatmapInfo>?> VisibleBeatmaps { get; } = new Bindable<HashSet<BeatmapInfo>?>();
 
-        private Box chevronBackground = null!;
         private PanelSetBackground setBackground = null!;
         private ScheduledDelegate? scheduledBackgroundRetrieval;
 
         private OsuSpriteText titleText = null!;
         private OsuSpriteText artistText = null!;
-        private Drawable chevronIcon = null!;
         private PanelUpdateBeatmapButton updateButton = null!;
         private BeatmapSetOnlineStatusPill statusPill = null!;
         private SpreadDisplay spreadDisplay = null!;
@@ -99,27 +98,6 @@ namespace osu.Game.Screens.Select
             Height = HEIGHT;
 
             materialUiMode = ezConfig.GetBindable<EzMaterialUiMode>(Ez2Setting.MaterialUiMode);
-
-            Icon = chevronIcon = new Container
-            {
-                Size = new Vector2(0, 22),
-                Child = new SpriteIcon
-                {
-                    Anchor = Anchor.Centre,
-                    Origin = Anchor.Centre,
-                    Icon = FontAwesome.Solid.ChevronRight,
-                    Size = new Vector2(8),
-                    X = 1f,
-                    Colour = colourProvider.Background5,
-                },
-            };
-
-            Background = chevronBackground = new Box
-            {
-                RelativeSizeAxes = Axes.Both,
-                Colour = Color4.White,
-                Alpha = 0f,
-            };
 
             Content.Children = new Drawable[]
             {
@@ -184,49 +162,8 @@ namespace osu.Game.Screens.Select
             KeyboardSelected.BindValueChanged(k => KeyboardSelected.Value = k.NewValue, true);
         }
 
-        protected override void Update()
-        {
-            base.Update();
-
-            // Keep accent strip width in sync while the chevron icon animates open/closed.
-            if (EzMaterialOverlayAlpha.IsEnabled(materialUiMode.Value))
-                ApplyAcrylicIconStripBackground(chevronBackground, true, colourProvider.Highlight1);
-        }
-
         private void onExpanded()
         {
-            bool acrylic = EzMaterialOverlayAlpha.IsEnabled(materialUiMode.Value);
-
-            // Cancel size/alpha fades before retargeting — a FadeIn started while still full-bleed white
-            // is what washed the whole set card under acrylic.
-            chevronBackground.ClearTransforms();
-
-            if (acrylic)
-            {
-                ApplyAcrylicIconStripBackground(chevronBackground, true, colourProvider.Highlight1);
-                chevronBackground.Alpha = Expanded.Value ? 1f : 0f;
-            }
-            else
-            {
-                ApplyAcrylicIconStripBackground(chevronBackground, false, Color4.White);
-
-                if (Expanded.Value)
-                    chevronBackground.FadeIn(DURATION / 2, Easing.OutQuint);
-                else
-                    chevronBackground.FadeOut(DURATION, Easing.OutQuint);
-            }
-
-            if (Expanded.Value)
-            {
-                chevronIcon.ResizeWidthTo(18, DURATION * 1.5f, Easing.OutElasticQuarter);
-                chevronIcon.FadeTo(1f, DURATION, Easing.OutQuint);
-            }
-            else
-            {
-                chevronIcon.ResizeWidthTo(0f, DURATION, Easing.OutQuint);
-                chevronIcon.FadeTo(0f, DURATION, Easing.OutQuint);
-            }
-
             spreadDisplay.Expanded.Value = Expanded.Value;
         }
 

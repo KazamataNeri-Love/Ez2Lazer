@@ -5,10 +5,8 @@ using System;
 using System.Threading;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
-using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Extensions.PolygonExtensions;
 using osu.Framework.Graphics;
-using osu.Framework.Graphics.Colour;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Primitives;
 using osu.Framework.Graphics.Shapes;
@@ -16,8 +14,6 @@ using osu.Framework.Graphics.Sprites;
 using osu.Game.Beatmaps;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.UI;
-using osu.Game.Overlays;
-using osuTK;
 using osuTK.Graphics;
 
 namespace osu.Game.Screens.Select
@@ -36,8 +32,11 @@ namespace osu.Game.Screens.Select
         private double timeSinceUnpool;
 
         private Bindable<EzMaterialUiMode> materialUiMode = null!;
-        private Box gradientBackground = null!;
-        private FillFlowContainer darkOverlays = null!;
+        private Box cardBackground = null!;
+
+        /// <summary>Cover art opacity when used as the card's semi-transparent mask image.</summary>
+        private const float cover_alpha = 0.7f;
+
 
         public WorkingBeatmap? Beatmap
         {
@@ -93,55 +92,23 @@ namespace osu.Game.Screens.Select
         }
 
         [BackgroundDependencyLoader]
-        private void load(OverlayColourProvider colourProvider, Ez2ConfigManager ezConfig)
+        private void load(Ez2ConfigManager ezConfig)
         {
             materialUiMode = ezConfig.GetBindable<EzMaterialUiMode>(Ez2Setting.MaterialUiMode);
 
             InternalChildren = new Drawable[]
             {
-                // Match official draw order: gradient behind cover, dark overlays in front of cover.
-                gradientBackground = new Box
+                // Flat card base colour; the cover art sits on top of it at partial alpha.
+                cardBackground = new Box
                 {
                     Depth = 1,
                     RelativeSizeAxes = Axes.Both,
-                    Colour = ColourInfo.GradientHorizontal(colourProvider.Background3, colourProvider.Background4),
-                },
-                darkOverlays = new FillFlowContainer
-                {
-                    Depth = -1,
-                    RelativeSizeAxes = Axes.Both,
-                    Direction = FillDirection.Horizontal,
-                    // This makes the gradient not be perfectly horizontal, but diagonal at a ~40° angle
-                    Shear = new Vector2(0.8f, 0),
-                    Children = new[]
-                    {
-                        // The left half with no gradient applied
-                        new Box
-                        {
-                            RelativeSizeAxes = Axes.Both,
-                            Colour = Color4.Black.Opacity(0.5f),
-                            Width = 0.4f,
-                        },
-                        new Box
-                        {
-                            RelativeSizeAxes = Axes.Both,
-                            Colour = ColourInfo.GradientHorizontal(Color4.Black.Opacity(0.5f), Color4.Black.Opacity(0.3f)),
-                            Width = 0.2f,
-                        },
-                        new Box
-                        {
-                            RelativeSizeAxes = Axes.Both,
-                            Colour = ColourInfo.GradientHorizontal(Color4.Black.Opacity(0.3f), Color4.Black.Opacity(0.2f)),
-                            // Slightly more than 1.0 in total to account for shear.
-                            Width = 0.45f,
-                        },
-                    }
+                    Colour = Color4.Black,
                 },
             };
 
             // Glass N is on Panel parent; hide classic layers when acrylic is on.
-            EzMaterialOverlayAlpha.BindHiddenWhenAcrylic(gradientBackground, materialUiMode);
-            EzMaterialOverlayAlpha.BindHiddenWhenAcrylic(darkOverlays, materialUiMode);
+            EzMaterialOverlayAlpha.BindHiddenWhenAcrylic(cardBackground, materialUiMode);
         }
 
         protected override void LoadComplete()
@@ -218,9 +185,10 @@ namespace osu.Game.Screens.Select
                     return;
                 }
 
+                s.Alpha = 0;
                 AddInternal(sprite = s);
                 bool spriteOnScreen = beatmapCarousel?.ScreenSpaceDrawQuad.Intersects(sprite.ScreenSpaceDrawQuad) != false;
-                sprite.FadeInFromZero(spriteOnScreen ? 400 : 0, Easing.OutQuint);
+                sprite.FadeTo(cover_alpha, spriteOnScreen ? 400 : 0, Easing.OutQuint);
             }, loadCancellation.Token);
         }
 

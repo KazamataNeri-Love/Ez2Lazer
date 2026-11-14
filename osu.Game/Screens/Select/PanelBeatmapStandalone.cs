@@ -72,7 +72,6 @@ namespace osu.Game.Screens.Select
         private EzAnalysisDatabase ezAnalysisDatabase { get; set; } = null!;
 
         private FillFlowContainer panelMetaFlow = null!;
-        private EzDisplayKpsGraph ezDisplayKpsGraph = null!;
         private EzDisplayKps ezDisplayKps = null!;
         private EzDisplayKpc ezDisplayKpc = null!;
         private EzDisplaySR displaySR = null!;
@@ -103,7 +102,6 @@ namespace osu.Game.Screens.Select
         private PanelUpdateBeatmapButton updateButton = null!;
         private BeatmapSetOnlineStatusPill statusPill = null!;
 
-        private ConstrainedIconContainer difficultyIcon = null!;
         private StarRatingDisplay starRatingDisplay = null!;
 
         private PanelLocalRankDisplay localRank = null!;
@@ -112,7 +110,6 @@ namespace osu.Game.Screens.Select
         private OsuSpriteText authorText = null!;
         private FillFlowContainer mainFill = null!;
 
-        private Box backgroundBorder = null!;
         private Box backgroundDim = null!;
 
         private BeatmapInfo beatmap => ((GroupedBeatmap)Item!.Model).Beatmap;
@@ -128,18 +125,6 @@ namespace osu.Game.Screens.Select
             Height = HEIGHT;
 
             materialUiMode = ezConfig.GetBindable<EzMaterialUiMode>(Ez2Setting.MaterialUiMode);
-
-            Icon = difficultyIcon = new ConstrainedIconContainer
-            {
-                Size = new Vector2(12),
-                Margin = new MarginPadding { Left = 4f, Right = 3f },
-                Colour = colourProvider.Background5,
-            };
-
-            Background = backgroundBorder = new Box
-            {
-                RelativeSizeAxes = Axes.Both,
-            };
 
             Content.Children = new Drawable[]
             {
@@ -255,13 +240,6 @@ namespace osu.Game.Screens.Select
                                                 },
                                             }
                                         },
-                                        ezDisplayKpsGraph = new EzDisplayKpsGraph
-                                        {
-                                            ExcludeFromParentAutoSize = true,
-                                            OverlayAnchorRow = panelMetaFlow,
-                                            Size = new Vector2(300, 20),
-                                            Blending = BlendingParameters.Mixture,
-                                        },
                                     }
                                 },
                                 new FillFlowContainer
@@ -365,9 +343,6 @@ namespace osu.Game.Screens.Select
             updateButton.BeatmapSet = beatmapSet;
             statusPill.Status = beatmap.Status;
 
-            difficultyIcon.Icon = beatmap.Ruleset.CreateInstance().CreateIcon();
-            difficultyIcon.Show();
-
             localRank.Beatmap = beatmap;
             difficultyText.Text = beatmap.DifficultyName;
             authorText.Text = BeatmapsetsStrings.ShowDetailsMappedBy(beatmap.Metadata.Author.Username);
@@ -469,7 +444,6 @@ namespace osu.Game.Screens.Select
 
         private void applyPanelKps(in EzSongSelectAnalysisDisplay.PanelMetrics metrics)
         {
-            ezDisplayKpsGraph.SetPoints(metrics.KpsList);
             ezDisplayKps.SetKpsMetrics(metrics);
         }
 
@@ -591,10 +565,6 @@ namespace osu.Game.Screens.Select
                 : starColour;
 
             AccentColour = diffColour;
-            // spreadDisplay.Current.Colour = starColour;
-
-            ApplyAcrylicIconStripBackground(backgroundBorder, EzMaterialOverlayAlpha.IsEnabled(materialUiMode.Value), diffColour);
-            difficultyIcon.Colour = starRatingDisplay.DisplayedDifficultyTextColour;
         }
 
         private void updateKeyCount()

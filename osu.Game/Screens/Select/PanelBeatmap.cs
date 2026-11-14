@@ -24,7 +24,6 @@ using osu.Game.EzOsuGame.Skills.SSR;
 using osu.Game.EzOsuGame.UI;
 using osu.Game.EzOsuGame.UserInterface;
 using osu.Game.Graphics;
-using osu.Game.Graphics.Backgrounds;
 using osu.Game.Graphics.Carousel;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
@@ -42,7 +41,6 @@ namespace osu.Game.Screens.Select
         public const float HEIGHT = CarouselItem.DEFAULT_HEIGHT + 26f;
 
         private StarCounter starCounter = null!;
-        private ConstrainedIconContainer difficultyIcon = null!;
         private OsuSpriteText variantText = null!;
         private StarRatingDisplay starRatingDisplay = null!;
         private PanelLocalRankDisplay localRank = null!;
@@ -51,16 +49,12 @@ namespace osu.Game.Screens.Select
         private FillFlowContainer mainFill = null!;
         private FillFlowContainer starMetricsFlow = null!;
 
+        private Box backgroundDifficultyTint = null!;
+
         private IBindable<StarDifficulty>? starDifficultyBindable;
         private CancellationTokenSource? starDifficultyCancellationSource;
         private StarDifficulty lastStarDifficulty;
 
-        private Box backgroundBorder = null!;
-        private Box backgroundDifficultyTint = null!;
-
-        private TrianglesV2 triangles = null!;
-
-        private EzDisplayKpsGraph ezDisplayKpsGraph = null!;
         private EzDisplayKps ezDisplayKps = null!;
         private EzDisplayKpc ezDisplayKpc = null!;
         private EzDisplaySR displaySR = null!;
@@ -116,19 +110,8 @@ namespace osu.Game.Screens.Select
         {
             Height = HEIGHT;
 
-            Icon = difficultyIcon = new ConstrainedIconContainer
-            {
-                Size = new Vector2(9f),
-                Margin = new MarginPadding { Left = 2.5f, Right = 1.5f },
-                Colour = colourProvider.Background5,
-            };
-
-            Background = backgroundBorder = new Box
-            {
-                RelativeSizeAxes = Axes.Both,
-            };
-
             materialUiMode = ezConfig.GetBindable<EzMaterialUiMode>(Ez2Setting.MaterialUiMode);
+
             Container colourOverlays;
 
             Content.Children = new Drawable[]
@@ -141,17 +124,10 @@ namespace osu.Game.Screens.Select
                         new Box
                         {
                             RelativeSizeAxes = Axes.Both,
-                            Colour = ColourInfo.GradientHorizontal(colourProvider.Background3, colourProvider.Background4),
+                            Colour = colourProvider.Background3,
                         },
                         backgroundDifficultyTint = new Box
                         {
-                            RelativeSizeAxes = Axes.Both,
-                        },
-                        triangles = new TrianglesV2
-                        {
-                            ScaleAdjust = 1.2f,
-                            Thickness = 0.01f,
-                            Velocity = 0.3f,
                             RelativeSizeAxes = Axes.Both,
                         },
                     }
@@ -270,13 +246,6 @@ namespace osu.Game.Screens.Select
                                                 },
                                             },
                                         },
-                                        ezDisplayKpsGraph = new EzDisplayKpsGraph
-                                        {
-                                            ExcludeFromParentAutoSize = true,
-                                            OverlayAnchorRow = starMetricsFlow,
-                                            Size = new Vector2(300, 15),
-                                            Blending = BlendingParameters.Mixture,
-                                        },
                                     },
                                 },
                                 new FillFlowContainer
@@ -361,8 +330,6 @@ namespace osu.Game.Screens.Select
         {
             base.PrepareForUse();
 
-            difficultyIcon.Icon = getRulesetIcon(beatmap.Ruleset);
-
             localRank.Beatmap = beatmap;
             difficultyText.Text = beatmap.DifficultyName;
             authorText.Text = BeatmapsetsStrings.ShowDetailsMappedBy(beatmap.Metadata.Author.Username);
@@ -418,16 +385,6 @@ namespace osu.Game.Screens.Select
             ezDisplayKpc.Hide();
         }
 
-        private Drawable getRulesetIcon(RulesetInfo rulesetInfo)
-        {
-            var rulesetInstance = rulesets.GetRuleset(rulesetInfo.ShortName)?.CreateInstance();
-
-            if (rulesetInstance is null)
-                return new SpriteIcon { Icon = FontAwesome.Regular.QuestionCircle };
-
-            return rulesetInstance.CreateIcon();
-        }
-
         protected override void FreeAfterUse()
         {
             base.FreeAfterUse();
@@ -468,7 +425,6 @@ namespace osu.Game.Screens.Select
 
         private void applyPanelKps(in EzSongSelectAnalysisDisplay.PanelMetrics metrics)
         {
-            ezDisplayKpsGraph.SetPoints(metrics.KpsList);
             ezDisplayKps.SetKpsMetrics(metrics);
         }
 
@@ -597,18 +553,8 @@ namespace osu.Game.Screens.Select
             if (AccentColour != diffColour)
                 AccentColour = diffColour;
 
-            ApplyAcrylicIconStripBackground(backgroundBorder, EzMaterialOverlayAlpha.IsEnabled(materialUiMode.Value), diffColour);
-
             if (!EzMaterialOverlayAlpha.IsEnabled(materialUiMode.Value))
-            {
                 backgroundDifficultyTint.Colour = ColourInfo.GradientHorizontal(diffColour.Opacity(0.25f), diffColour.Opacity(0f));
-                triangles.Colour = ColourInfo.GradientVertical(diffColour.Opacity(0.25f), diffColour.Opacity(0f));
-            }
-
-            if (difficultyIcon.Colour != starRatingDisplay.DisplayedDifficultyTextColour)
-            {
-                difficultyIcon.Colour = starRatingDisplay.DisplayedDifficultyTextColour;
-            }
         }
 
         private void updateKeyCount()
