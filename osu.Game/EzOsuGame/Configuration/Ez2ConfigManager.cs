@@ -150,7 +150,8 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.QuickRotationCandidateCount, 5, 3, 6);
 
             SetDefault(Ez2Setting.StoryboardAutoVideoSize, false);
-            SetDefault(Ez2Setting.BackgroundScale, 1.0f, 0.5f, 1.0f, 0.01f);
+            // 下限 0.1：位移量按 maxPan = (1 - s) / 2 派生，0.1 时为 0.45，内容仍能贴到屏幕边缘。
+            SetDefault(Ez2Setting.BackgroundScale, 1.0f, 0.1f, 1.0f, 0.01f);
             SetDefault(Ez2Setting.BackgroundPosX, 0.5f, 0f, 1f, 0.01f);
             SetDefault(Ez2Setting.BackgroundPosY, 0.5f, 0f, 1f, 0.01f);
             SetDefault(Ez2Setting.MaterialUiMode, EzMaterialUiMode.LiquidGlass);
