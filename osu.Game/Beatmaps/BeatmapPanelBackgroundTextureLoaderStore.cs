@@ -20,6 +20,10 @@ namespace osu.Game.Beatmaps
         // The aspect ratio of SetPanelBackground at its maximum size (very tall window).
         private const float minimum_display_ratio = 512 / 80f;
 
+        // Panels are ~500-700px wide on screen; keeping the source at native width wastes VRAM and
+        // upload bandwidth several times over for no visible gain.
+        private const int maximum_width = 768;
+
         private readonly IResourceStore<TextureUpload>? textureStore;
 
         public BeatmapPanelBackgroundTextureLoaderStore(IResourceStore<TextureUpload>? textureStore)
@@ -63,6 +67,13 @@ namespace osu.Game.Beatmaps
 
             // The original texture upload will no longer be returned or used.
             textureUpload.Dispose();
+
+            // Downscale before cropping: panel backgrounds never need more than ~768px of width.
+            if (image.Width > maximum_width)
+            {
+                int scaledHeight = Math.Max(1, (int)Math.Round(image.Height * (double)maximum_width / image.Width));
+                image.Mutate(i => i.Resize(maximum_width, scaledHeight));
+            }
 
             Size size = image.Size;
 
