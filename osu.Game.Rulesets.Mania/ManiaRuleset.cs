@@ -309,10 +309,10 @@ namespace osu.Game.Rulesets.Mania
                     return new Mod[]
                     {
                         new ManiaModNeriBarrelRoll(),
-                        new ManiaModNeriFasterBarrelRoll(),
                         new ManiaModNeriDance(),
-                        new ManiaModNeriNewDance(),
-                        new ManiaModSlantCompensation(),
+                        new ManiaModOjamaEarthquake(),
+                        new ManiaModSpinNotes(),
+                        new ManiaModTiltedTrack(),
                     };
 
                 case ModType.LA_Mod:

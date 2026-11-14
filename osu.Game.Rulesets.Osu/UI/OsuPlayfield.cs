@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
@@ -66,16 +66,16 @@ namespace osu.Game.Rulesets.Osu.UI
         public SmokeContainer Smoke { get; }
         public FollowPointRenderer FollowPoints { get; }
 
-        /// <summary>
-        /// 把自绘层插到 hit object 之下（负 Depth），供背景类 mod 使用。
-        /// </summary>
-        public void AddBackgroundLayer(Drawable layer)
-        {
-            layer.Depth = -1;
-            AddInternal(layer);
-        }
-
         public static readonly Vector2 BASE_SIZE = new Vector2(512, 384);
+
+        /// <summary>
+        /// 把一个纯观感图层放到物件层之下（用于 mod 的背景网格、区域边界等）。
+        /// </summary>
+        public void AddBackgroundLayer(Drawable drawable)
+        {
+            AddInternal(drawable);
+            ChangeInternalChildDepth(drawable, 1);
+        }
 
         protected override GameplayCursorContainer? CreateCursor() => new OsuCursorContainer();
 
