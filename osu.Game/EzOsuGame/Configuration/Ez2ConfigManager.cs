@@ -84,7 +84,8 @@ namespace osu.Game.EzOsuGame.Configuration
 
         public Ez2ConfigManager(Storage storage)
             : base(storage)
-        { }
+        {
+        }
 
         protected override void PerformLoad()
         {
@@ -594,7 +595,7 @@ namespace osu.Game.EzOsuGame.Configuration
 
             ColumnWidthStyle style = Get<ColumnWidthStyle>(Ez2Setting.ColumnWidthStyle);
 
-            return style is ColumnWidthStyle.GlobalTotalWidth or ColumnWidthStyle.EzSkinTotalWidth
+            return style is ColumnWidthStyle.GlobalTotalWidth
                 ? 10f / keyMode
                 : 1f;
         }
@@ -818,6 +819,18 @@ namespace osu.Game.EzOsuGame.Configuration
         {
             if (runtime_column_data.TryGetValue(keyMode, out var data))
                 return data;
+
+            if (!key_mode_to_column_color_setting.ContainsKey(keyMode))
+            {
+                var typesBytes = new byte[keyMode];
+
+                for (int i = 0; i < keyMode; i++)
+                    typesBytes[i] = getDefaultColumnTypeByte(keyMode, i);
+
+                data = createRuntimeData(typesBytes);
+                runtime_column_data[keyMode] = data;
+                return data;
+            }
 
             return buildKeyModeColumnDataFromSetting(keyMode);
         }
@@ -1450,7 +1463,7 @@ namespace osu.Game.EzOsuGame.Configuration
 
         // 皮肤与舞台资源
         ColumnWidthStyle,
-        HitPositionGlobalEnable, // 未来要考虑，是否统一成，整套系统套用在传统皮肤上，变成切换设置
+        HitPositionGlobalEnable,
 
         /// <summary>
         /// When enabled, switching skins applies per-skin EzSkin.json to in-memory Ez config only.

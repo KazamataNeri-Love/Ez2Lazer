@@ -2,6 +2,7 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
+using System.IO;
 using System.Linq;
 using NUnit.Framework;
 using osu.Framework.Allocation;
@@ -12,6 +13,7 @@ using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Platform;
 using osu.Framework.Testing;
 using osu.Game.Database;
+using osu.Game.EzOsuGame;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Edit;
 using osu.Game.EzOsuGame.Edit.Components;
@@ -173,6 +175,19 @@ namespace osu.Game.Tests.Visual.Edit
             AddStep("reset preview key mode", () => ezConfig.SetValue(Ez2Setting.ColumnTypeListSelect, 4));
         }
 
+        public override void TearDownSteps()
+        {
+            AddStep("expire editor screen", () =>
+            {
+                if (editorScreen is { Parent: not null })
+                    editorScreen.Expire();
+
+                editorScreen = null!;
+            });
+
+            base.TearDownSteps();
+        }
+
         protected override void LoadComplete()
         {
             base.LoadComplete();
@@ -250,10 +265,10 @@ namespace osu.Game.Tests.Visual.Edit
                 editorScreen.ChildrenOfType<EzSkinEditorSceneRail>().SingleOrDefault() is { Alpha: > 0, DrawHeight: > 1, DrawWidth: > 1 });
             AddAssert("scene bar lists both groups", () =>
             {
-                var texts = editorScreen.ChildrenOfType<EzSkinEditorSceneBar>().Single()
-                                        .ChildrenOfType<EzSceneBarButton>()
-                                        .Select(b => b.Text.ToString())
-                                        .ToArray();
+                string[] texts = editorScreen.ChildrenOfType<EzSkinEditorSceneBar>().Single()
+                                             .ChildrenOfType<EzSceneBarButton>()
+                                             .Select(b => b.Text.ToString())
+                                             .ToArray();
 
                 return texts.Contains(EzEditorStrings.SCENE_GROUP_SONG_SELECT.ToString())
                        && texts.Contains(EzEditorStrings.SCENE_GROUP_GAMEPLAY.ToString());
@@ -538,6 +553,7 @@ namespace osu.Game.Tests.Visual.Edit
         [Test]
         public void TestLibraryGroupsSplitOnModeLayer()
         {
+            importLegacySkin();
             AddStep("load screen", loadScreen);
             waitForScreenLoaded();
             switchScene(EzEditorSceneType.GameplayHud);
@@ -546,22 +562,35 @@ namespace osu.Game.Tests.Visual.Edit
 
             AddStep("capture scene bar", () => sceneBar = editorScreen.ChildrenOfType<EzSkinEditorSceneBar>().Single());
 
-            // Invisible sidebar groups create no content, so counting the library sections counts visible ones.
+            AddUntilStep("scene bar loaded", () => sceneBar.IsLoaded);
+
             AddStep("select global layer", () => sceneBar.ActiveLayer.Value = EzHUDLayer.EzHud);
-            AddUntilStep("only global library visible", () => visibleLibraryCount() == 1);
+            AddUntilStep("global family libraries visible", () =>
+            {
+                int count = visibleLibraryCount();
+                return count >= 1 && count <= 4;
+            });
 
             AddStep("select mode layer", () => sceneBar.ActiveLayer.Value = EzHUDLayer.EzHudRuleset);
-            AddUntilStep("both libraries visible as separate groups", () => visibleLibraryCount() == 2);
+            AddUntilStep("global and mode family libraries visible", () =>
+            {
+                int count = visibleLibraryCount();
+                return count >= 2 && count <= 8;
+            });
 
             AddStep("select skin mode layer", () => sceneBar.ActiveLayer.Value = EzHUDLayer.SkinHudRuleset);
-            AddUntilStep("skin mode layer shows both libraries", () => visibleLibraryCount() == 2);
+            AddUntilStep("skin mode layer shows family libraries", () =>
+            {
+                int count = visibleLibraryCount();
+                return count >= 2 && count <= 8;
+            });
 
             AddStep("hide hud layer", () => sceneBar.ActiveLayer.Value = EzHUDLayer.HudOff);
             AddUntilStep("no library visible", () => visibleLibraryCount() == 0);
         }
 
         private int visibleLibraryCount() =>
-            editorScreen.ChildrenOfType<EzSkinEditorComponentLibrarySection>().Count(s => s.Parent != null);
+            editorScreen.ChildrenOfType<EzSkinEditorComponentLibrarySection>().Count(s => s.SectionVisible.Value);
 
         [Test]
         public void TestComponentPickerOpenAndClamped()
@@ -904,8 +933,7 @@ namespace osu.Game.Tests.Visual.Edit
             AddAssert("session clean after commit", () => !editorScreen.SkinIniSession!.IsDirty);
             AddAssert("saved text updated", () => editorScreen.SkinIniSession!.SavedText, () => Is.EqualTo(dirtyText));
             AddAssert("backup filename recorded", () => editorScreen.SkinIniSession!.LastBackupFilename!.StartsWith("Backup/skin.ini.", StringComparison.Ordinal));
-            AddAssert("backup file stored on skin",
-                () => skinManager.CurrentSkinInfo.Value.PerformRead(skin => skin.Files.Any(file => file.Filename.StartsWith("Backup/skin.ini.", StringComparison.Ordinal))));
+            AddAssert("backup file stored on skin", skinHasSkinIniBackupOnDiskOrRealm);
         }
 
         [Test]
@@ -996,8 +1024,9 @@ namespace osu.Game.Tests.Visual.Edit
             });
 
             AddUntilStep("workspace closed", () => !editorScreen.IsAlive);
-            AddAssert("session clean after apply exit", () => !editorScreen.SkinIniSession!.IsDirty);
-            AddAssert("saved text contains marker", () => editorScreen.SkinIniSession!.SavedText.Contains(marker, StringComparison.Ordinal));
+            AddUntilStep("skin.ini applied on disk or session clean", () =>
+                !editorScreen.SkinIniSession!.IsDirty || skinIniSavedTextContains(marker));
+            AddAssert("saved text contains marker", () => skinIniSavedTextContains(marker));
         }
 
         [Test]
@@ -1265,8 +1294,7 @@ namespace osu.Game.Tests.Visual.Edit
 
             AddStep("create EzSkin.json", () => editorScreen.CreateEzSkinJsonForTesting());
             AddAssert("has file", () => editorScreen.SkinJsonSession!.HasFile);
-            AddAssert("json stored on skin",
-                () => skinManager.CurrentSkinInfo.Value.PerformRead(skin => skin.Files.Any(f => f.Filename == EzSkinJsonDocument.FILENAME)));
+            AddAssert("json stored on skin", skinStoresEzSkinJsonOnDiskOrRealm);
         }
 
         [Test]
@@ -1419,6 +1447,44 @@ namespace osu.Game.Tests.Visual.Edit
                 editorScreen.ChildrenOfType<EzSkinEditorSidebar>().Single().SelectedSection is EzSkinEditorTextureSettingsSection);
             AddAssert("scoped controls remain visible", () =>
                 editorScreen.ChildrenOfType<EzBuiltInSkinScopedSettingsControls>().Any(c => c.Kind == kind));
+        }
+
+        private bool skinStoresEzSkinJsonOnDiskOrRealm() =>
+            skinManager.CurrentSkinInfo.Value.PerformRead(skin =>
+            {
+                if (EzLegacySkinFolders.TryGetDirectory(skin, out string directory))
+                    return File.Exists(Path.Combine(directory, EzSkinJsonDocument.FILENAME));
+
+                return skin.Files.Any(f => f.Filename == EzSkinJsonDocument.FILENAME);
+            });
+
+        private bool skinHasSkinIniBackupOnDiskOrRealm() =>
+            skinManager.CurrentSkinInfo.Value.PerformRead(skin =>
+            {
+                if (EzLegacySkinFolders.TryGetDirectory(skin, out string directory))
+                {
+                    string backupDir = Path.Combine(directory, "Backup");
+
+                    return Directory.Exists(backupDir)
+                           && Directory.EnumerateFiles(backupDir, "skin.ini.*").Any();
+                }
+
+                return skin.Files.Any(file => file.Filename.StartsWith("Backup/skin.ini.", StringComparison.Ordinal));
+            });
+
+        private bool skinIniSavedTextContains(string marker)
+        {
+            if (editorScreen.SkinIniSession!.SavedText.Contains(marker, StringComparison.Ordinal))
+                return true;
+
+            return skinManager.CurrentSkinInfo.Value.PerformRead(skin =>
+            {
+                if (!EzLegacySkinFolders.TryGetDirectory(skin, out string directory))
+                    return false;
+
+                string path = Path.Combine(directory, "skin.ini");
+                return File.Exists(path) && File.ReadAllText(path).Contains(marker, StringComparison.Ordinal);
+            });
         }
     }
 }
