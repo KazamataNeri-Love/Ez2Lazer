@@ -38,5 +38,11 @@ namespace osu.Game.EzOsuGame.Edit
 
         /// <summary>Current skin layout, ruleset-specific playfield components.</summary>
         SkinPlayfieldRuleset,
+
+        /// <summary>Current skin layout, global (non-ruleset) background components.</summary>
+        SkinBackground,
+
+        /// <summary>Current skin layout, ruleset-specific background components.</summary>
+        SkinBackgroundRuleset,
     }
 }

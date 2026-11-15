@@ -395,6 +395,10 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly LocalisableString LAYER_EZ_BACKGROUND_RULESET = new EzLocalizationManager.EzLocalisableString("Ez Background（{0}）", "Ez Background ({0})");
 
+        public static readonly LocalisableString LAYER_SKIN_BACKGROUND = new EzLocalizationManager.EzLocalisableString("Skin Background", "Skin Background");
+
+        public static readonly LocalisableString LAYER_SKIN_BACKGROUND_RULESET = new EzLocalizationManager.EzLocalisableString("Skin Background（{0}）", "Skin Background ({0})");
+
         public static readonly LocalisableString LAYER_SKIN_HUD = new EzLocalizationManager.EzLocalisableString("Skin HUD", "Skin HUD");
 
         public static readonly LocalisableString LAYER_SKIN_HUD_RULESET = new EzLocalizationManager.EzLocalisableString("Skin HUD（{0}）", "Skin HUD ({0})");

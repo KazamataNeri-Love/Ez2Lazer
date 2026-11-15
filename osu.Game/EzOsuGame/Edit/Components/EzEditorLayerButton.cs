@@ -81,7 +81,7 @@ namespace osu.Game.EzOsuGame.Edit.Components
 
         public partial class LayerListPopover : OsuPopover
         {
-            private const float body_width = 220;
+            private const float body_width = 260;
             private const float body_padding = 10;
             private const float item_height = 32;
             private const float item_spacing = 4;
@@ -159,6 +159,7 @@ namespace osu.Game.EzOsuGame.Edit.Components
                     Action = action;
                     RelativeSizeAxes = Axes.X;
                     Height = 32;
+                    TextAnchor = Anchor.CentreLeft;
                 }
             }
         }

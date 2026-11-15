@@ -65,6 +65,19 @@ namespace osu.Game.EzOsuGame.UserInterface
 
         protected void HideBuiltInLabel() => textContainer.Hide();
 
+        /// <summary>
+        /// Where the label sits inside the button. Defaults to centred so existing buttons are unchanged.
+        /// </summary>
+        protected Anchor TextAnchor
+        {
+            get => textContainer.Anchor;
+            set
+            {
+                textContainer.Anchor = value;
+                textContainer.Origin = value;
+            }
+        }
+
         private Colour4 buttonAccentColour;
 
         public Colour4 AccentColour

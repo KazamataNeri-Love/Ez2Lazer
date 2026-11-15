@@ -72,11 +72,43 @@ namespace osu.Game.EzOsuGame.Edit
             UsesEzLayoutStore = true,
         };
 
+        public static readonly EzSkinEditorLayerDefinition EZ_BACKGROUND = new EzSkinEditorLayerDefinition
+        {
+            Layer = EzHUDLayer.EzBackground,
+            RulesetScoped = false,
+            Target = GlobalSkinnableContainers.Background,
+            UsesEzLayoutStore = true,
+        };
+
+        public static readonly EzSkinEditorLayerDefinition EZ_BACKGROUND_RULESET = new EzSkinEditorLayerDefinition
+        {
+            Layer = EzHUDLayer.EzBackgroundRuleset,
+            RulesetScoped = true,
+            Target = GlobalSkinnableContainers.Background,
+            UsesEzLayoutStore = true,
+        };
+
         public static readonly EzSkinEditorLayerDefinition SKIN_HUD = new EzSkinEditorLayerDefinition
         {
             Layer = EzHUDLayer.SkinHud,
             RulesetScoped = false,
             Target = GlobalSkinnableContainers.MainHUDComponents,
+            UsesEzLayoutStore = false,
+        };
+
+        public static readonly EzSkinEditorLayerDefinition SKIN_BACKGROUND = new EzSkinEditorLayerDefinition
+        {
+            Layer = EzHUDLayer.SkinBackground,
+            RulesetScoped = false,
+            Target = GlobalSkinnableContainers.Background,
+            UsesEzLayoutStore = false,
+        };
+
+        public static readonly EzSkinEditorLayerDefinition SKIN_BACKGROUND_RULESET = new EzSkinEditorLayerDefinition
+        {
+            Layer = EzHUDLayer.SkinBackgroundRuleset,
+            RulesetScoped = true,
+            Target = GlobalSkinnableContainers.Background,
             UsesEzLayoutStore = false,
         };
 
@@ -98,7 +130,9 @@ namespace osu.Game.EzOsuGame.Edit
 
         private static readonly EzSkinEditorLayerDefinition[] gameplay_layers =
         {
-            HUD_OFF, EZ_HUD, EZ_HUD_RULESET, EZ_PLAYFIELD_RULESET,
+            HUD_OFF, EZ_BACKGROUND, EZ_BACKGROUND_RULESET,
+            EZ_HUD, EZ_HUD_RULESET, EZ_PLAYFIELD_RULESET,
+            SKIN_BACKGROUND, SKIN_BACKGROUND_RULESET,
             SKIN_HUD, SKIN_HUD_RULESET, SKIN_PLAYFIELD_RULESET,
         };
 
@@ -124,9 +158,13 @@ namespace osu.Game.EzOsuGame.Edit
             EzHUDLayer.EzHud => EZ_HUD,
             EzHUDLayer.EzHudRuleset => EZ_HUD_RULESET,
             EzHUDLayer.EzPlayfieldRuleset => EZ_PLAYFIELD_RULESET,
+            EzHUDLayer.EzBackground => EZ_BACKGROUND,
+            EzHUDLayer.EzBackgroundRuleset => EZ_BACKGROUND_RULESET,
             EzHUDLayer.SkinHud => SKIN_HUD,
             EzHUDLayer.SkinHudRuleset => SKIN_HUD_RULESET,
             EzHUDLayer.SkinPlayfieldRuleset => SKIN_PLAYFIELD_RULESET,
+            EzHUDLayer.SkinBackground => SKIN_BACKGROUND,
+            EzHUDLayer.SkinBackgroundRuleset => SKIN_BACKGROUND_RULESET,
             _ => HUD_OFF,
         };
 
@@ -192,6 +230,18 @@ namespace osu.Game.EzOsuGame.Edit
 
                 case EzHUDLayer.SkinPlayfieldRuleset:
                     return LocalisableString.Format(EzEditorStrings.LAYER_SKIN_PLAYFIELD_RULESET.ToString(), getRulesetName(ruleset));
+
+                case EzHUDLayer.EzBackground:
+                    return EzEditorStrings.LAYER_EZ_BACKGROUND;
+
+                case EzHUDLayer.EzBackgroundRuleset:
+                    return LocalisableString.Format(EzEditorStrings.LAYER_EZ_BACKGROUND_RULESET.ToString(), getRulesetName(ruleset));
+
+                case EzHUDLayer.SkinBackground:
+                    return EzEditorStrings.LAYER_SKIN_BACKGROUND;
+
+                case EzHUDLayer.SkinBackgroundRuleset:
+                    return LocalisableString.Format(EzEditorStrings.LAYER_SKIN_BACKGROUND_RULESET.ToString(), getRulesetName(ruleset));
 
                 default:
                     return EzEditorStrings.LAYER_HUD_OFF;
