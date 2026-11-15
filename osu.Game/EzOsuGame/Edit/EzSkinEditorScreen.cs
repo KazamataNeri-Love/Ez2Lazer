@@ -31,13 +31,13 @@ using osu.Game.EzOsuGame.ScriptedSkin;
 using osu.Game.EzOsuGame.UI;
 using osu.Game.Graphics.Cursor;
 using osu.Game.Input.Bindings;
-using osu.Game.Localisation;
 using osu.Game.IO;
+using osu.Game.Localisation;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Dialog;
-using osu.Game.Overlays.SkinEditor;
-using OfficialSkinEditor = osu.Game.Overlays.SkinEditor.SkinEditor;
 using osu.Game.Overlays.Notifications;
+using osu.Game.Overlays.OSD;
+using osu.Game.Overlays.SkinEditor;
 using osu.Game.Rulesets;
 using osu.Game.Screens;
 using osu.Game.Screens.Edit;
@@ -134,6 +134,8 @@ namespace osu.Game.EzOsuGame.Edit
         private EzSkinEditorSidebar sidebar = null!;
         private EzPlaybackBar playbackBar = null!;
         private EzSkinEditorComponentPickerWindow componentPicker = null!;
+        private EzSkinEditorColouringPreviewerWindow colouringPreviewer = null!;
+        private EzSkinEditorSceneLoadingOverlay sceneLoadingOverlay = null!;
 
         protected override IReadOnlyDependencyContainer CreateChildDependencies(IReadOnlyDependencyContainer parent)
             => dependencies = new DependencyContainer(base.CreateChildDependencies(parent));
@@ -157,6 +159,10 @@ namespace osu.Game.EzOsuGame.Edit
         public Bindable<EzEditorSceneType> CurrentScene => sceneBar.CurrentScene;
 
         internal void ApplyCoordinatedScene(EzEditorSceneType scene) => sceneBar.CurrentScene.Value = scene;
+
+        internal void ShowSceneLoading() => sceneLoadingOverlay.ShowLoading();
+
+        internal void HideSceneLoading() => sceneLoadingOverlay.HideLoading();
 
         /// <summary>
         /// Top-level group switch: re-selects the scene last used in that group, falling back to its
@@ -225,7 +231,8 @@ namespace osu.Game.EzOsuGame.Edit
 
         public void Deactivate()
         {
-            hudLayer.PersistAllLayouts();
+            // 落盘仅在 RequestEndSession（无脏数据 flush / 确认应用）或菜单 Apply 中完成；此处再 Persist 会在用户
+            // 点「取消」放弃修改后仍从插拔屏上的实时 HUD 写盘并弹出布局已保存提示。
             hudLayer.DetachLiveTargets();
         }
 
@@ -243,20 +250,25 @@ namespace osu.Game.EzOsuGame.Edit
 
             if (dialogOverlay == null)
             {
-                applySettings();
-                onContinued();
+                applyUnsavedAndContinue(onContinued);
                 return;
             }
 
-            dialogOverlay.Push(new ConfirmDialog(EzEditorStrings.EXIT_CONFIRM_APPLY_TO_SKIN, () =>
+            var dialog = new ConfirmDialog(EzEditorStrings.EXIT_CONFIRM_APPLY_UNSAVED, () =>
             {
-                applySettings();
-                onContinued();
+                applyUnsavedAndContinue(onContinued);
             }, () =>
             {
+                // HUD / skin.ini drafts only. EzSkin.json stays dirty vs already-saved ini
+                // until the user updates the snapshot or confirms; do not recapture it here.
                 discardWorkspaceChanges();
                 onContinued();
-            }));
+            })
+            {
+                BodyText = unsavedApplyBody(),
+            };
+
+            dialogOverlay.Push(dialog);
         }
 
         public void SetSceneHost(Drawable? host)
@@ -440,37 +452,47 @@ namespace osu.Game.EzOsuGame.Edit
                                 },
                                 new Drawable[]
                                 {
-                                    new GridContainer
+                                    new Container
                                     {
                                         RelativeSizeAxes = Axes.Both,
-                                        ColumnDimensions = new[]
+                                        Children = new Drawable[]
                                         {
-                                            new Dimension(GridSizeMode.AutoSize),
-                                            new Dimension(),
-                                            new Dimension(GridSizeMode.AutoSize),
-                                        },
-                                        Content = new[]
-                                        {
-                                            new Drawable[]
+                                            new GridContainer
                                             {
-                                                sceneRail = new EzSkinEditorSceneRail(),
-                                                // 游玩洞：下层 ScreenContainer 经 SetCustomRect 缩进此处；本层只叠 HUD 蓝图。
-                                                gameplayHole = new Container
+                                                RelativeSizeAxes = Axes.Both,
+                                                ColumnDimensions = new[]
                                                 {
-                                                    RelativeSizeAxes = Axes.Both,
-                                                    Children = new Drawable[]
+                                                    new Dimension(GridSizeMode.AutoSize),
+                                                    new Dimension(),
+                                                    new Dimension(GridSizeMode.AutoSize),
+                                                },
+                                                Content = new[]
+                                                {
+                                                    new Drawable[]
                                                     {
-                                                        hudLayer,
-                                                        componentPicker = new EzSkinEditorComponentPickerWindow(ezSkinConfig.GetBindable<float>(Ez2Setting.SkinEditorComponentPickerX)),
+                                                        sceneRail = new EzSkinEditorSceneRail(),
+                                                        // 游玩洞：下层 ScreenContainer 经 SetCustomRect 缩进此处；本层只叠 HUD 蓝图。
+                                                        gameplayHole = new Container
+                                                        {
+                                                            RelativeSizeAxes = Axes.Both,
+                                                            Children = new Drawable[]
+                                                            {
+                                                                hudLayer,
+                                                                componentPicker = new EzSkinEditorComponentPickerWindow(ezSkinConfig.GetBindable<float>(Ez2Setting.SkinEditorComponentPickerX)),
+                                                                colouringPreviewer = new EzSkinEditorColouringPreviewerWindow(ezSkinConfig.GetBindable<float>(Ez2Setting.SkinEditorColouringPreviewerX)),
+                                                                sceneLoadingOverlay = new EzSkinEditorSceneLoadingOverlay(),
+                                                            },
+                                                        },
+                                                        sidebar = new EzSkinEditorSidebar
+                                                        {
+                                                            Anchor = Anchor.TopRight,
+                                                            Origin = Anchor.TopRight,
+                                                            Width = 0,
+                                                        },
                                                     },
                                                 },
-                                                sidebar = new EzSkinEditorSidebar
-                                                {
-                                                    Anchor = Anchor.TopRight,
-                                                    Origin = Anchor.TopRight,
-                                                    Width = 0,
-                                                },
                                             },
+                                            // The loading overlay is scoped to gameplayHole.
                                         },
                                     },
                                 },
@@ -493,6 +515,9 @@ namespace osu.Game.EzOsuGame.Edit
         protected override void LoadComplete()
         {
             base.LoadComplete();
+            NoteSessionForTesting.ColouringMode.BindTo(ezSkinConfig.GetBindable<EzColouringMode>(Ez2Setting.ColouringMode));
+            NoteSessionForTesting.ColouringRange.BindTo(ezSkinConfig.GetBindable<EzColouringRange>(Ez2Setting.ColouringRange));
+            NoteSessionForTesting.ColouringStrength.BindTo(ezSkinConfig.GetBindable<double>(Ez2Setting.ColouringStrength));
             hudLayer.LayoutWritten += onLayoutWritten;
             SkinEditorProviderResolver.EnsureDefaultProviderRegistered();
             beatmapPicker = new EzSkinEditorBeatmapPicker(realm, beatmapManager);
@@ -516,6 +541,8 @@ namespace osu.Game.EzOsuGame.Edit
             // 侧栏设置面板叠在游玩区右缘上；选择器右界跟随面板当前可见宽度，面板收起时贴到轨道左缘。
             componentPicker.RightReserve = () => sidebar.VisiblePanelReserve;
             sceneBar.VisualPickerOpen.BindTo(componentPicker.Open);
+            colouringPreviewer.RightReserve = () => sidebar.VisiblePanelReserve;
+            sceneBar.ColouringPreviewerOpen.BindTo(colouringPreviewer.Open);
             bindSceneBarPlayback();
         }
 
@@ -725,31 +752,25 @@ namespace osu.Game.EzOsuGame.Edit
             ensureSkinIniSession();
             ensureSkinJsonSession();
 
-            bool configDirty = hasUnsavedConfigChanges();
             bool iniDirty = SkinIniSession.IsDirty;
-            bool jsonDirty = SkinJsonSession is { IsSupported: true, HasFile: true } && SkinJsonSession.IsDirty(ezSkinConfig);
             bool layoutDirty = hudLayer.HasPendingSkinLayoutSave;
 
-            if ((iniDirty || jsonDirty || layoutDirty)
-                && needsMutableSkinBeforeWrite(iniDirty, jsonDirty, layoutDirty)
-                && !ensureMutableSkinPreservingWorkspaceDrafts(iniDirty, jsonDirty))
+            if ((iniDirty || layoutDirty)
+                && needsMutableSkinBeforeWrite(iniDirty, jsonDirty: false, layoutDirty)
+                && !ensureMutableSkinPreservingWorkspaceDrafts(iniDirty, jsonDirty: false))
             {
                 postNotification(EzEditorStrings.NOTIFY_SKIN_LAYOUT_EXIT_SAVE_FAILED);
                 return;
             }
 
-            ezSkinConfig.Save();
             hudLayer.PersistAllLayouts();
-
-            if (jsonDirty)
-                SkinJsonSession!.Commit(ezSkinConfig);
 
             if (iniDirty)
                 SkinIniSession.Commit();
 
             recaptureAppliedConfigBaseline();
 
-            if (!configDirty && !iniDirty && !jsonDirty)
+            if (!iniDirty)
                 return;
 
             refreshScene();
@@ -996,6 +1017,7 @@ namespace osu.Game.EzOsuGame.Edit
 
         private void createEzSkinJson()
         {
+            // First write of EzSkin.json onto the current skin. Apply / exit never create it.
             ensureSkinJsonSession();
 
             if (needsMutableSkinBeforeWrite(iniDirty: false, jsonDirty: false, layoutDirty: false)
@@ -1171,10 +1193,10 @@ namespace osu.Game.EzOsuGame.Edit
 
             try
             {
-                hudLayer.PersistLayoutToCurrentSkin();
+                hudLayer.PersistAllLayouts();
                 var exportStorage = (storage as OsuStorage)?.GetExportStorage() ?? storage.GetStorageForDirectory(@"exports");
                 string path = target is EzLayoutContainer ezLayout
-                    ? EzLayoutPackIO.ExportLayerJson(storage, layoutThemeHost.Store, ezLayout.LayoutFile, exportStorage)
+                    ? EzLayoutPackIO.ExportLayerJson(storage, ezLayout.Store, ezLayout.LayoutFile, exportStorage)
                     : EzSkinLayoutIO.ExportLayerJson(target, skinManager.CurrentSkin.Value, exportStorage);
                 postNotification(LocalisableString.Format(EzEditorStrings.NOTIFY_EXPORTED_TO, path));
             }
@@ -1208,7 +1230,7 @@ namespace osu.Game.EzOsuGame.Edit
                 {
                     if (target is EzLayoutContainer ezLayout)
                     {
-                        EzLayoutPackIO.ImportLayerJson(storage, layoutThemeHost.Store, ezLayout.LayoutFile, file.FullName);
+                        EzLayoutPackIO.ImportLayerJson(storage, ezLayout.Store, ezLayout.LayoutFile, file.FullName);
                         ezLayout.LoadFromStore();
                     }
                     else
@@ -1355,11 +1377,116 @@ namespace osu.Game.EzOsuGame.Edit
 
         private void postNotification(LocalisableString text) => notifications?.Post(new SimpleNotification { Text = text });
 
-        private void onLayoutWritten()
+        private void onLayoutWritten(EzLayoutWriteKind kind)
         {
-            onScreenDisplay?.Display(new OfficialSkinEditor.SkinEditorToast(
-                ToastStrings.SkinSaved,
-                skinManager.CurrentSkin.Value.SkinInfo.ToString() ?? "Unknown"));
+            if (kind == EzLayoutWriteKind.None)
+                return;
+
+            onScreenDisplay?.Display(new EzLayoutSavedToast(layoutWriteHeader(kind), layoutWriteExtra(kind)));
+        }
+
+        private static LocalisableString layoutWriteHeader(EzLayoutWriteKind kind)
+        {
+            bool skin = (kind & EzLayoutWriteKind.Skin) != 0;
+            bool theme = (kind & EzLayoutWriteKind.Theme) != 0;
+            bool client = (kind & EzLayoutWriteKind.Client) != 0;
+            int layers = (skin ? 1 : 0) + (theme ? 1 : 0) + (client ? 1 : 0);
+
+            if (layers != 1)
+                return EzEditorStrings.TOAST_HEADER_LAYOUT;
+
+            if (skin)
+                return EzEditorStrings.TOAST_HEADER_SKIN_LAYOUT;
+
+            if (theme)
+                return EzEditorStrings.TOAST_HEADER_THEME_LAYOUT;
+
+            return EzEditorStrings.TOAST_HEADER_CLIENT_LAYOUT;
+        }
+
+        private string layoutWriteExtra(EzLayoutWriteKind kind)
+        {
+            var parts = new List<string>();
+
+            if ((kind & EzLayoutWriteKind.Skin) != 0)
+                parts.Add(skinManager.CurrentSkin.Value.SkinInfo.ToString() ?? "Unknown");
+
+            if ((kind & EzLayoutWriteKind.Theme) != 0 && layoutLayer != null)
+                parts.Add($"{EzModifyPath.CONFIG_ROOT_PATH}/{layoutLayer.Store.LayoutSetName}");
+
+            if ((kind & EzLayoutWriteKind.Client) != 0)
+                parts.Add(EzModifyPath.CONFIG_ROOT_PATH);
+
+            return string.Join(" · ", parts);
+        }
+
+        private void applyUnsavedAndContinue(Action onContinued)
+        {
+            applySettings();
+            commitDirtySkinJson();
+            onContinued();
+        }
+
+        private void commitDirtySkinJson()
+        {
+            ensureSkinJsonSession();
+
+            if (SkinJsonSession is not { IsSupported: true, HasFile: true } || !SkinJsonSession.IsDirty(ezSkinConfig))
+                return;
+
+            if (needsMutableSkinBeforeWrite(iniDirty: false, jsonDirty: true, layoutDirty: false)
+                && !ensureMutableSkinPreservingWorkspaceDrafts(iniDirty: false, jsonDirty: true))
+                return;
+
+            SkinJsonSession.Commit(ezSkinConfig);
+        }
+
+        private LocalisableString unsavedApplyBody()
+        {
+            string[] names = collectUnsavedLayers().Select(l => l.ToString()).ToArray();
+
+            if (names.Length == 0)
+                return DialogStrings.ConfirmDialogBodyText;
+
+            return EzEditorStrings.EXIT_CONFIRM_MODIFIED.Format(string.Join("、", names));
+        }
+
+        private List<LocalisableString> collectUnsavedLayers()
+        {
+            bool skinHud = hudLayer.HasPendingSkinLayoutSave;
+            bool theme = hudLayer.HasPendingThemeLayoutSave;
+            bool client = hudLayer.HasPendingClientLayoutSave;
+            bool json = SkinJsonSession is { IsSupported: true, HasFile: true } && SkinJsonSession.IsDirty(ezSkinConfig);
+            bool ini = SkinIniSession.IsDirty;
+            bool hudUndo = hudLayer.ChangeHandler?.CanUndo.Value ?? false;
+
+            if (hudUndo && !skinHud && !theme && !client)
+            {
+                if (hudLayer.ActiveTarget is EzLayoutContainer ezLayout)
+                {
+                    if (ezLayout.Store.IsClientRoot)
+                        client = true;
+                    else
+                        theme = true;
+                }
+                else
+                    skinHud = true;
+            }
+
+            var layers = new List<LocalisableString>();
+
+            if (skinHud)
+                layers.Add(EzEditorStrings.TOAST_HEADER_SKIN_LAYOUT);
+            if (theme)
+                layers.Add(EzEditorStrings.TOAST_HEADER_THEME_LAYOUT);
+            if (client)
+                layers.Add(EzEditorStrings.TOAST_HEADER_CLIENT_LAYOUT);
+            if (json)
+                layers.Add(EzEditorStrings.LAYER_SKIN_JSON);
+            if (ini)
+                layers.Add(EzEditorStrings.LAYER_SKIN_INI);
+
+            return layers;
         }
 
         private void onCurrentSkinChanged(ValueChangedEvent<Skin> skin)
@@ -1609,33 +1736,20 @@ namespace osu.Game.EzOsuGame.Edit
 
         private bool hasUnsavedWorkspaceChanges() =>
             SkinIniSession.IsDirty
-            || hasUnsavedConfigChanges()
             || (hudLayer.ChangeHandler?.CanUndo.Value ?? false)
             || hudLayer.HasPendingSkinLayoutSave
-            || (SkinJsonSession?.IsDirty(ezSkinConfig) ?? false);
-
-        private bool hasUnsavedConfigChanges()
-        {
-            if (!appliedConfigBaselineInitialized)
-                return false;
-
-            string current = EzSkinJsonBridge.CreateNormalizedSnapshot(ezSkinConfig);
-            string baseline = EzSkinJsonDocument.SerializeNormalized(appliedConfigBaseline.Document);
-            return current != baseline;
-        }
+            || hudLayer.HasPendingEzLayoutSave
+            // Existing EzSkin.json that lags live (already-saved) ini. Not auto-created.
+            || (SkinJsonSession is { IsSupported: true, HasFile: true } && SkinJsonSession.IsDirty(ezSkinConfig));
 
         private void discardWorkspaceChanges()
         {
+            // Do not revert EzSkinSettings.ini (saved on change) and do not recapture
+            // EzSkin.json as clean — cancel means the skin snapshot stays old.
             if (SkinIniSession.IsDirty)
                 SkinIniSession.Discard();
 
-            if (hasUnsavedConfigChanges())
-            {
-                appliedConfigBaseline.ApplyConfigTo(ezSkinConfig);
-                appliedConfigBaseline.ApplyTo(ezSkinConfig, SkinIniSession);
-            }
-
-            hudLayer.DiscardPendingSkinLayoutSave();
+            hudLayer.DiscardPendingLayouts();
             skinManager.CurrentSkinInfo.TriggerChange();
         }
 
@@ -1670,6 +1784,15 @@ namespace osu.Game.EzOsuGame.Edit
             }
 
             base.Dispose(isDisposing);
+        }
+
+        private partial class EzLayoutSavedToast : Toast
+        {
+            public EzLayoutSavedToast(LocalisableString header, string extra)
+                : base(header, EzEditorStrings.TOAST_LAYOUT_SAVED)
+            {
+                ExtraText = extra;
+            }
         }
     }
 }

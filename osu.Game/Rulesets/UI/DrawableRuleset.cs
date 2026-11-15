@@ -33,7 +33,6 @@ using osu.Game.Scoring;
 using osu.Game.Screens.Play;
 using osu.Game.Screens.Play.HUD;
 using osu.Game.Screens.Play.HUD.ClicksPerSecond;
-using osu.Game.Skinning;
 using osuTK;
 
 namespace osu.Game.Rulesets.UI
@@ -81,8 +80,6 @@ namespace osu.Game.Rulesets.UI
         private readonly DrawableAudioMixer gameplayMixer = new DrawableAudioMixer { RelativeSizeAxes = Axes.Both, Name = "GameplayMixer" };
 
         public override Container FrameStableComponents { get; } = new Container { RelativeSizeAxes = Axes.Both };
-
-        public override Container BackgroundLayer { get; } = new Container { RelativeSizeAxes = Axes.Both, Depth = float.MaxValue };
 
         public override IFrameStableClock FrameStableClock => frameStabilityContainer;
 
@@ -200,41 +197,6 @@ namespace osu.Game.Rulesets.UI
                     new DetachedSampleTrack(Beatmap.DetachedSamples, Beatmap.DetachedSampleIsHitsound),
                 }
             };
-
-            // Global and ruleset-scoped background components get separate hosts: a
-            // SkinnableContainer clears its ExternalTarget on every reload, so two proxies
-            // sharing one host would erase each other's components.
-            var globalBackgroundHost = new Container { RelativeSizeAxes = Axes.Both };
-            var rulesetBackgroundHost = new Container { RelativeSizeAxes = Axes.Both };
-
-            BackgroundLayer.Add(globalBackgroundHost);
-            BackgroundLayer.Add(rulesetBackgroundHost);
-            BackgroundLayer.Add(EzGlobalBackgroundHost);
-            BackgroundLayer.Add(EzRulesetBackgroundHost);
-
-            // BackgroundLayer is added outside FrameStabilityContainer
-            // to avoid interfering with its frame-stable pipeline timing.
-            AddInternal(BackgroundLayer);
-
-            // Register SkinnableContainer proxies for editor discovery. Alpha=0 keeps them out
-            // of the draw traversal; ExternalTarget proxies Add/Remove/Reload to the matching host.
-            // Child order doubles as z-order here, so the global host is added first to keep
-            // ruleset-scoped components above it (same layering as the HUD's global/ruleset pair).
-            AddInternal(new SkinnableContainer(
-                new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.Background))
-            {
-                ExternalTarget = globalBackgroundHost,
-                Alpha = 0,
-                AlwaysPresent = false,
-            });
-
-            AddInternal(new SkinnableContainer(
-                new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.Background, Ruleset.RulesetInfo))
-            {
-                ExternalTarget = rulesetBackgroundHost,
-                Alpha = 0,
-                AlwaysPresent = false,
-            });
 
             if ((ResumeOverlay = CreateResumeOverlay()) != null)
             {
@@ -500,25 +462,6 @@ namespace osu.Game.Rulesets.UI
         /// Content to be placed above hitobjects. Will be affected by frame stability and adjustments applied to <see cref="Audio"/>.
         /// </summary>
         public abstract Container Overlays { get; }
-
-        /// <summary>
-        /// A layer anchored to the full screen, rendered below the playfield and all other content.
-        /// </summary>
-        /// <remarks>
-        /// Deliberately not abstract: test fixtures derive from this class and only supply the members they
-        /// actually exercise, so requiring every one of them to implement an unused layer would break the
-        /// test project for no benefit.
-        /// </remarks>
-        public virtual Container BackgroundLayer { get; } = new Container { RelativeSizeAxes = Axes.Both, Depth = float.MaxValue };
-
-        /// <summary>
-        /// Hosts for Ez layout background components. Kept apart from the skin hosts because a
-        /// skinnable container clears its external target on every reload, so sharing one host would
-        /// erase the other provider's components.
-        /// </summary>
-        internal Container EzGlobalBackgroundHost { get; } = new Container { RelativeSizeAxes = Axes.Both };
-
-        internal Container EzRulesetBackgroundHost { get; } = new Container { RelativeSizeAxes = Axes.Both };
 
         /// <summary>
         /// Components to be run potentially multiple times in line with frame-stable gameplay.

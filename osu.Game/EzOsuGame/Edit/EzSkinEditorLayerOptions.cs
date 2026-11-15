@@ -99,35 +99,23 @@ namespace osu.Game.EzOsuGame.Edit
         private static readonly EzSkinEditorLayerDefinition[] gameplay_layers =
         {
             HUD_OFF, EZ_HUD, EZ_HUD_RULESET, EZ_PLAYFIELD_RULESET,
-            EZ_BACKGROUND, EZ_BACKGROUND_RULESET,
             SKIN_HUD, SKIN_HUD_RULESET, SKIN_PLAYFIELD_RULESET,
         };
 
-        public static readonly EzSkinEditorLayerDefinition EZ_BACKGROUND = new EzSkinEditorLayerDefinition
+        private static readonly EzSkinEditorLayerDefinition[] ez_only_layers =
         {
-            Layer = EzHUDLayer.EzBackground,
-            RulesetScoped = false,
-            Target = GlobalSkinnableContainers.Background,
-            UsesEzLayoutStore = true,
-        };
-
-        public static readonly EzSkinEditorLayerDefinition EZ_BACKGROUND_RULESET = new EzSkinEditorLayerDefinition
-        {
-            Layer = EzHUDLayer.EzBackgroundRuleset,
-            RulesetScoped = true,
-            Target = GlobalSkinnableContainers.Background,
-            UsesEzLayoutStore = true,
+            HUD_OFF, EZ_HUD,
         };
 
         /// <summary>
         /// Layers offered for a scene. Song select only has the global song-select layout, so it lists
-        /// the hidden state and the global Ez / skin HUD layers. HUD-capable gameplay scenes offer the
-        /// full layer set.
+        /// the hidden state and the global Ez / skin HUD layers. Results and music player are Ez JSON
+        /// only. HUD-capable gameplay scenes offer the full layer set.
         /// </summary>
         public static IReadOnlyList<EzSkinEditorLayerDefinition> For(EzEditorSceneType sceneType) => sceneType switch
         {
             EzEditorSceneType.SongSelectHud => new[] { HUD_OFF, EZ_HUD, SKIN_HUD },
-            EzEditorSceneType.MusicPlayer => new[] { HUD_OFF, EZ_HUD, SKIN_HUD },
+            EzEditorSceneType.ResultsHud or EzEditorSceneType.MusicPlayerHud => ez_only_layers,
             _ => gameplay_layers,
         };
 
@@ -136,8 +124,6 @@ namespace osu.Game.EzOsuGame.Edit
             EzHUDLayer.EzHud => EZ_HUD,
             EzHUDLayer.EzHudRuleset => EZ_HUD_RULESET,
             EzHUDLayer.EzPlayfieldRuleset => EZ_PLAYFIELD_RULESET,
-            EzHUDLayer.EzBackground => EZ_BACKGROUND,
-            EzHUDLayer.EzBackgroundRuleset => EZ_BACKGROUND_RULESET,
             EzHUDLayer.SkinHud => SKIN_HUD,
             EzHUDLayer.SkinHudRuleset => SKIN_HUD_RULESET,
             EzHUDLayer.SkinPlayfieldRuleset => SKIN_PLAYFIELD_RULESET,
@@ -162,7 +148,10 @@ namespace osu.Game.EzOsuGame.Edit
             if (sceneType == EzEditorSceneType.SongSelectHud)
                 return new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.SongSelect);
 
-            if (sceneType == EzEditorSceneType.MusicPlayer)
+            if (sceneType == EzEditorSceneType.ResultsHud)
+                return new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.Results);
+
+            if (sceneType == EzEditorSceneType.MusicPlayerHud)
                 return new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.MusicPlayer);
 
             var definition = Get(layer);
@@ -194,12 +183,6 @@ namespace osu.Game.EzOsuGame.Edit
 
                 case EzHUDLayer.EzPlayfieldRuleset:
                     return LocalisableString.Format(EzEditorStrings.LAYER_EZ_PLAYFIELD_RULESET.ToString(), getRulesetName(ruleset));
-
-                case EzHUDLayer.EzBackground:
-                    return EzEditorStrings.LAYER_EZ_BACKGROUND;
-
-                case EzHUDLayer.EzBackgroundRuleset:
-                    return LocalisableString.Format(EzEditorStrings.LAYER_EZ_BACKGROUND_RULESET.ToString(), getRulesetName(ruleset));
 
                 case EzHUDLayer.SkinHud:
                     return EzEditorStrings.LAYER_SKIN_HUD;

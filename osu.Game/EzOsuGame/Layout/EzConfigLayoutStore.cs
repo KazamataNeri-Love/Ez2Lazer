@@ -9,7 +9,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.IO.Serialization;
@@ -34,30 +33,47 @@ namespace osu.Game.EzOsuGame.Layout
 
         private const int playfield_save_debounce_ms = 200;
 
-        /// <summary>
-        /// Component type that used to be placeable but is now a fixed footer element. Loaded layouts are
-        /// stripped of it once and rewritten, so no stale entry keeps failing to instantiate.
-        /// </summary>
-        private const string retired_footer_image_type = "EzSongSelectImage";
-
         private readonly Storage gameStorage;
         private readonly Lock playfieldSaveLock = new Lock();
+        private readonly Dictionary<string, SkinLayoutInfo> pendingLayouts = new Dictionary<string, SkinLayoutInfo>();
         private Storage storage = null!;
         private int lastPlayfieldSave;
         private bool suppressPlayfieldSave;
 
         public string LayoutSetName { get; private set; }
 
+        public bool IsClientRoot { get; }
+
         public ManiaPlayfieldLayoutConfig PlayfieldLayout { get; }
 
         public event Action? SetChanged;
 
         public EzConfigLayoutStore(Storage gameStorage)
+            : this(gameStorage, clientRoot: false)
+        {
+        }
+
+        /// <summary>
+        /// JSON under <see cref="EzModifyPath.CONFIG_ROOT_PATH"/>. <see cref="UseSet"/> is a no-op.
+        /// </summary>
+        public static EzConfigLayoutStore CreateClientRoot(Storage gameStorage) =>
+            new EzConfigLayoutStore(gameStorage, clientRoot: true);
+
+        private EzConfigLayoutStore(Storage gameStorage, bool clientRoot)
         {
             this.gameStorage = gameStorage;
+            IsClientRoot = clientRoot;
+            PlayfieldLayout = new ManiaPlayfieldLayoutConfig();
+
+            if (clientRoot)
+            {
+                LayoutSetName = string.Empty;
+                storage = gameStorage.GetStorageForDirectory(EzModifyPath.CONFIG_ROOT_PATH);
+                return;
+            }
+
             LayoutSetName = EzModifyPath.LAYOUT_SET_DEFAULT;
             bind(LayoutSetName);
-            PlayfieldLayout = new ManiaPlayfieldLayoutConfig();
             reloadPlayfield();
             PlayfieldLayout.StageX.BindValueChanged(_ => queuePlayfieldSave());
             PlayfieldLayout.StageY.BindValueChanged(_ => queuePlayfieldSave());
@@ -68,10 +84,14 @@ namespace osu.Game.EzOsuGame.Layout
         /// </summary>
         public void UseSet(string layoutSetName)
         {
+            if (IsClientRoot)
+                return;
+
             if (LayoutSetName == layoutSetName)
                 return;
 
             LayoutSetName = layoutSetName;
+            DiscardPending();
             bind(layoutSetName);
             reloadPlayfield();
             SetChanged?.Invoke();
@@ -79,6 +99,9 @@ namespace osu.Game.EzOsuGame.Layout
 
         public SkinLayoutInfo Load(string layoutFile)
         {
+            if (pendingLayouts.TryGetValue(layoutFile, out var pending))
+                return cloneLayout(pending);
+
             string? json = readText(layoutFile);
 
             if (string.IsNullOrEmpty(json))
@@ -88,7 +111,6 @@ namespace osu.Game.EzOsuGame.Layout
 
             try
             {
-                json = stripRetiredComponents(layoutFile, json);
                 return JsonConvert.DeserializeObject<SkinLayoutInfo>(json, json_settings) ?? new SkinLayoutInfo();
             }
             catch (Exception ex)
@@ -99,68 +121,83 @@ namespace osu.Game.EzOsuGame.Layout
         }
 
         /// <summary>
-        /// Drops entries of components that were retired from the layout format and persists the result,
-        /// so the file stops carrying a type that no longer exists.
+        /// Keeps the live container in the session cache. Does not write JSON until <see cref="FlushPending"/>.
         /// </summary>
-        private string stripRetiredComponents(string layoutFile, string json)
+        public void Capture(EzLayoutContainer container) =>
+            Capture(container.LayoutFile, container.Ruleset, ((ISerialisableDrawableContainer)container).CreateSerialisedInfo().ToArray());
+
+        public void Capture(string layoutFile, RulesetInfo? ruleset, SerialisedDrawableInfo[] components)
         {
-            try
+            var layout = Load(layoutFile);
+            layout.Update(ruleset, components);
+            pendingLayouts[layoutFile] = layout;
+        }
+
+        /// <summary>
+        /// Whether any captured layout serialises differently from the on-disk JSON.
+        /// </summary>
+        public bool HasUnflushedChanges()
+        {
+            foreach ((string file, SkinLayoutInfo layout) in pendingLayouts)
             {
-                JObject root = JObject.Parse(json);
+                string json = JsonConvert.SerializeObject(layout, json_settings);
 
-                if (root["DrawableInfo"] is not JObject buckets)
-                    return json;
+                if (readText(file) != json)
+                    return true;
+            }
 
-                bool changed = false;
+            return false;
+        }
 
-                foreach (JProperty bucket in buckets.Properties())
+        /// <summary>
+        /// Writes captured layouts that differ from disk. Returns whether any file changed.
+        /// </summary>
+        public bool FlushPending(string? layoutFile = null)
+        {
+            bool written = false;
+            string[] files = layoutFile == null
+                ? pendingLayouts.Keys.ToArray()
+                : pendingLayouts.ContainsKey(layoutFile)
+                    ? new[] { layoutFile }
+                    : Array.Empty<string>();
+
+            foreach (string file in files)
+            {
+                if (!pendingLayouts.TryGetValue(file, out var layout))
+                    continue;
+
+                string json = JsonConvert.SerializeObject(layout, json_settings);
+
+                if (readText(file) != json)
                 {
-                    if (bucket.Value is not JArray entries)
-                        continue;
-
-                    for (int i = entries.Count - 1; i >= 0; i--)
-                    {
-                        if (entries[i] is not JObject entry)
-                            continue;
-
-                        string? typeName = entry["Type"]?.Value<string>();
-
-                        if (typeName == null || !typeName.Contains(retired_footer_image_type, StringComparison.Ordinal))
-                            continue;
-
-                        entries.RemoveAt(i);
-                        changed = true;
-                    }
+                    writeText(file, json);
+                    written = true;
                 }
 
-                if (!changed)
-                    return json;
-
-                string migrated = root.ToString(Formatting.None);
-                writeText(layoutFile, migrated);
-                Logger.Log($"Ez layout {layoutFile} migrated: retired '{retired_footer_image_type}' entries removed.", LoggingTarget.Runtime, LogLevel.Debug);
-
-                return migrated;
+                pendingLayouts.Remove(file);
             }
-            catch (Exception ex)
-            {
-                Logger.Error(ex, $"Failed to migrate Ez layout {layoutFile}");
-                return json;
-            }
+
+            return written;
         }
 
-        public void Save(EzLayoutContainer container)
+        public void DiscardPending(string? layoutFile = null)
         {
-            var layout = Load(container.LayoutFile);
-            layout.Update(container.Ruleset, ((ISerialisableDrawableContainer)container).CreateSerialisedInfo().ToArray());
-            Save(container.LayoutFile, layout);
+            if (layoutFile == null)
+                pendingLayouts.Clear();
+            else
+                pendingLayouts.Remove(layoutFile);
         }
 
-        public void Save(string layoutFile, SkinLayoutInfo layout) =>
+        public void Save(string layoutFile, SkinLayoutInfo layout)
+        {
+            pendingLayouts.Remove(layoutFile);
             writeText(layoutFile, JsonConvert.SerializeObject(layout, json_settings));
+        }
 
         public void Reset(string layoutFile)
         {
+            pendingLayouts.Remove(layoutFile);
+
             if (storage.Exists(layoutFile))
                 storage.Delete(layoutFile);
         }
@@ -233,21 +270,16 @@ namespace osu.Game.EzOsuGame.Layout
                 Save(layoutFile, layout);
         }
 
-        public Container CreateComponentsContainer(string layoutFile, RulesetInfo? ruleset, Func<SkinLayoutInfo>? fallback = null)
+        public Container CreateComponentsContainer(string layoutFile, RulesetInfo? ruleset)
         {
             var layout = Load(layoutFile);
 
             if (!layout.TryGetDrawableInfo(ruleset, out var drawableInfos) || drawableInfos.Length == 0)
             {
-                var defaults = fallback?.Invoke();
-
-                if (defaults == null || !defaults.TryGetDrawableInfo(ruleset, out drawableInfos) || drawableInfos.Length == 0)
+                return new Container
                 {
-                    return new Container
-                    {
-                        RelativeSizeAxes = Axes.Both,
-                    };
-                }
+                    RelativeSizeAxes = Axes.Both,
+                };
             }
 
             return new Container
@@ -260,11 +292,14 @@ namespace osu.Game.EzOsuGame.Layout
         private void bind(string layoutSetName) =>
             storage = gameStorage.GetStorageForDirectory(EzModifyPath.LayoutSetPath(layoutSetName));
 
+        private static SkinLayoutInfo cloneLayout(SkinLayoutInfo layout)
+        {
+            string json = JsonConvert.SerializeObject(layout, json_settings);
+            return JsonConvert.DeserializeObject<SkinLayoutInfo>(json, json_settings) ?? new SkinLayoutInfo();
+        }
+
         private string? readText(string filename)
         {
-            if (!storage.Exists(filename) && filename == EzLayoutFiles.MAIN_HUD)
-                filename = EzLayoutFiles.LEGACY_MAIN_HUD;
-
             if (!storage.Exists(filename))
                 return null;
 

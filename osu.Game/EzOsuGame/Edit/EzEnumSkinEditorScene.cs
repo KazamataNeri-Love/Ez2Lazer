@@ -21,16 +21,13 @@ namespace osu.Game.EzOsuGame.Edit
     {
         SongSelectHud,
         BeatmapPreview,
-
+        ResultsHud,
+        MusicPlayerHud,
         GameplayHud,
-        MusicPlayer,
         Appearance,
         Note,
         SkinIni,
         SkinSpecific,
         EditorColouring,
-
-        /// <summary>结算屏（编辑结算 HUD 与卡片背景）。</summary>
-        Results,
     }
 }

@@ -7,11 +7,10 @@ using System.Linq;
 using osu.Framework.Screens;
 using osu.Game.EzOsuGame.Edit.Scenes;
 using osu.Game.EzOsuGame.Layout;
-using osu.Game.EzOsuGame.Screens.MusicPlayer;
+using osu.Game.EzOsuGame.Screens.Visualizer;
 using osu.Game.Screens.Play;
 using osu.Game.Screens.Ranking;
 using osu.Game.Screens.Select;
-using osu.Game.Skinning;
 
 namespace osu.Game.EzOsuGame.Edit
 {
@@ -24,13 +23,13 @@ namespace osu.Game.EzOsuGame.Edit
         {
             new SongSelectSceneStrategy(),
             new BeatmapPreviewSceneStrategy(),
+            new ResultsSceneStrategy(),
             new MusicPlayerSceneStrategy(),
             new GameplaySceneStrategy(),
             new AppearanceSceneStrategy(),
             new NoteSceneStrategy(),
             new SkinIniSceneStrategy(),
             new SkinSpecificSceneStrategy(),
-            new ResultsSceneStrategy(),
             new EditorColouringSceneStrategy(),
         };
 
@@ -57,44 +56,20 @@ namespace osu.Game.EzOsuGame.Edit
         /// </summary>
         public static bool SupportsHudLayer(EzEditorSceneType sceneType) => Get(sceneType).SupportsHudLayer;
 
-        /// <summary>
-        /// The Ez layout container target a scene edits, or null when the scene has no editable HUD.
-        /// Keeps the scene-to-target mapping out of the HUD layer.
-        /// </summary>
-        public static GlobalSkinnableContainers? ResolveLayoutTarget(EzEditorSceneType sceneType) => sceneType switch
-        {
-            EzEditorSceneType.GameplayHud => GlobalSkinnableContainers.MainHUDComponents,
-            EzEditorSceneType.SongSelectHud => GlobalSkinnableContainers.SongSelect,
-            EzEditorSceneType.MusicPlayer => GlobalSkinnableContainers.MusicPlayer,
-            _ => null,
-        };
-
-        /// <summary>
-        /// All layout targets a scene edits. Scenes with more than one layer (results HUD + backdrop)
-        /// return every lookup so the HUD layer can build a blueprint for each.
-        /// </summary>
-        public static IReadOnlyList<GlobalSkinnableContainers> ResolveLayoutTargets(EzEditorSceneType sceneType) => sceneType switch
-        {
-            EzEditorSceneType.Results => new[] { GlobalSkinnableContainers.Results, GlobalSkinnableContainers.ResultsBackground },
-            _ => ResolveLayoutTarget(sceneType) is GlobalSkinnableContainers single
-                ? new[] { single }
-                : Array.Empty<GlobalSkinnableContainers>(),
-        };
-
         public static EzLayoutRoot LayoutRootOf(EzEditorSceneType sceneType) => Get(sceneType).LayoutRoot;
 
         public static EzEditorSceneType ResolveCurrentScene(IScreen? currentScreen) => ResolveCurrentScene(currentScreen?.GetType());
 
         public static EzEditorSceneType ResolveCurrentScene(Type? screenType)
         {
-            if (screenType != null && typeof(ResultsScreen).IsAssignableFrom(screenType))
-                return EzEditorSceneType.Results;
-
             if (screenType != null && typeof(SoloSongSelect).IsAssignableFrom(screenType))
                 return EzEditorSceneType.SongSelectHud;
 
-            if (screenType != null && typeof(EzMusicPlayerScreen).IsAssignableFrom(screenType))
-                return EzEditorSceneType.MusicPlayer;
+            if (screenType != null && typeof(ResultsScreen).IsAssignableFrom(screenType))
+                return EzEditorSceneType.ResultsHud;
+
+            if (screenType != null && typeof(EzVisualizerScreen).IsAssignableFrom(screenType))
+                return EzEditorSceneType.MusicPlayerHud;
 
             if (screenType != null && typeof(Player).IsAssignableFrom(screenType))
                 return EzEditorSceneType.GameplayHud;

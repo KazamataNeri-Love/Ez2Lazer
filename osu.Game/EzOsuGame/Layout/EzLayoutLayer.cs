@@ -7,14 +7,11 @@ using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Platform;
 using osu.Framework.Screens;
-using osu.Framework.Testing;
-using osu.Game.EzOsuGame.HUD;
-using osu.Game.EzOsuGame.Screens.MusicPlayer;
-using osu.Game.EzOsuGame.UI;
+using osu.Game.EzOsuGame.HUD.MusicPlayer;
+using osu.Game.EzOsuGame.Screens.Visualizer;
 using osu.Game.Rulesets;
-using osu.Game.Rulesets.UI;
-using osu.Game.Screens;
 using osu.Game.Screens.Play;
 using osu.Game.Screens.Ranking;
 using osu.Game.Screens.Select;
@@ -32,7 +29,41 @@ namespace osu.Game.EzOsuGame.Layout
 
         public EzConfigLayoutStore Store => layoutStore;
 
+        public EzConfigLayoutStore ClientStore { get; private set; } = null!;
+
+        public bool HasUnflushedLayoutChanges =>
+            HasUnflushedThemeLayoutChanges || HasUnflushedClientLayoutChanges;
+
+        public bool HasUnflushedThemeLayoutChanges => layoutStore.HasUnflushedChanges();
+
+        public bool HasUnflushedClientLayoutChanges => IsLoaded && ClientStore.HasUnflushedChanges();
+
+        public EzLayoutWriteKind FlushPendingLayouts()
+        {
+            var kind = EzLayoutWriteKind.None;
+
+            if (layoutStore.FlushPending())
+                kind |= EzLayoutWriteKind.Theme;
+
+            if (IsLoaded && ClientStore.FlushPending())
+                kind |= EzLayoutWriteKind.Client;
+
+            return kind;
+        }
+
+        public void DiscardPendingLayouts()
+        {
+            layoutStore.DiscardPending();
+
+            if (IsLoaded)
+                ClientStore.DiscardPending();
+        }
+
         public EzLayoutContainer? SongSelectContainer { get; private set; }
+
+        public EzLayoutContainer? ResultsContainer { get; private set; }
+
+        public EzLayoutContainer? MusicPlayerContainer { get; private set; }
 
         /// <summary>
         /// Fired after song-select / gameplay containers are shown, hidden, or recreated.
@@ -41,17 +72,13 @@ namespace osu.Game.EzOsuGame.Layout
 
         private EzLayoutContainer? gameplayContainer;
         private EzLayoutContainer? rulesetGameplayContainer;
-        private EzLayoutContainer? musicPlayerContainer;
-        private EzLayoutContainer? resultsContainer;
-        private EzLayoutContainer? resultsBackgroundContainer;
         private EzLayoutContainer? rulesetPlayfieldContainer;
-        private EzLayoutContainer? backgroundContainer;
-        private EzLayoutContainer? rulesetBackgroundContainer;
         private Player? pendingPlayer;
+        private Drawable? pendingDonor;
 
         private bool onSongSelect;
-        private bool onMusicPlayer;
         private bool onResults;
+        private bool onMusicPlayer;
         private bool songSelectLayoutSuppressed;
         private bool editorHidden;
 
@@ -89,9 +116,9 @@ namespace osu.Game.EzOsuGame.Layout
 
                 editorHidden = value;
                 updateSongSelectContainerVisibility();
-                updateGameplayContainerVisibility();
-                updateMusicPlayerContainerVisibility();
                 updateResultsContainerVisibility();
+                updateMusicPlayerContainerVisibility();
+                updateGameplayContainerVisibility();
             }
         }
 
@@ -102,8 +129,9 @@ namespace osu.Game.EzOsuGame.Layout
         }
 
         [BackgroundDependencyLoader]
-        private void load()
+        private void load(Storage storage)
         {
+            ClientStore = EzConfigLayoutStore.CreateClientRoot(storage);
             InternalChild = SongSelectContainer = new EzLayoutContainer(Store, EzLayoutFiles.SONG_SELECT, null);
         }
 
@@ -128,6 +156,11 @@ namespace osu.Game.EzOsuGame.Layout
                 updateSongSelectContainerVisibility();
             }
 
+            if (game.ScreenStack.CurrentScreen is ResultsScreen results && results.IsLoaded)
+                recreateResultsContainer(results);
+            else
+                expireResultsContainer();
+
             if (game.ScreenStack.CurrentScreen is Player player && canAttachGameplayLayout(player))
                 recreateGameplayContainers(player);
             else if (gameplayContainer != null || rulesetGameplayContainer != null)
@@ -149,20 +182,9 @@ namespace osu.Game.EzOsuGame.Layout
             layoutStore.SetChanged -= reloadThemeLayouts;
             game.ScreenStack.ScreenPushed -= onScreenChanged;
             game.ScreenStack.ScreenExited -= onScreenChanged;
-
-            // The results backdrop lives on the screen stack, not in this layer's own children.
-            resultsBackgroundContainer?.Expire();
-            resultsBackgroundContainer = null;
         }
 
-        public IEnumerable<EzLayoutContainer> LayoutContainers
-            => InternalChildren.OfType<EzLayoutContainer>();
-
-        /// <summary>
-        /// All layout targets, including the results backdrop which is hosted by <see cref="OsuScreenStack"/>.
-        /// </summary>
-        public IEnumerable<EzLayoutContainer> AllLayoutContainers
-            => resultsBackgroundContainer == null ? LayoutContainers : LayoutContainers.Append(resultsBackgroundContainer);
+        public IEnumerable<EzLayoutContainer> LayoutContainers => InternalChildren.OfType<EzLayoutContainer>();
 
         public override bool ReceivePositionalInputAt(Vector2 screenSpacePos) =>
             InternalChildren.Any(c => c.IsPresent && c.ReceivePositionalInputAt(screenSpacePos));
@@ -174,13 +196,13 @@ namespace osu.Game.EzOsuGame.Layout
             unbindPendingPlayer();
 
             onSongSelect = screen is SongSelect;
-            onMusicPlayer = screen is EzMusicPlayerScreen;
             onResults = screen is ResultsScreen;
+            onMusicPlayer = screen is EzVisualizerScreen;
             bool onPlayer = screen is Player;
 
             updateSongSelectContainerVisibility();
-            updateMusicPlayerContainerVisibility();
-            updateResultsContainerVisibility();
+            attachOrExpireScene(onResults, screen as CompositeDrawable, recreateResultsContainer, expireResultsContainer);
+            attachOrExpireScene(onMusicPlayer, screen as CompositeDrawable, recreateMusicPlayerContainer, expireMusicPlayerContainer);
 
             if (onPlayer && screen is Player player)
             {
@@ -220,11 +242,91 @@ namespace osu.Game.EzOsuGame.Layout
 
         private void unbindPendingPlayer()
         {
-            if (pendingPlayer == null)
-                return;
+            if (pendingPlayer != null)
+            {
+                pendingPlayer.OnLoadComplete -= onPendingPlayerLoaded;
+                pendingPlayer = null;
+            }
 
-            pendingPlayer.OnLoadComplete -= onPendingPlayerLoaded;
-            pendingPlayer = null;
+            if (pendingDonor != null)
+            {
+                pendingDonor.OnLoadComplete -= onPendingDonorLoaded;
+                pendingDonor = null;
+            }
+        }
+
+        private void attachOrExpireScene(bool visible, CompositeDrawable? screen, Action<CompositeDrawable> recreate, Action expire)
+        {
+            if (!visible || screen == null)
+            {
+                expire();
+                return;
+            }
+
+            if (screen.IsLoaded && screen.Dependencies != null)
+                recreate(screen);
+            else
+            {
+                pendingDonor = screen;
+                pendingDonor.OnLoadComplete += onPendingDonorLoaded;
+            }
+        }
+
+        private void onPendingDonorLoaded(Drawable loaded)
+        {
+            if (pendingDonor != null)
+            {
+                pendingDonor.OnLoadComplete -= onPendingDonorLoaded;
+                pendingDonor = null;
+            }
+
+            Schedule(() =>
+            {
+                if (!ReferenceEquals(game.ScreenStack.CurrentScreen, loaded) || loaded is not CompositeDrawable screen)
+                    return;
+
+                if (onResults)
+                    recreateResultsContainer(screen);
+                else if (onMusicPlayer)
+                    recreateMusicPlayerContainer(screen);
+
+                notifyTargetsChanged();
+            });
+        }
+
+        private void recreateResultsContainer(CompositeDrawable screen)
+        {
+            expireResultsContainer();
+            ResultsContainer = new EzLayoutContainer(Store, EzLayoutFiles.RESULTS, null);
+            ResultsContainer.SetDependencyDonor(screen);
+            AddInternal(ResultsContainer);
+            updateResultsContainerVisibility();
+        }
+
+        private void recreateMusicPlayerContainer(CompositeDrawable screen)
+        {
+            expireMusicPlayerContainer();
+            MusicPlayerContainer = new EzLayoutContainer(ClientStore, EzLayoutFiles.MUSIC_PLAYER, null);
+            MusicPlayerContainer.SetDependencyDonor(screen);
+            MusicPlayerContainer.OnComponentsLoaded += d =>
+            {
+                if (d is EzLayoutContainer loaded && loaded.IsLoaded)
+                    EzMusicPlayerHudDefaults.ApplyIfEmpty(loaded);
+            };
+            AddInternal(MusicPlayerContainer);
+            updateMusicPlayerContainerVisibility();
+        }
+
+        private void expireResultsContainer()
+        {
+            ResultsContainer?.Expire();
+            ResultsContainer = null;
+        }
+
+        private void expireMusicPlayerContainer()
+        {
+            MusicPlayerContainer?.Expire();
+            MusicPlayerContainer = null;
         }
 
         private void recreateGameplayContainers(Player player)
@@ -234,22 +336,11 @@ namespace osu.Game.EzOsuGame.Layout
             gameplayContainer = addGameplayContainer(player, EzLayoutFiles.MAIN_HUD, null);
 
             var ruleset = player.Ruleset.Value;
-            var drawableRuleset = player.ChildrenOfType<DrawableRuleset>().FirstOrDefault();
 
             if (ruleset != null)
             {
                 rulesetGameplayContainer = addGameplayContainer(player, EzLayoutFiles.MAIN_HUD, ruleset);
                 rulesetPlayfieldContainer = addGameplayContainer(player, EzLayoutFiles.PLAYFIELD, ruleset);
-            }
-
-            // Background components render under the playfield, so their content is proxied into the
-            // drawable ruleset's own background hosts rather than stacking above the screen.
-            if (drawableRuleset != null)
-            {
-                backgroundContainer = addGameplayContainer(player, EzLayoutFiles.BACKGROUND, null, drawableRuleset.EzGlobalBackgroundHost);
-
-                if (ruleset != null)
-                    rulesetBackgroundContainer = addGameplayContainer(player, EzLayoutFiles.BACKGROUND, ruleset, drawableRuleset.EzRulesetBackgroundHost);
             }
 
             updateGameplayContainerVisibility();
@@ -259,7 +350,7 @@ namespace osu.Game.EzOsuGame.Layout
         private static bool canAttachGameplayLayout(Player player) =>
             player.IsLoaded && player.Dependencies != null;
 
-        private EzLayoutContainer addGameplayContainer(Player player, string layoutFile, RulesetInfo? ruleset, Container? externalTarget = null)
+        private EzLayoutContainer addGameplayContainer(Player player, string layoutFile, RulesetInfo? ruleset)
         {
             var container = new EzLayoutContainer(Store, layoutFile, ruleset);
 
@@ -268,9 +359,6 @@ namespace osu.Game.EzOsuGame.Layout
                 var donor = player.Dependencies!.Get(typeof(HUDOverlay)) as CompositeDrawable ?? player;
                 container.SetDependencyDonor(donor);
             }
-
-            if (externalTarget != null)
-                container.ExternalTarget = externalTarget;
 
             AddInternal(container);
             return container;
@@ -284,26 +372,21 @@ namespace osu.Game.EzOsuGame.Layout
             rulesetGameplayContainer = null;
             rulesetPlayfieldContainer?.Expire();
             rulesetPlayfieldContainer = null;
-            expireBackgroundContainer(ref backgroundContainer);
-            expireBackgroundContainer(ref rulesetBackgroundContainer);
-        }
-
-        private static void expireBackgroundContainer(ref EzLayoutContainer? container)
-        {
-            if (container == null)
-                return;
-
-            // The proxied content lives on the drawable ruleset's host, which outlives this container.
-            container.ExternalTarget?.Clear();
-            container.Expire();
-            container = null;
         }
 
         private void updateSongSelectContainerVisibility()
         {
-            bool visible = onSongSelect && !songSelectLayoutSuppressed && !editorHidden;
+            SongSelectContainer?.Alpha = onSongSelect && !songSelectLayoutSuppressed && !editorHidden ? 1 : 0;
+        }
 
-            SongSelectContainer?.Alpha = visible ? 1 : 0;
+        private void updateResultsContainerVisibility()
+        {
+            ResultsContainer?.Alpha = onResults && !editorHidden ? 1 : 0;
+        }
+
+        private void updateMusicPlayerContainerVisibility()
+        {
+            MusicPlayerContainer?.Alpha = onMusicPlayer && !editorHidden ? 1 : 0;
         }
 
         private void updateGameplayContainerVisibility()
@@ -313,92 +396,6 @@ namespace osu.Game.EzOsuGame.Layout
             gameplayContainer?.Alpha = alpha;
             rulesetGameplayContainer?.Alpha = alpha;
             rulesetPlayfieldContainer?.Alpha = alpha;
-
-            setBackgroundContainerAlpha(backgroundContainer, alpha);
-            setBackgroundContainerAlpha(rulesetBackgroundContainer, alpha);
-        }
-
-        private static void setBackgroundContainerAlpha(EzLayoutContainer? container, float alpha)
-        {
-            if (container == null)
-                return;
-
-            container.Alpha = alpha;
-            // The proxied content sits outside this container's tree, so it needs the fade applied too.
-            container.ExternalTarget?.Alpha = alpha;
-        }
-
-        private void updateMusicPlayerContainerVisibility()
-        {
-            if (!onMusicPlayer)
-            {
-                if (musicPlayerContainer != null)
-                    musicPlayerContainer.Alpha = 0;
-
-                return;
-            }
-
-            musicPlayerContainer ??= createMusicPlayerContainer();
-            musicPlayerContainer.Alpha = editorHidden ? 0 : 1;
-        }
-
-        private EzLayoutContainer createMusicPlayerContainer()
-        {
-            // Created lazily so the layout (and its components) only load when the player is first opened.
-            var container = new EzLayoutContainer(
-                Store,
-                EzLayoutFiles.MUSIC_PLAYER,
-                null,
-                EzMusicPlayerLayoutDefaults.Create);
-
-            AddInternal(container);
-            return container;
-        }
-
-        private void updateResultsContainerVisibility()
-        {
-            if (!onResults || editorHidden)
-            {
-                if (resultsContainer != null)
-                    resultsContainer.Alpha = 0;
-
-                if (resultsBackgroundContainer != null)
-                    resultsBackgroundContainer.Alpha = 0;
-
-                return;
-            }
-
-            resultsContainer ??= createResultsContainer();
-            resultsContainer.Alpha = 1;
-
-            resultsBackgroundContainer ??= createResultsBackgroundContainer();
-            resultsBackgroundContainer.Alpha = 1;
-        }
-
-        private EzLayoutContainer createResultsContainer()
-        {
-            var container = new EzLayoutContainer(
-                Store,
-                EzLayoutFiles.RESULTS,
-                null);
-
-            AddInternal(container);
-            return container;
-        }
-
-        private EzLayoutContainer createResultsBackgroundContainer()
-        {
-            // Hosted by the screen stack so it sits between the beatmap background and the results screen itself.
-            var container = new EzLayoutContainer(
-                Store,
-                EzLayoutFiles.RESULTS_BACKGROUND,
-                null)
-            {
-                ConsumesInput = false,
-            };
-
-            game.ScreenStack.UnderlayContent.Add(container);
-            return container;
         }
 
         private void notifyTargetsChanged() => LayoutTargetsChanged?.Invoke();

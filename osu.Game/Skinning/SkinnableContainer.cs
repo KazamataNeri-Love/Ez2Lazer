@@ -43,14 +43,6 @@ namespace osu.Game.Skinning
 
         private CancellationTokenSource? cancellationSource;
 
-        /// <summary>
-        /// Optional external container. When set, <see cref="Reload(Container?)"/> will
-        /// proxy visual output to this target instead of adding children to this instance.
-        /// Order of internal cleanup (ClearInternal → components.Clear → ComponentsLoaded → content → cancel)
-        /// is identical to the default path to preserve pipeline stability.
-        /// </summary>
-        public Container? ExternalTarget { get; set; }
-
         public SkinnableContainer(GlobalSkinnableContainerLookup lookup)
         {
             Lookup = lookup;
@@ -75,44 +67,23 @@ namespace osu.Game.Skinning
             cancellationSource?.Cancel();
             cancellationSource = null;
 
-            if (ExternalTarget != null)
+            LoadComponentAsync(content, wrapper =>
             {
-                LoadComponentAsync(content, wrapper =>
+                foreach (var component in wrapper.Children.OfType<ISerialisableDrawable>().ToArray())
                 {
-                    foreach (var component in wrapper.Children.OfType<ISerialisableDrawable>().ToArray())
-                    {
-                        if (component.CanBePlaced(components))
-                            components.Add(component);
-                        else
-                            wrapper.Remove((Drawable)component, true);
-                    }
+                    if (components.Contains(component))
+                        continue;
 
-                    ExternalTarget.Clear();
-                    // Add the wrapper itself rather than re-parenting its children,
-                    // to avoid "May not add a drawable to multiple containers" errors
-                    // when children are already parented by the async loading pipeline.
-                    ExternalTarget.Add(wrapper);
-                    ComponentsLoaded = true;
-                    OnComponentsLoaded?.Invoke(this);
-                }, (cancellationSource = new CancellationTokenSource()).Token);
-            }
-            else
-            {
-                LoadComponentAsync(content, wrapper =>
-                {
-                    foreach (var component in wrapper.Children.OfType<ISerialisableDrawable>().ToArray())
-                    {
-                        if (component.CanBePlaced(components))
-                            components.Add(component);
-                        else
-                            wrapper.Remove((Drawable)component, true);
-                    }
+                    if (component.CanBePlaced(components))
+                        components.Add(component);
+                    else
+                        wrapper.Remove((Drawable)component, true);
+                }
 
-                    AddInternal(wrapper);
-                    ComponentsLoaded = true;
-                    OnComponentsLoaded?.Invoke(this);
-                }, (cancellationSource = new CancellationTokenSource()).Token);
-            }
+                AddInternal(wrapper);
+                ComponentsLoaded = true;
+                OnComponentsLoaded?.Invoke(this);
+            }, (cancellationSource = new CancellationTokenSource()).Token);
         }
 
         /// <inheritdoc cref="ISerialisableDrawableContainer"/>
@@ -126,9 +97,6 @@ namespace osu.Game.Skinning
             if (!(component is Drawable drawable))
                 throw new ArgumentException($"Provided argument must be of type {nameof(Drawable)}.", nameof(component));
 
-            // Always add to content (the wrapper), not to ExternalTarget.
-            // When ExternalTarget is set, components are children of content,
-            // which itself is a child of ExternalTarget.
             content.Add(drawable);
             components.Add(component);
         }
@@ -144,10 +112,6 @@ namespace osu.Game.Skinning
             if (!(component is Drawable drawable))
                 throw new ArgumentException($"Provided argument must be of type {nameof(Drawable)}.", nameof(component));
 
-            // Always remove from content (the wrapper), not from ExternalTarget.
-            // When ExternalTarget is set, components are children of content,
-            // which itself is a child of ExternalTarget. Removing from ExternalTarget
-            // directly would fail because the drawable's parent is content.
             content.Remove(drawable, disposeImmediately);
             components.Remove(component);
         }

@@ -19,16 +19,10 @@ namespace osu.Game.Skinning
         [Description("Playfield")]
         Playfield,
 
-        [Description("Background")]
-        Background,
-
-        [Description("Music player")]
-        MusicPlayer,
-
         [Description("Results")]
         Results,
 
-        [Description("Results background")]
-        ResultsBackground
+        [Description("Music player")]
+        MusicPlayer,
     }
 }

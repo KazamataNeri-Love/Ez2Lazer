@@ -17,18 +17,11 @@ namespace osu.Game.EzOsuGame.Layout
 
         public const string MAIN_HUD = "MainHUDComponents.json";
 
-        /// <summary>Edge 旧版主 HUD 布局文件名；仅用于读回退，新写入用 <see cref="MAIN_HUD"/>。</summary>
-        public const string LEGACY_MAIN_HUD = "Gameplay.json";
-
         public const string PLAYFIELD = "Playfield.json";
-
-        public const string BACKGROUND = "Background.json";
-
-        public const string MUSIC_PLAYER = "MusicPlayer.json";
 
         public const string RESULTS = "Results.json";
 
-        public const string RESULTS_BACKGROUND = "ResultsBackground.json";
+        public const string MUSIC_PLAYER = "MusicPlayer.json";
 
         public static GlobalSkinnableContainerLookup? SkinLookup(string layoutFile, RulesetInfo? ruleset)
         {
@@ -37,10 +30,8 @@ namespace osu.Game.EzOsuGame.Layout
                 SONG_SELECT => GlobalSkinnableContainers.SongSelect,
                 MAIN_HUD => GlobalSkinnableContainers.MainHUDComponents,
                 PLAYFIELD => GlobalSkinnableContainers.Playfield,
-                BACKGROUND => GlobalSkinnableContainers.Background,
-                MUSIC_PLAYER => GlobalSkinnableContainers.MusicPlayer,
                 RESULTS => GlobalSkinnableContainers.Results,
-                RESULTS_BACKGROUND => GlobalSkinnableContainers.ResultsBackground,
+                MUSIC_PLAYER => GlobalSkinnableContainers.MusicPlayer,
                 _ => null,
             };
 

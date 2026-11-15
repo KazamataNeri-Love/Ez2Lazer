@@ -18,9 +18,10 @@ using osu.Game.Database;
 using osu.Game.EzOsuGame.Edit.Components;
 using osu.Game.EzOsuGame.Edit.Screens;
 using osu.Game.EzOsuGame.Layout;
-using osu.Game.EzOsuGame.Screens.MusicPlayer;
+using osu.Game.EzOsuGame.Screens.Visualizer;
 using osu.Game.Graphics.Containers;
 using osu.Game.Input.Bindings;
+using osu.Game.Online.API;
 using osu.Game.Overlays;
 using osu.Game.Overlays.SkinEditor;
 using osu.Game.Rulesets;
@@ -86,6 +87,9 @@ namespace osu.Game.EzOsuGame.Edit
         [Resolved]
         private MusicController musicController { get; set; } = null!;
 
+        [Resolved]
+        private IAPIProvider api { get; set; } = null!;
+
         private EzSkinEditorBeatmapPicker? beatmapPicker;
 
         private readonly Bindable<bool> beatmapSkins = new Bindable<bool>();
@@ -147,6 +151,9 @@ namespace osu.Game.EzOsuGame.Edit
             EzSkinEditorHostScope.Enter(EzSkinEditorHostScope.Host.Ez);
             sessionTarget = game.ScreenStack.CurrentScreen as OsuScreen;
             overrideSkinEditorRelevantSettings();
+
+            game.Toolbar.Hide();
+            game.CloseAllOverlays(hideToolbar: false);
 
             // Keep the global (main menu) background alive behind plugged screens: stop screens from
             // pushing their own beatmap background, and drop the one already on the stack.
@@ -223,6 +230,9 @@ namespace osu.Game.EzOsuGame.Edit
                     EzSkinEditorActiveState.RestoreBackgroundDraw();
 
                 current.RestoreOwnedBackground();
+
+                if (!current.HideOverlaysOnEnter)
+                    game.Toolbar.Show();
             }
             else
                 EzSkinEditorActiveState.RestoreBackgroundDraw();
@@ -264,31 +274,17 @@ namespace osu.Game.EzOsuGame.Edit
 
         private bool canPresentScene(EzEditorSceneType scene)
         {
-            switch (scene)
-            {
-                case EzEditorSceneType.Results:
-                    return game.ScreenStack.CurrentScreen is ResultsScreen;
+            if (scene == EzEditorSceneType.SkinIni)
+                return EzSkinIniSupport.IsSupported(skinManager.CurrentSkinInfo.Value);
 
-                case EzEditorSceneType.MusicPlayer:
-                    return game.ScreenStack.CurrentScreen is EzMusicPlayerScreen;
-
-                case EzEditorSceneType.SkinIni:
-                    return EzSkinIniSupport.IsSupported(skinManager.CurrentSkinInfo.Value);
-
-                default:
-                    return true;
-            }
+            return true;
         }
 
         private void initializeSceneCoordinator(EzSkinEditorScreen workspace)
         {
-            sceneCoordinator = new EzSkinEditorSceneCoordinator(scalingContainer, workspace, layoutLayer, updateScreenSizing, canPresentScene, () => game.ScreenStack.CurrentScreen, enterSongSelect, enterGameplay, enterFullMapPreview, enterBeatmapCompose);
+            sceneCoordinator = new EzSkinEditorSceneCoordinator(scalingContainer, workspace, layoutLayer, updateScreenSizing, canPresentScene, () => game.ScreenStack.CurrentScreen, enterSongSelect, enterGameplay, enterFullMapPreview, enterBeatmapCompose, enterResults, enterMusicPlayer);
             workspace.SceneApplied = scene => sceneCoordinator?.Present(scene, game.ScreenStack.CurrentScreen as OsuScreen);
             workspace.CanPresentScene = canPresentScene;
-
-            // 结算场景只在结算屏上存在，其他屏隐藏按钮避免无效切换。
-            workspace.SetSceneAvailable(EzEditorSceneType.Results, canPresentScene(EzEditorSceneType.Results));
-            workspace.SetSceneAvailable(EzEditorSceneType.MusicPlayer, canPresentScene(EzEditorSceneType.MusicPlayer));
 
             // 侧栏固定时挤占场景可用宽度；宽度变化后跟随重算插拔场景矩形。
             workspace.SidebarReservedWidth.ValueChanged += onReservedWidthChanged;
@@ -344,6 +340,42 @@ namespace osu.Game.EzOsuGame.Edit
                     Workspace.PreviewState.Ruleset.Value));
             }, new[] { typeof(MainMenu) });
         }
+
+        private void enterResults()
+        {
+            performer?.PerformFromScreen(screen =>
+            {
+                if (screen is ResultsScreen || State.Value != Visibility.Visible)
+                    return;
+
+                screen.Push(new SoloResultsScreen(createEditorPreviewScore())
+                {
+                    AllowRetry = false,
+                });
+            }, new[] { typeof(MainMenu) });
+        }
+
+        private void enterMusicPlayer()
+        {
+            performer?.PerformFromScreen(screen =>
+            {
+                if (screen is EzVisualizerScreen || State.Value != Visibility.Visible)
+                    return;
+
+                screen.Push(new EzVisualizerScreen());
+            }, new[] { typeof(MainMenu) });
+        }
+
+        private ScoreInfo createEditorPreviewScore() => new ScoreInfo(beatmap.Value.BeatmapInfo, ruleset.Value)
+        {
+            User = api.LocalUser.Value,
+            TotalScore = 1_000_000,
+            Accuracy = 1,
+            MaxCombo = 1000,
+            Rank = ScoreRank.X,
+            Date = DateTimeOffset.Now,
+            Position = 1,
+        };
 
         private void enterBeatmapCompose()
         {
@@ -518,6 +550,8 @@ namespace osu.Game.EzOsuGame.Edit
 
         private partial class EzEditorEndlessPlayer : ReplayPlayer
         {
+            private bool awaitingLoopRewind;
+
             protected override UserActivity? InitialActivity => null;
 
             public override bool DisallowExternalBeatmapRulesetChanges => true;
@@ -545,9 +579,36 @@ namespace osu.Game.EzOsuGame.Edit
             {
                 base.Update();
 
-                if (LoadedBeatmapSuccessfully && GameplayState.HasPassed)
-                    GameplayClockContainer.Seek(0);
+                if (!LoadedBeatmapSuccessfully)
+                    return;
+
+                if (awaitingLoopRewind)
+                {
+                    if (!GameplayState.HasPassed)
+                        awaitingLoopRewind = false;
+
+                    return;
+                }
+
+                if (!GameplayState.HasPassed)
+                    return;
+
+                awaitingLoopRewind = true;
+                GameplayState.HasPassed = false;
+                GameplayClockContainer.Seek(0);
             }
         }
+    }
+}
+
+namespace osu.Game.Screens.Play
+{
+    public partial class Player
+    {
+        internal bool IsReadyForSkinEditorScenePresent() =>
+            IsLoaded
+            && LoadedBeatmapSuccessfully
+            && Alpha >= 1
+            && DrawableRuleset?.FrameStableClock.WaitingOnFrames.Value == false;
     }
 }
