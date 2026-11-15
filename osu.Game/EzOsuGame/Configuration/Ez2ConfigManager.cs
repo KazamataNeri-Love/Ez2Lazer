@@ -597,7 +597,7 @@ namespace osu.Game.EzOsuGame.Configuration
 
             ColumnWidthStyle style = Get<ColumnWidthStyle>(Ez2Setting.ColumnWidthStyle);
 
-            return style is ColumnWidthStyle.GlobalTotalWidth
+            return style is ColumnWidthStyle.GlobalTotalWidth or ColumnWidthStyle.EzSkinTotalWidth
                 ? 10f / keyMode
                 : 1f;
         }

@@ -221,6 +221,11 @@ namespace osu.Game.Rulesets.Mania.EzMania
                         width = ezWidth;
                     break;
 
+                case ColumnWidthStyle.EzSkinTotalWidth:
+                    if (IsCodeSkin(skin, skinManager))
+                        width = ezWidth * ezSkinConfig.GetColumnWidthStyleScale(keyMode);
+                    break;
+
                 case ColumnWidthStyle.GlobalWidth:
                     width = ezWidth;
                     break;
