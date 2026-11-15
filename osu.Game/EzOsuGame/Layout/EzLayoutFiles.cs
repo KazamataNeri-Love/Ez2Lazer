@@ -19,6 +19,8 @@ namespace osu.Game.EzOsuGame.Layout
 
         public const string PLAYFIELD = "Playfield.json";
 
+        public const string BACKGROUND = "Background.json";
+
         public const string RESULTS = "Results.json";
 
         public const string MUSIC_PLAYER = "MusicPlayer.json";
@@ -30,6 +32,7 @@ namespace osu.Game.EzOsuGame.Layout
                 SONG_SELECT => GlobalSkinnableContainers.SongSelect,
                 MAIN_HUD => GlobalSkinnableContainers.MainHUDComponents,
                 PLAYFIELD => GlobalSkinnableContainers.Playfield,
+                BACKGROUND => GlobalSkinnableContainers.Background,
                 RESULTS => GlobalSkinnableContainers.Results,
                 MUSIC_PLAYER => GlobalSkinnableContainers.MusicPlayer,
                 _ => null,

@@ -43,6 +43,16 @@ namespace osu.Game.Skinning
 
         private CancellationTokenSource? cancellationSource;
 
+        /// <summary>
+        /// Optional external container. When set, <see cref="Reload(Container?)"/> proxies its
+        /// visual output into this target instead of adding the wrapper to this instance.
+        /// </summary>
+        /// <remarks>
+        /// Used where the components must render somewhere this container cannot reach (for example
+        /// below the playfield). Two proxies must not share one target: each reload clears it.
+        /// </remarks>
+        public Container? ExternalTarget { get; set; }
+
         public SkinnableContainer(GlobalSkinnableContainerLookup lookup)
         {
             Lookup = lookup;
@@ -80,7 +90,18 @@ namespace osu.Game.Skinning
                         wrapper.Remove((Drawable)component, true);
                 }
 
-                AddInternal(wrapper);
+                if (ExternalTarget != null)
+                {
+                    // The wrapper is re-parented as a whole rather than having its children moved,
+                    // to avoid "May not add a drawable to multiple containers" from the async pipeline.
+                    ExternalTarget.Clear();
+                    ExternalTarget.Add(wrapper);
+                }
+                else
+                {
+                    AddInternal(wrapper);
+                }
+
                 ComponentsLoaded = true;
                 OnComponentsLoaded?.Invoke(this);
             }, (cancellationSource = new CancellationTokenSource()).Token);

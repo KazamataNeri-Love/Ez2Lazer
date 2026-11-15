@@ -19,6 +19,9 @@ namespace osu.Game.Skinning
         [Description("Playfield")]
         Playfield,
 
+        [Description("Background")]
+        Background,
+
         [Description("Results")]
         Results,
 

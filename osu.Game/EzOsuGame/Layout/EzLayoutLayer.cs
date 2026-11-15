@@ -9,9 +9,11 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Platform;
 using osu.Framework.Screens;
+using osu.Framework.Testing;
 using osu.Game.EzOsuGame.HUD.MusicPlayer;
 using osu.Game.EzOsuGame.Screens.Visualizer;
 using osu.Game.Rulesets;
+using osu.Game.Rulesets.UI;
 using osu.Game.Screens.Play;
 using osu.Game.Screens.Ranking;
 using osu.Game.Screens.Select;
@@ -73,6 +75,8 @@ namespace osu.Game.EzOsuGame.Layout
         private EzLayoutContainer? gameplayContainer;
         private EzLayoutContainer? rulesetGameplayContainer;
         private EzLayoutContainer? rulesetPlayfieldContainer;
+        private EzLayoutContainer? backgroundContainer;
+        private EzLayoutContainer? rulesetBackgroundContainer;
         private Player? pendingPlayer;
         private Drawable? pendingDonor;
 
@@ -336,11 +340,22 @@ namespace osu.Game.EzOsuGame.Layout
             gameplayContainer = addGameplayContainer(player, EzLayoutFiles.MAIN_HUD, null);
 
             var ruleset = player.Ruleset.Value;
+            var drawableRuleset = player.ChildrenOfType<DrawableRuleset>().FirstOrDefault();
 
             if (ruleset != null)
             {
                 rulesetGameplayContainer = addGameplayContainer(player, EzLayoutFiles.MAIN_HUD, ruleset);
                 rulesetPlayfieldContainer = addGameplayContainer(player, EzLayoutFiles.PLAYFIELD, ruleset);
+            }
+
+            // Background components render under the playfield, so their content is proxied into the
+            // drawable ruleset's own background hosts instead of stacking above the screen.
+            if (drawableRuleset != null)
+            {
+                backgroundContainer = addGameplayContainer(player, EzLayoutFiles.BACKGROUND, null, drawableRuleset.EzGlobalBackgroundHost);
+
+                if (ruleset != null)
+                    rulesetBackgroundContainer = addGameplayContainer(player, EzLayoutFiles.BACKGROUND, ruleset, drawableRuleset.EzRulesetBackgroundHost);
             }
 
             updateGameplayContainerVisibility();
@@ -350,7 +365,7 @@ namespace osu.Game.EzOsuGame.Layout
         private static bool canAttachGameplayLayout(Player player) =>
             player.IsLoaded && player.Dependencies != null;
 
-        private EzLayoutContainer addGameplayContainer(Player player, string layoutFile, RulesetInfo? ruleset)
+        private EzLayoutContainer addGameplayContainer(Player player, string layoutFile, RulesetInfo? ruleset, Container? externalTarget = null)
         {
             var container = new EzLayoutContainer(Store, layoutFile, ruleset);
 
@@ -359,6 +374,9 @@ namespace osu.Game.EzOsuGame.Layout
                 var donor = player.Dependencies!.Get(typeof(HUDOverlay)) as CompositeDrawable ?? player;
                 container.SetDependencyDonor(donor);
             }
+
+            if (externalTarget != null)
+                container.ExternalTarget = externalTarget;
 
             AddInternal(container);
             return container;
@@ -372,6 +390,29 @@ namespace osu.Game.EzOsuGame.Layout
             rulesetGameplayContainer = null;
             rulesetPlayfieldContainer?.Expire();
             rulesetPlayfieldContainer = null;
+            expireBackgroundContainer(ref backgroundContainer);
+            expireBackgroundContainer(ref rulesetBackgroundContainer);
+        }
+
+        private static void expireBackgroundContainer(ref EzLayoutContainer? container)
+        {
+            if (container == null)
+                return;
+
+            // The proxied content lives on the drawable ruleset's host, which outlives this container.
+            container.ExternalTarget?.Clear();
+            container.Expire();
+            container = null;
+        }
+
+        private static void setBackgroundContainerAlpha(EzLayoutContainer? container, float alpha)
+        {
+            if (container == null)
+                return;
+
+            container.Alpha = alpha;
+            // The proxied content sits outside this container's tree, so it needs the fade applied too.
+            container.ExternalTarget?.Alpha = alpha;
         }
 
         private void updateSongSelectContainerVisibility()
@@ -396,6 +437,8 @@ namespace osu.Game.EzOsuGame.Layout
             gameplayContainer?.Alpha = alpha;
             rulesetGameplayContainer?.Alpha = alpha;
             rulesetPlayfieldContainer?.Alpha = alpha;
+            setBackgroundContainerAlpha(backgroundContainer, alpha);
+            setBackgroundContainerAlpha(rulesetBackgroundContainer, alpha);
         }
 
         private void notifyTargetsChanged() => LayoutTargetsChanged?.Invoke();
