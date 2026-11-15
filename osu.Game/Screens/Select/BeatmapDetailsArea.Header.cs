@@ -281,7 +281,7 @@ namespace osu.Game.Screens.Select
                 }
             }
 
-            private bool playerHasSkillData(string username) => skillProvider == null || skillProvider.GetPlayerSsrKeyCounts(username).Count > 0;
+            private bool playerHasSkillData(string username) => skillProvider == null || skillProvider.GetPlayerRatingKeyCounts(username).Count > 0;
 
             private void applyFlowModeState(bool enabled)
             {

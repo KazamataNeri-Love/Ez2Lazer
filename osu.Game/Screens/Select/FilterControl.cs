@@ -530,7 +530,7 @@ namespace osu.Game.Screens.Select
             {
                 case EzAnalysisSystem.Mina:
                     foreach (var axis in EzMinaSkillAxisExtensions.RadarAxes)
-                        items.Add(new SkillAxisDropdownItem(EzAnalysisSystem.Mina, axis.ToId(), axis.Meta().DisplayName));
+                        items.Add(new SkillAxisDropdownItem(EzAnalysisSystem.Mina, axis.ToMetaId(), axis.Meta().DisplayName));
                     break;
 
                 case EzAnalysisSystem.PPP:
