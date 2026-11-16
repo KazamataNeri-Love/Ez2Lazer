@@ -9,6 +9,7 @@ using osu.Framework.Graphics.Colour;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.Rulesets.Mania.Objects.Drawables;
 using osu.Game.Rulesets.Mania.Skinning.Default;
 using osu.Game.Rulesets.Mania.UI;
 
@@ -39,11 +40,9 @@ namespace osu.Game.Rulesets.Mania.Skinning.SbI
         private float lastTopRegionHeight = float.NaN;
         private float cachedTailMaskHeight = float.NaN;
         private double tailMaskLevel;
-        private double cachedBeatLength = double.NaN;
-        private double cachedTimeRange = double.NaN;
-        private float cachedScrollLength = float.NaN;
         private bool lnGradient;
         private DrawableManiaRuleset? drawableRuleset;
+        private DrawableHoldNote? holdNote;
 
         public SbIHoldBodyPiece()
         {
@@ -354,22 +353,16 @@ namespace osu.Game.Rulesets.Mania.Skinning.SbI
                 return 0;
 
             drawableRuleset ??= this.FindClosestParent<DrawableManiaRuleset>();
+            holdNote ??= this.FindClosestParent<DrawableHoldNote>();
+
+            if (holdNote == null)
+                return 0;
 
             var hitObjectContainer = Column.HitObjectContainer;
             double beatLength = ManiaHoldTailMask.ResolveBeatLength(drawableRuleset);
-            double timeRange = ManiaHoldTailMask.ResolveTimeRange(Column.ScrollingInfo);
-            float scrollLength = hitObjectContainer.DrawHeight;
 
-            if (float.IsNaN(cachedTailMaskHeight)
-                || cachedBeatLength != beatLength
-                || cachedTimeRange != timeRange
-                || cachedScrollLength != scrollLength)
-            {
-                cachedBeatLength = beatLength;
-                cachedTimeRange = timeRange;
-                cachedScrollLength = scrollLength;
-                cachedTailMaskHeight = ManiaHoldTailMask.GetLength(hitObjectContainer, tailMaskLevel, beatLength);
-            }
+            // 尾段长度随它当前所在位置变化，必须每帧按当前时刻重算。
+            cachedTailMaskHeight = ManiaHoldTailMask.GetLength(hitObjectContainer, tailMaskLevel, beatLength, holdNote.HitObject.EndTime);
 
             return cachedTailMaskHeight;
         }

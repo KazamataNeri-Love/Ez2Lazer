@@ -1,6 +1,7 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System;
 using osu.Game.Rulesets.Mania.UI;
 using osu.Game.Rulesets.UI.Scrolling;
 
@@ -31,14 +32,16 @@ namespace osu.Game.Rulesets.Mania.Skinning
             return beatLength * uiLevel / BEAT_DIVISOR;
         }
 
-        public static float GetLength(ScrollingHitObjectContainer? hitObjectContainer, double uiLevel, double beatLength)
+        public static float GetLength(ScrollingHitObjectContainer? hitObjectContainer, double uiLevel, double beatLength, double endTime)
         {
             double duration = GetDuration(uiLevel, beatLength);
 
             if (duration <= 0 || hitObjectContainer == null)
                 return 0;
 
-            return hitObjectContainer.LengthAtTime(0, duration);
+            // 尾段在屏幕上的长度随它当前所在位置变化，必须按当前时刻量两端，而不是用判定线处的固定长度。
+            return Math.Abs(
+                hitObjectContainer.PositionAtTime(endTime) - hitObjectContainer.PositionAtTime(endTime - duration));
         }
 
         public static double ResolveTimeRange(IScrollingInfo? scrollingInfo)

@@ -268,19 +268,6 @@ namespace osu.Game.Rulesets.Mania.UI
             setupReplayInputNotes(replayPlayer);
 
             setupSpeedCompensation();
-            setupHoldNoteLengthUpdaters();
-        }
-
-        /// <summary>
-        /// 每列挂一个长条长度更新组件；没有速度补偿时它在第一帧就返回。
-        /// </summary>
-        private void setupHoldNoteLengthUpdaters()
-        {
-            foreach (var stage in Playfield.Stages)
-            {
-                foreach (var column in stage.Columns)
-                    column.TopLevelContainer.Add(new EzHoldNoteLengthUpdater(column));
-            }
         }
 
         /// <summary>

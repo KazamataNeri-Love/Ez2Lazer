@@ -41,9 +41,6 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
         private float lastTopContainerY = float.NaN;
         private float cachedTailMaskHeight = float.NaN;
         private double tailMaskLevel;
-        private double cachedBeatLength = double.NaN;
-        private double cachedTimeRange = double.NaN;
-        private float cachedScrollLength = float.NaN;
 
         private bool lnGradient;
         private DrawableManiaRuleset? drawableRuleset;
@@ -320,19 +317,9 @@ namespace osu.Game.Rulesets.Mania.Skinning.EzStylePro
 
             var hitObjectContainer = Column.HitObjectContainer;
             double beatLength = ManiaHoldTailMask.ResolveBeatLength(drawableRuleset);
-            double timeRange = ManiaHoldTailMask.ResolveTimeRange(Column.ScrollingInfo);
-            float scrollLength = hitObjectContainer.DrawHeight;
 
-            if (float.IsNaN(cachedTailMaskHeight)
-                || cachedBeatLength != beatLength
-                || cachedTimeRange != timeRange
-                || cachedScrollLength != scrollLength)
-            {
-                cachedBeatLength = beatLength;
-                cachedTimeRange = timeRange;
-                cachedScrollLength = scrollLength;
-                cachedTailMaskHeight = ManiaHoldTailMask.GetLength(hitObjectContainer, tailMaskLevel, beatLength);
-            }
+            // 尾段长度随它当前所在位置变化，必须每帧按当前时刻重算。
+            cachedTailMaskHeight = ManiaHoldTailMask.GetLength(hitObjectContainer, tailMaskLevel, beatLength, holdNote.HitObject.EndTime);
 
             return cachedTailMaskHeight;
         }

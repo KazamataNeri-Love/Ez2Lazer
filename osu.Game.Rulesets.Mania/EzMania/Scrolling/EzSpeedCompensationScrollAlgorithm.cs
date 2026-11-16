@@ -32,6 +32,13 @@ namespace osu.Game.Rulesets.Mania.EzMania.Scrolling
             this.compensation = Math.Clamp(compensation, 0.2f, 1.8f);
         }
 
+        /// <summary>
+        /// The position law remaps the normalised scroll position, so a duration occupies a different
+        /// length depending on where it currently sits. Lengths and nested offsets must therefore be
+        /// measured at the current time.
+        /// </summary>
+        public bool IsPositionDependent => true;
+
         public double GetDisplayStartTime(double originTime, float offset, double timeRange, float scrollLength)
             => Math.Min(TimeAt(-offset, originTime, timeRange, scrollLength) - timeRange,
                         inner.GetDisplayStartTime(originTime, offset, timeRange, scrollLength));

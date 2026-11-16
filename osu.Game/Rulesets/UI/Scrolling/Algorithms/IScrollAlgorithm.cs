@@ -66,6 +66,19 @@ namespace osu.Game.Rulesets.UI.Scrolling.Algorithms
         double TimeAt(float position, double currentTime, double timeRange, float scrollLength);
 
         /// <summary>
+        /// Whether this algorithm's position mapping is position-dependent, i.e. whether
+        /// <see cref="PositionAt"/> differences between two times are not equal to <see cref="GetLength"/>
+        /// for the same pair of times.
+        /// </summary>
+        /// <remarks>
+        /// Algorithms which remap the normalised scroll position (instead of accumulating absolute
+        /// positions) break the translation invariance that <see cref="GetLength"/> relies on.
+        /// Scrolling containers read this to recompute object geometry every frame instead of trusting
+        /// the length measured at the origin.
+        /// </remarks>
+        bool IsPositionDependent => false;
+
+        /// <summary>
         /// Resets this <see cref="IScrollAlgorithm"/> to a default state.
         /// </summary>
         void Reset();

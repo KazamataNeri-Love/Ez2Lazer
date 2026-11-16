@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 #nullable disable
@@ -129,6 +129,15 @@ namespace osu.Game.Rulesets.UI.Scrolling
             return algorithm.Value.GetLength(startTime, endTime, timeRange.Value, scrollLength);
         }
 
+        /// <summary>
+        /// Given a start time, an end time and the current time, return the length of the object along
+        /// the scrolling axis. Unlike <see cref="LengthAtTime(double,double)"/> this is also valid for
+        /// position-dependent algorithms, where the same duration occupies a different length depending
+        /// on where it currently sits.
+        /// </summary>
+        public float LengthAtTime(double startTime, double endTime, double currentTime)
+            => Math.Abs(PositionAtTime(endTime, currentTime) - PositionAtTime(startTime, currentTime));
+
         private float scrollLength => scrollingAxis == Direction.Horizontal ? DrawWidth : DrawHeight;
 
         public override void Add(HitObjectLifetimeEntry entry)
@@ -191,6 +200,23 @@ namespace osu.Game.Rulesets.UI.Scrolling
                 var obj = entry.Value;
 
                 updatePosition(obj, Time.Current);
+
+                // Position-dependent algorithms cannot reuse the layout computed at the origin: both
+                // ends of an object (and every nested offset) move differently, so geometry has to be
+                // recomputed from the current time until the object leaves the screen.
+                if (algorithm.Value.IsPositionDependent)
+                {
+                    updatePositionDependentLayout(obj, Time.Current);
+
+                    // Lifetimes only change with the algorithm or the time range, not per frame.
+                    if (!layoutComputed.Contains(obj))
+                    {
+                        updateNestedLifetimes(obj);
+                        layoutComputed.Add(obj);
+                    }
+
+                    continue;
+                }
 
                 if (layoutComputed.Contains(obj))
                     continue;
@@ -275,6 +301,80 @@ namespace osu.Game.Rulesets.UI.Scrolling
                 // Nested hitobjects don't need to scroll, but they do need accurate positions and start lifetime
                 updatePosition(obj, hitObject.HitObject.StartTime, parentHitObjectStartTime);
                 setComputedLifetime(obj.Entry);
+            }
+        }
+
+        /// <summary>
+        /// Minimum change in pixels before rewriting a position-dependent length. Keeps flat parts of
+        /// the curve from invalidating layout every frame.
+        /// </summary>
+        private const float position_dependent_epsilon = 0.5f;
+
+        /// <summary>
+        /// Recomputes lengths and nested offsets for algorithms whose position mapping is not
+        /// translation-invariant (see <see cref="IScrollAlgorithm.IsPositionDependent"/>).
+        /// </summary>
+        /// <remarks>
+        /// <see cref="LengthAtTime"/> can only express the length measured with the object's end resting
+        /// at the origin, and nested positions are otherwise evaluated at the parent's start time. Both
+        /// assumptions only hold when positions accumulate, so here both ends are evaluated at
+        /// <paramref name="currentTime"/> and the difference is used instead.
+        /// </remarks>
+        private void updatePositionDependentLayout(DrawableHitObject hitObject, double currentTime, double? parentHitObjectStartTime = null)
+        {
+            double originTime = parentHitObjectStartTime ?? hitObject.HitObject.StartTime;
+
+            if (hitObject.HitObject is IHasDuration duration)
+            {
+                float startPosition = PositionAtTime(hitObject.HitObject.StartTime, currentTime, originTime);
+                float endPosition = PositionAtTime(duration.EndTime, currentTime, originTime);
+                float length = Math.Abs(endPosition - startPosition);
+
+                if (scrollingAxis == Direction.Horizontal)
+                {
+                    if (Math.Abs(hitObject.Width - length) >= position_dependent_epsilon)
+                        hitObject.Width = length;
+                }
+                else
+                {
+                    if (Math.Abs(hitObject.Height - length) >= position_dependent_epsilon)
+                        hitObject.Height = length;
+                }
+            }
+
+            foreach (var nested in hitObject.NestedHitObjects)
+            {
+                updatePositionDependentLayout(nested, currentTime, hitObject.HitObject.StartTime);
+                updateRelativePosition(nested, currentTime, hitObject.HitObject.StartTime);
+            }
+        }
+
+        /// <summary>
+        /// Positions a nested hit object relative to its parent at <paramref name="currentTime"/>.
+        /// </summary>
+        private void updateRelativePosition(DrawableHitObject hitObject, double currentTime, double parentHitObjectStartTime)
+        {
+            float parentPosition = PositionAtTime(parentHitObjectStartTime, currentTime, parentHitObjectStartTime);
+            float objectPosition = PositionAtTime(hitObject.HitObject.StartTime, currentTime, parentHitObjectStartTime);
+            float offset = objectPosition - parentPosition;
+
+            if (scrollingAxis == Direction.Horizontal)
+                hitObject.X = offset;
+            else
+                hitObject.Y = offset;
+        }
+
+        /// <summary>
+        /// Recomputes nested lifetimes without touching geometry. Nested lifetimes depend on the
+        /// algorithm and time range only, so they are refreshed when the layout cache is invalidated
+        /// rather than every frame.
+        /// </summary>
+        private void updateNestedLifetimes(DrawableHitObject hitObject)
+        {
+            foreach (var nested in hitObject.NestedHitObjects)
+            {
+                setComputedLifetime(nested.Entry);
+                updateNestedLifetimes(nested);
             }
         }
 
