@@ -2,6 +2,7 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -31,6 +32,8 @@ using osu.Game.EzOsuGame.Skills.Dan;
 using osu.Game.EzOsuGame.Skills.Mina;
 using osu.Game.EzOsuGame.Skills.PPP;
 using osu.Game.EzOsuGame.Skills.SkillTag;
+using osu.Game.EzOsuGame.Skills.SkillTag.KeyPattern;
+using osu.Game.EzOsuGame.Beatmaps;
 using osu.Game.EzOsuGame.Skills.SSR;
 using osu.Game.EzOsuGame.Startup;
 using osu.Game.Online.API;
@@ -125,6 +128,9 @@ namespace osu.Game.Database
 
         [Resolved]
         private EzSSRUnit ezSSRUnit { get; set; } = null!;
+
+        [Resolved]
+        private EzKeyPatternUnit ezKeyPatternUnit { get; set; } = null!;
 
         [Resolved]
         private EzCSIUnit ezCSIUnit { get; set; } = null!;
@@ -707,6 +713,11 @@ namespace osu.Game.Database
         {
             EzStartupTrace.Log($"BDSP EzRealm backfill begin scope={scope}");
 
+            if (scope.HasFlag(EzAnalysisSystem.KeyPattern) && skillStore.IsExpired(EzAnalysisSystem.KeyPattern))
+                Logger.Log($"Retiring KeyPattern axes for recomputation: {string.Join(", ", skillStore.Invalidate(EzAnalysisSystem.KeyPattern, includeDownstream: false))}.");
+
+            bool sunnyFillFinished = true;
+
             if (scope.HasFlag(EzAnalysisSystem.SSR))
             {
                 // A tuning edit never bumps the revision, so the stored rows look current while having been produced
@@ -715,15 +726,34 @@ namespace osu.Game.Database
                 // what is still missing.
                 if (skillStore.IsExpired(EzAnalysisSystem.SSR) || EzSSRTuningSnapshot.IsPending)
                 {
-                    Logger.Log($"Retiring Sunny ratings for recomputation: {string.Join(", ", skillStore.Invalidate(EzAnalysisSystem.SSR))}.");
+                    // BeatmapInfo columns go to -1 (queued like every other BDSP pass); downstream Realm rows stay
+                    // until Sunny finishes, with AppliedVersion=0 marking the owed downstream reset.
+                    Logger.Log($"Retiring Sunny ratings for recomputation: {string.Join(", ", skillStore.Invalidate(EzAnalysisSystem.SSR, includeDownstream: false))}.");
 
                     if (EzSSRTuningSnapshot.IsPending)
                         EzSSRTuningSnapshot.Record();
                 }
 
-                if (!populateMissingSunnyStarRatings())
-                    Logger.Log("Sunny rating pass did not finish; the remaining charts stay missing and are picked up next launch.");
+                (sunnyFillFinished, _) = populateMissingSunnyStarRatings();
+
+                if (!sunnyFillFinished)
+                    Logger.Log("Sunny rating pass did not finish; downstream chart skills stay until Sunny finishes.");
+
+                if (sunnyFillFinished && skillStore.DownstreamAwaitingReset(EzAnalysisSystem.SSR))
+                {
+                    // KeyPattern rows were written in the same Sunny pass; retiring them would recompute the same axes.
+                    Logger.Log($"Sunny fill finished; resetting downstream of SSR: {string.Join(", ", skillStore.InvalidateDownstream(EzAnalysisSystem.SSR, new[] { EzAnalysisSystem.KeyPattern }))}.");
+                }
+
+                if (sunnyFillFinished && !populateMissingSunnySrSkillAxes())
+                    Logger.Log("Sunny SR4 skill axis pass did not finish; remaining charts are picked up next launch.");
+
+                if (sunnyFillFinished)
+                    populateMissingMultiSystemBaselines();
             }
+
+            if (scope.HasFlag(EzAnalysisSystem.KeyPattern) && !populateMissingKeyPatternAxes())
+                Logger.Log("KeyPattern axis pass did not finish; remaining charts are picked up next launch.");
 
             if (scope.HasFlag(EzAnalysisSystem.Official))
                 populateOfficialBaselines();
@@ -747,39 +777,96 @@ namespace osu.Game.Database
                 Logger.Log($"Ez analysis revisions: Mina v{EzMinaEngine.VERSION}, CSI v{EzCSIEngine.VERSION}, Dan v{EzDanEngine.VERSION}.");
             }
 
-            bool needsChartChain = scope.HasFlag(EzAnalysisSystem.Mina)
-                                   || scope.HasFlag(EzAnalysisSystem.CSI)
-                                   || scope.HasFlag(EzAnalysisSystem.Dan)
-                                   || scope.HasFlag(EzAnalysisSystem.PPP);
+            EzChartChainBackfillScope.Resolve(scope, out _, out _, out _, out _, out bool needsChartChain);
 
             if (needsChartChain)
             {
                 // Same contract as the Sunny pass: a revision that is behind is retired once instead of being read as
                 // stale by every later pass, so a cancelled pass resumes on the rows still missing.
-                retireExpiredChainSystems(scope);
+                retireExpiredChainSystems(scope, out bool stagedMinaUpstream, out bool stagedCsiUpstream);
 
-                // One pass over the library. Each chart pays only for the stages it owes, but it is loaded,
-                // converted and written by one iteration instead of one per stage.
-                populateChartChain(
-                    skillStore.CollectChartChainState("BDSP"),
-                    csi: scope.HasFlag(EzAnalysisSystem.CSI),
-                    msd: scope.HasFlag(EzAnalysisSystem.Mina),
-                    ppp: scope.HasFlag(EzAnalysisSystem.PPP),
-                    dan: scope.HasFlag(EzAnalysisSystem.Dan));
+                if (!runChartChainBackfill(scope, sunnyFillFinished, stagedMinaUpstream, stagedCsiUpstream))
+                    Logger.Log("Chart chain backfill did not finish; downstream rows stay until the upstream pass completes.");
             }
 
             EzStartupTrace.Log($"BDSP EzRealm backfill end scope={scope}");
         }
 
-        private void retireExpiredChainSystems(EzAnalysisSystem scope)
+        private void retireExpiredChainSystems(EzAnalysisSystem scope, out bool stagedMinaUpstream, out bool stagedCsiUpstream)
         {
+            stagedMinaUpstream = false;
+            stagedCsiUpstream = false;
+
             foreach (var system in new[] { EzAnalysisSystem.Mina, EzAnalysisSystem.CSI, EzAnalysisSystem.Dan, EzAnalysisSystem.PPP })
             {
                 if (!scope.HasFlag(system) || !skillStore.IsExpired(system))
                     continue;
 
-                Logger.Log($"Retiring {system} rows for recomputation: {string.Join(", ", skillStore.Invalidate(system))}.");
+                bool upstreamOnly = system is EzAnalysisSystem.Mina or EzAnalysisSystem.CSI;
+
+                if (system == EzAnalysisSystem.Mina)
+                    stagedMinaUpstream = true;
+
+                if (system == EzAnalysisSystem.CSI)
+                    stagedCsiUpstream = true;
+
+                Logger.Log($"Retiring {system} rows for recomputation: {string.Join(", ", skillStore.Invalidate(system, includeDownstream: !upstreamOnly))}.");
             }
+        }
+
+        /// <summary>
+        /// Runs the chart chain, staging downstream retirement until the upstream stage that forced it has finished.
+        /// </summary>
+        private bool runChartChainBackfill(EzAnalysisSystem scope, bool sunnyFillFinished, bool stagedMinaUpstream, bool stagedCsiUpstream)
+        {
+            EzChartChainBackfillScope.Resolve(scope, out bool runMsd, out bool runCsi, out bool runDan, out bool runPpp, out _);
+
+            if (scope.HasFlag(EzAnalysisSystem.SSR) && !sunnyFillFinished)
+                runDan = false;
+
+            if (stagedMinaUpstream)
+            {
+                if (!populateChartChainStages(msd: true, csi: false, ppp: false, dan: false))
+                    return false;
+
+                if (skillStore.DownstreamAwaitingReset(EzAnalysisSystem.Mina) && shouldResetDownstreamAfterUpstreamFill(scope, EzAnalysisSystem.Mina))
+                    Logger.Log($"Mina fill finished; resetting downstream of Mina: {string.Join(", ", skillStore.InvalidateDownstream(EzAnalysisSystem.Mina))}.");
+
+                EzChartChainBackfillScope.Resolve(scope, out _, out runCsi, out runDan, out runPpp, out _);
+
+                if (scope.HasFlag(EzAnalysisSystem.SSR) && !sunnyFillFinished)
+                    runDan = false;
+
+                return populateChartChainStages(msd: false, csi: runCsi, ppp: runPpp, dan: runDan);
+            }
+
+            if (stagedCsiUpstream)
+            {
+                if (!populateChartChainStages(msd: runMsd, csi: true, ppp: false, dan: false))
+                    return false;
+
+                if (skillStore.DownstreamAwaitingReset(EzAnalysisSystem.CSI) && shouldResetDownstreamAfterUpstreamFill(scope, EzAnalysisSystem.CSI))
+                    Logger.Log($"CSI fill finished; resetting downstream of CSI: {string.Join(", ", skillStore.InvalidateDownstream(EzAnalysisSystem.CSI))}.");
+
+                EzChartChainBackfillScope.Resolve(scope, out _, out _, out runDan, out runPpp, out _);
+
+                if (scope.HasFlag(EzAnalysisSystem.SSR) && !sunnyFillFinished)
+                    runDan = false;
+
+                return populateChartChainStages(msd: false, csi: false, ppp: runPpp, dan: runDan);
+            }
+
+            return populateChartChainStages(msd: runMsd, csi: runCsi, ppp: runPpp, dan: runDan);
+        }
+
+        private bool populateChartChainStages(bool msd, bool csi, bool ppp, bool dan)
+        {
+            return populateChartChain(
+                skillStore.CollectChartChainState("BDSP"),
+                csi: csi,
+                msd: msd,
+                ppp: ppp,
+                dan: dan);
         }
 
         private void clearEzRealmMetadata(EzAnalysisSystem scope)
@@ -790,23 +877,25 @@ namespace osu.Game.Database
             // carry that to the systems derived from it. The revision is recorded at the same time, so an interrupted
             // pass resumes on whatever is still missing instead of retiring the library again.
             if (scope.HasFlag(EzAnalysisSystem.Mina))
-                Logger.Log($"Retiring Mina and its downstream systems: {string.Join(", ", skillStore.Invalidate(EzAnalysisSystem.Mina))}");
+                retireRealmSystemForForce(scope, EzAnalysisSystem.Mina, "Retiring Mina");
 
             if (scope.HasFlag(EzAnalysisSystem.CSI))
-                Logger.Log($"Retiring CSI and its downstream systems: {string.Join(", ", skillStore.Invalidate(EzAnalysisSystem.CSI))}");
+                retireRealmSystemForForce(scope, EzAnalysisSystem.CSI, "Retiring CSI");
 
             if (scope.HasFlag(EzAnalysisSystem.Dan))
-                Logger.Log($"Retiring Dan: {string.Join(", ", skillStore.Invalidate(EzAnalysisSystem.Dan))}");
+                retireRealmSystemForForce(scope, EzAnalysisSystem.Dan, "Retiring Dan");
 
             if (scope.HasFlag(EzAnalysisSystem.PPP))
-                Logger.Log($"Retiring PP+: {string.Join(", ", skillStore.Invalidate(EzAnalysisSystem.PPP))}");
+                retireRealmSystemForForce(scope, EzAnalysisSystem.PPP, "Retiring PP+");
 
             if (scope.HasFlag(EzAnalysisSystem.SSR))
             {
-                // Dan reads the Sunny rating, so the dependency edge retires it along with the ratings.
-                Logger.Log($"Retiring Sunny ratings: {string.Join(", ", skillStore.Invalidate(EzAnalysisSystem.SSR))}");
+                retireRealmSystemForForce(scope, EzAnalysisSystem.SSR, "Retiring Sunny ratings");
                 skillProvider.InvalidateLiveMetrics();
             }
+
+            if (scope.HasFlag(EzAnalysisSystem.KeyPattern))
+                retireRealmSystemForForce(scope, EzAnalysisSystem.KeyPattern, "Retiring KeyPattern axes");
 
             bool clearBeatmapInfoFields = scope.HasFlag(EzAnalysisSystem.MetadataTags)
                                           || scope.HasFlag(EzAnalysisSystem.Official);
@@ -881,22 +970,62 @@ namespace osu.Game.Database
 
         private void forceEzRealmMetadataRecalculation() => clearEzRealmMetadata(EzAnalysisSystem.All);
 
+        private void retireRealmSystemForForce(EzAnalysisSystem scope, EzAnalysisSystem system, string logPrefix)
+        {
+            bool cascade = shouldCascadeInvalidationOnForce(scope, system);
+            Logger.Log($"{logPrefix}{(cascade ? " and its downstream systems" : string.Empty)}: {string.Join(", ", skillStore.Invalidate(system, cascade))}.");
+        }
+
+        /// <summary>
+        /// Force-clear only cascades to downstream when those systems are part of the same maintenance request.
+        /// </summary>
+        private static bool shouldCascadeInvalidationOnForce(EzAnalysisSystem scope, EzAnalysisSystem system)
+        {
+            if (scope.HasFlag(EzAnalysisSystem.All))
+                return true;
+
+            foreach (var downstream in EzChartSkillStore.DownstreamOf(system))
+            {
+                if (!scope.HasFlag(downstream))
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// After an upstream pass, derived rows are reset only when the request also covers at least one downstream system.
+        /// </summary>
+        private static bool shouldResetDownstreamAfterUpstreamFill(EzAnalysisSystem scope, EzAnalysisSystem upstream)
+        {
+            if (scope.HasFlag(EzAnalysisSystem.All))
+                return true;
+
+            foreach (var downstream in EzChartSkillStore.DownstreamOf(upstream))
+            {
+                if (scope.HasFlag(downstream))
+                    return true;
+            }
+
+            return false;
+        }
+
         /// <summary>
         /// Fills the SunnyStarRatings that are not stored yet.
         /// </summary>
         /// <remarks>
-        /// Retirement happens before this runs (<see cref="EzChartSkillStore.Invalidate"/>), so the only question here
+        /// Retirement happens before this runs (<see cref="EzChartSkillStore.Invalidate(EzAnalysisSystem)"/>), so the only question here
         /// is whether a chart has a rating: a pass that is cancelled leaves the rest missing, and the next launch
         /// continues from there instead of retiring everything again.
         /// </remarks>
-        private bool populateMissingSunnyStarRatings()
+        private (bool completed, int starDebtCount) populateMissingSunnyStarRatings()
         {
-            HashSet<Guid> beatmapIds = new HashSet<Guid>();
-
             Logger.Log("Querying for beatmaps with missing SunnyStarRatings...");
 
-            realmAccess.Run(r =>
+            var beatmapIds = realmAccess.Run(r =>
             {
+                var list = new List<Guid>();
+
                 foreach (var b in r.All<BeatmapInfo>())
                 {
                     if (b.BeatmapSet == null)
@@ -908,12 +1037,14 @@ namespace osu.Game.Database
                     if (!EzSSRUnit.SupportsRuleset(b.Ruleset.OnlineID))
                         continue;
 
-                    beatmapIds.Add(b.ID);
+                    list.Add(b.ID);
                 }
+
+                return list;
             });
 
             if (beatmapIds.Count == 0)
-                return true;
+                return (true, 0);
 
             Logger.Log($"Found {beatmapIds.Count} beatmaps which require SunnyStarRating reprocessing.");
 
@@ -921,54 +1052,64 @@ namespace osu.Game.Database
                 EzAnalysisNotificationStrings.SUNNY_RUNNING,
                 EzAnalysisNotificationStrings.SUNNY_COMPLETED);
 
-            ChartBatchResult batch = runChartBatch(beatmapIds.ToList(), processSunnyRating, notification);
+            ChartBatchResult batch = runSunnyMaintenance(beatmapIds, notification, beatmap => ezSSRUnit.TryCompute(beatmap, CancellationToken.None));
 
-            completeNotification(notification, batch.Processed, beatmapIds.Count, batch.Failed);
+            completeNotification(notification, batch.Attempted, beatmapIds.Count, batch.Failed);
+
+            bool completed = !batch.Aborted && notification?.State != ProgressNotificationState.Cancelled;
+            return (completed, beatmapIds.Count);
+        }
+
+        /// <summary>
+        /// Fills Sunny SR4 chart skill axes where the star is already stored (see <see cref="EzChartSkillStore.CollectSunnySrSkillDebt"/>).
+        /// </summary>
+        private bool populateMissingSunnySrSkillAxes()
+        {
+            IReadOnlyList<Guid> beatmapIds = skillStore.CollectSunnySrSkillDebt();
+
+            if (beatmapIds.Count == 0)
+                return true;
+
+            Logger.Log($"Found {beatmapIds.Count} beatmaps which require Sunny SR4 skill axis backfill.");
+
+            var notification = showProgressNotification(beatmapIds.Count,
+                EzAnalysisNotificationStrings.SUNNY_SKILL_AXES_RUNNING,
+                EzAnalysisNotificationStrings.SUNNY_SKILL_AXES_COMPLETED);
+
+            ChartBatchResult batch = runSunnyAxesMaintenance(beatmapIds, notification, beatmap => ezSSRUnit.TryBackfillSunnyAxes(beatmap, CancellationToken.None));
+
+            completeNotification(notification, batch.Attempted, beatmapIds.Count, batch.Failed);
 
             return !batch.Aborted && notification?.State != ProgressNotificationState.Cancelled;
+        }
 
-            bool processSunnyRating(Guid id)
-            {
-                var beatmap = realmAccess.Run(r => r.Find<BeatmapInfo>(id)?.Detach());
+        private bool populateMissingKeyPatternAxes()
+        {
+            IReadOnlyList<Guid> beatmapIds = skillStore.CollectKeyPatternSkillDebt();
 
-                if (beatmap == null)
-                    return false;
-
-                bool computed = ezSSRUnit.ComputeAndStore(beatmap, CancellationToken.None);
-
-                // Load failures and "nothing to rate" paths must leave a settled star (>= 0), or the same chart is
-                // selected again on every launch. Zero is the failure / N/A stamp; a manual SSR rebuild clears it.
-                bool settled = realmAccess.Run(r => r.Find<BeatmapInfo>(id)?.EzRatingData.SunnySR >= 0);
-
-                if (!settled)
-                {
-                    realmAccess.Write(r =>
-                    {
-                        if (r.Find<BeatmapInfo>(id) is BeatmapInfo live)
-                            EzRatingWriter.MarkProcessingFailed(live, EzAnalysisSystem.SSR);
-                    });
-                }
-
-                if (!computed)
-                    return false;
-
-                if (settled)
-                    ((IWorkingBeatmapCache)beatmapManager).Invalidate(beatmap);
-
+            if (beatmapIds.Count == 0)
                 return true;
-            }
+
+            Logger.Log($"Found {beatmapIds.Count} beatmaps which require KeyPattern axis backfill.");
+
+            var notification = showProgressNotification(beatmapIds.Count,
+                EzAnalysisNotificationStrings.KEYPATTERN_RUNNING,
+                EzAnalysisNotificationStrings.KEYPATTERN_COMPLETED);
+
+            ChartBatchResult batch = runKeyPatternAxesMaintenance(beatmapIds, notification, beatmap => ezKeyPatternUnit.TryCompute(beatmap, CancellationToken.None));
+
+            completeNotification(notification, batch.Attempted, beatmapIds.Count, batch.Failed);
+
+            return !batch.Aborted && notification?.State != ProgressNotificationState.Cancelled;
         }
 
         /// <summary>
         /// Runs every enabled chart-chain stage over one pass of the library.
         /// </summary>
         /// <remarks>
-        /// The stages used to be four separate full-library loops, so a chart needing all four was loaded and
-        /// converted four times. They are still four independent stages with their own revision gates (a chart
-        /// only pays for the stages it owes), but they now share one beatmap load and run in dependency order
-        /// within the same iteration: Mina, then CSI, then dan, then PP+ - each stage reading what the earlier
-        /// stages in this same iteration just wrote. Mina leads because CSI settles against its unrateable verdict;
-        /// dan reads both rows; PP+ is independent and goes last.
+        /// One chart load per worker when multiple stages run. Stages keep separate revision gates; compute is
+        /// DTO-only (Mina → CSI → Dan → PP+ in memory, no per-stage Realm writes). A single writer commits batches
+        /// of 50; CSI live cache and ChartDan session invalidate after each batch flush.
         /// </remarks>
         private bool populateChartChain(EzChartChainState chain, bool csi, bool msd, bool ppp, bool dan)
         {
@@ -1005,7 +1146,21 @@ namespace osu.Game.Database
                 EzAnalysisNotificationStrings.ChartChainRunning(msd, csi, dan, ppp),
                 EzAnalysisNotificationStrings.ChartChainCompleted(msd, csi, dan, ppp));
 
-            ChartBatchResult result = runChartBatch(work, processChart, notification);
+            EzChartChainApplyFlags stageFlags = EzChartChainApplyFlags.None;
+
+            if (msd)
+                stageFlags |= EzChartChainApplyFlags.Msd;
+
+            if (csi)
+                stageFlags |= EzChartChainApplyFlags.Csi;
+
+            if (dan)
+                stageFlags |= EzChartChainApplyFlags.Dan;
+
+            if (ppp)
+                stageFlags |= EzChartChainApplyFlags.Ppp;
+
+            ChartBatchResult result = runChartChainMaintenance(work, stageFlags, notification, computeChartChain);
 
             int attemptedCount = result.Attempted;
             int processedCount = result.Processed;
@@ -1020,44 +1175,87 @@ namespace osu.Game.Database
 
             return !result.Aborted && notification?.State != ProgressNotificationState.Cancelled;
 
-            bool processChart((Guid Id, string? Hash) item)
+            EzChartChainMaintenanceResult? computeChartChain((Guid Id, string? Hash) item, BeatmapInfo beatmap)
             {
-                BeatmapInfo? beatmap = realmAccess.Run(r => r.Find<BeatmapInfo>(item.Id)?.Detach());
-
-                if (beatmap == null)
-                    return false;
-
                 bool stageFailed = false;
                 bool msdWritten = false;
+                EzMinaMaintenanceSection? mina = null;
+                EzCsiMaintenanceSection? csiSection = null;
+                IBeatmap? sharedPlayable = null;
 
                 if (msd && item.Hash != null && chain.MsdOwed.Contains(item.Hash))
                 {
-                    if (ezBeatmapMinaComputer.ComputeAndStore(beatmap) != null)
-                        msdWritten = true;
-                    else if (skillStore.GetBeatmapSystemState(item.Hash, EzAnalysisSystem.Mina) != EzSkillRowState.Unrateable)
-                        stageFailed = true;
+                    mina = ezBeatmapMinaComputer.TryCompute(beatmap);
+
+                    switch (mina)
+                    {
+                        case EzMinaMaintenanceSection.Vector:
+                            msdWritten = true;
+                            break;
+
+                        case EzMinaMaintenanceSection.TransientFailure:
+                            if (skillStore.GetBeatmapSystemState(item.Hash, EzAnalysisSystem.Mina) != EzSkillRowState.Unrateable)
+                                stageFailed = true;
+
+                            break;
+                    }
                 }
 
                 if (csi && item.Hash != null && chain.ChartSkillInfoOwed.Contains(item.Hash))
                 {
-                    // True = settled afterwards (computed, or stamped unavailable).
-                    if (!ezCSIUnit.TryEnsure(beatmap))
+                    csiSection = ezCSIUnit.TryCompute(beatmap, mina, chartChainPass: true);
+
+                    if (csiSection is EzCsiMaintenanceSection.TransientFailure)
                         stageFailed = true;
                 }
+
+                EzDanMaintenanceSection? danSection = null;
 
                 if (dan && item.Hash != null && (msdWritten || chain.ChartDanOwed.Contains(item.Hash)))
                 {
-                    if (!chartDanUnit.ComputeAndStoreFromStored(beatmap))
+                    bool allowStoredMina = !msdWritten;
+
+                    if ((csi || msd) && sharedPlayable == null)
+                    {
+                        try
+                        {
+                            sharedPlayable = EzPlayableBeatmapCache.GetShared(beatmapManager.GetWorkingBeatmap(beatmap), beatmap.Ruleset);
+                        }
+                        catch (Exception)
+                        {
+                            // Dan can fall back to beatmap scalars.
+                        }
+                    }
+
+                    danSection = chartDanUnit.TryComputeFromInputs(beatmap, mina, csiSection, allowStoredMina, sharedPlayable);
+
+                    if (danSection is EzDanMaintenanceSection.TransientFailure)
                         stageFailed = true;
                 }
+
+                EzPppMaintenanceSection? pppSection = null;
 
                 if (ppp && pppDebt.Contains(item.Id))
                 {
-                    if (ezBeatmapPPPComputer.ComputeAndStore(beatmap) == null)
+                    pppSection = ezBeatmapPPPComputer.TryCompute(beatmap);
+
+                    if (pppSection is EzPppMaintenanceSection.TransientFailure)
                         stageFailed = true;
                 }
 
-                return !stageFailed;
+                if (stageFailed)
+                    return null;
+
+                bool invalidate = EzChartChainMaintenanceResult.ComputeRequiresBeatmapCacheInvalidate(mina, pppSection);
+
+                return new EzChartChainMaintenanceResult(
+                    beatmap.ID,
+                    beatmap.Hash,
+                    mina,
+                    csiSection,
+                    danSection,
+                    pppSection,
+                    invalidate);
             }
 
             IEnumerable<string> enumerateOwedHashes()
@@ -2313,6 +2511,729 @@ namespace osu.Game.Database
             config.SetValue(OsuSetting.LastOnlineTagsPopulation, metadataSourceFetchDate);
         }
 
+        private const int sunny_maintenance_store_batch_size = 50;
+
+        private const int sunny_maintenance_queue_capacity = 100;
+
+        /// <summary>
+        /// Sunny maintenance: workers compute; one writer commits results in fixed batches aligned with progress.
+        /// </summary>
+        /// <remarks>
+        /// Notification cancellation drains already-computed charts. Shutdown disposes Realm and abandons uncommitted queue items.
+        /// </remarks>
+        private ChartBatchResult runChartChainMaintenance(
+            IReadOnlyList<(Guid Id, string? Hash)> work,
+            EzChartChainApplyFlags stageFlags,
+            ProgressNotification? notification,
+            Func<(Guid Id, string? Hash), BeatmapInfo, EzChartChainMaintenanceResult?> compute)
+        {
+            int workers = Math.Min(analysisWorkerCount, Math.Max(work.Count, 1));
+            var pending = new BlockingCollection<(Guid Id, EzChartChainMaintenanceResult? Result)>(sunny_maintenance_queue_capacity);
+
+            lastChartChainMaintenanceProgressBatch = -1;
+
+            try
+            {
+                return runChartChainMaintenanceWithQueue(work, stageFlags, notification, compute, pending, workers);
+            }
+            finally
+            {
+                pending.Dispose();
+            }
+        }
+
+        private ChartBatchResult runChartChainMaintenanceWithQueue(
+            IReadOnlyList<(Guid Id, string? Hash)> work,
+            EzChartChainApplyFlags stageFlags,
+            ProgressNotification? notification,
+            Func<(Guid Id, string? Hash), BeatmapInfo, EzChartChainMaintenanceResult?> compute,
+            BlockingCollection<(Guid Id, EzChartChainMaintenanceResult? Result)> pending,
+            int workers)
+        {
+            int total = work.Count;
+            int next = -1;
+            int realmShutdown = 0;
+            int processed = 0;
+            int failed = 0;
+            var storeBatch = new List<(Guid Id, EzChartChainMaintenanceResult? Result)>(sunny_maintenance_store_batch_size);
+
+            var writer = new Thread(writePending, 4 * 1024 * 1024)
+            {
+                IsBackground = true,
+                Name = "ez-chart-chain-write",
+            };
+
+            var threads = new Thread[workers];
+
+            writer.Start();
+
+            for (int i = 0; i < workers; i++)
+            {
+                threads[i] = new Thread(runComputeWorker, 4 * 1024 * 1024)
+                {
+                    IsBackground = true,
+                    Name = $"ez-chart-chain-compute-{i}",
+                };
+
+                threads[i].Start();
+            }
+
+            foreach (var thread in threads)
+                thread.Join();
+
+            completePending();
+            writer.Join();
+
+            return new ChartBatchResult(processed + failed, processed, failed, Volatile.Read(ref realmShutdown) != 0);
+
+            void completePending()
+            {
+                try
+                {
+                    pending.CompleteAdding();
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }
+
+            void enqueue(Guid id, EzChartChainMaintenanceResult? result)
+            {
+                try
+                {
+                    pending.Add((id, result));
+                }
+                catch (ObjectDisposedException)
+                {
+                    Interlocked.Exchange(ref realmShutdown, 1);
+                    completePending();
+                }
+                catch (InvalidOperationException)
+                {
+                    Interlocked.Exchange(ref realmShutdown, 1);
+                }
+            }
+
+            void runComputeWorker()
+            {
+                while (Volatile.Read(ref realmShutdown) == 0)
+                {
+                    if (notification?.State == ProgressNotificationState.Cancelled)
+                        return;
+
+                    int index = Interlocked.Increment(ref next);
+
+                    if (index >= total)
+                        return;
+
+                    sleepIfRequired();
+                    var item = work[index];
+
+                    try
+                    {
+                        BeatmapInfo? beatmap = realmAccess.Run(r => r.Find<BeatmapInfo>(item.Id)?.Detach());
+                        EzChartChainMaintenanceResult? result = beatmap == null ? null : compute(item, beatmap);
+                        enqueue(item.Id, result);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        Interlocked.Exchange(ref realmShutdown, 1);
+                        completePending();
+                        return;
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.Log($"Chart chain compute failed on {item.Id}: {e}");
+                        enqueue(item.Id, null);
+                    }
+                }
+            }
+
+            void writePending()
+            {
+                try
+                {
+                    foreach (var item in pending.GetConsumingEnumerable())
+                    {
+                        if (Volatile.Read(ref realmShutdown) != 0)
+                            continue;
+
+                        sleepIfRequired();
+
+                        storeBatch.Add(item);
+
+                        if (storeBatch.Count >= sunny_maintenance_store_batch_size)
+                            flushStoreBatch(finalProgress: false);
+                    }
+
+                    if (storeBatch.Count > 0 && Volatile.Read(ref realmShutdown) == 0)
+                        flushStoreBatch(finalProgress: true);
+                }
+                finally
+                {
+                    storeBatch.Clear();
+                }
+            }
+
+            void flushStoreBatch(bool finalProgress)
+            {
+                if (storeBatch.Count == 0)
+                    return;
+
+                if (Volatile.Read(ref realmShutdown) != 0)
+                {
+                    storeBatch.Clear();
+                    return;
+                }
+
+                try
+                {
+                    var batchCopy = storeBatch.ToArray();
+                    EzChartSkillStore.ChartChainMaintenanceBatchResult batchResult =
+                        skillStore.ApplyChartChainMaintenanceBatch(batchCopy, stageFlags);
+                    processed += batchResult.Processed;
+                    failed += batchResult.Failed;
+                    storeBatch.Clear();
+
+                    ezCSIUnit.InvalidateSubjectsAfterBatch(batchResult.CsiInvalidationHashes);
+
+                    foreach (string hash in batchResult.CsiTransientMissHashes)
+                        ezCSIUnit.RecordSessionMissAfterCommit(hash);
+
+                    foreach (string hash in batchResult.DanInvalidationHashes)
+                        skillProvider.InvalidateChartDanSession(hash);
+
+                    foreach (var (id, result) in batchCopy)
+                    {
+                        if (result is { RequiresBeatmapCacheInvalidate: true })
+                        {
+                            BeatmapInfo? beatmap = realmAccess.Run(r => r.Find<BeatmapInfo>(id)?.Detach());
+
+                            if (beatmap != null)
+                                ((IWorkingBeatmapCache)beatmapManager).Invalidate(beatmap);
+                        }
+                    }
+
+                    if (Volatile.Read(ref realmShutdown) == 0)
+                        updateChartChainMaintenanceBatchProgress(notification, processed + failed, total, finalProgress);
+                }
+                catch (ObjectDisposedException)
+                {
+                    Interlocked.Exchange(ref realmShutdown, 1);
+                    storeBatch.Clear();
+                }
+                catch (Exception e)
+                {
+                    Logger.Log($"Chart chain maintenance store batch failed: {e}");
+                    failed += storeBatch.Count;
+                    storeBatch.Clear();
+                }
+            }
+        }
+
+        private ChartBatchResult runSunnyAxesMaintenance(
+            IReadOnlyList<Guid> work,
+            ProgressNotification? notification,
+            Func<BeatmapInfo, EzSunnyAxesMaintenanceResult?> compute)
+        {
+            int workers = Math.Min(analysisWorkerCount, Math.Max(work.Count, 1));
+            var pending = new BlockingCollection<(Guid Id, EzSunnyAxesMaintenanceResult? Result)>(sunny_maintenance_queue_capacity);
+
+            lastSunnyAxesMaintenanceProgressBatch = -1;
+
+            try
+            {
+                return runSunnyAxesMaintenanceWithQueue(work, notification, compute, pending, workers);
+            }
+            finally
+            {
+                pending.Dispose();
+            }
+        }
+
+        private ChartBatchResult runSunnyAxesMaintenanceWithQueue(
+            IReadOnlyList<Guid> work,
+            ProgressNotification? notification,
+            Func<BeatmapInfo, EzSunnyAxesMaintenanceResult?> compute,
+            BlockingCollection<(Guid Id, EzSunnyAxesMaintenanceResult? Result)> pending,
+            int workers)
+            => runGuidMaintenanceWithQueue(
+                work,
+                notification,
+                compute,
+                pending,
+                workers,
+                "ez-sunny-axes",
+                batch =>
+                {
+                    int failed = 0;
+                    int processed = 0;
+                    var toStore = new List<EzSunnyAxesMaintenanceResult>();
+
+                    foreach (var (_, result) in batch)
+                    {
+                        if (result == null)
+                        {
+                            failed++;
+                            continue;
+                        }
+
+                        if (!result.RequiresStore)
+                        {
+                            processed++;
+                            continue;
+                        }
+
+                        toStore.Add(result);
+                    }
+
+                    (int stored, int storeFailed) = skillStore.ApplySunnyAxesMaintenanceBatch(toStore);
+                    return (processed + stored, failed + storeFailed);
+                },
+                beatmap => ((IWorkingBeatmapCache)beatmapManager).Invalidate(beatmap),
+                r => r is { RequiresStore: true },
+                (n, committed, total, final) =>
+                    updateMaintenanceBatchProgress(n, committed, total, final, ref lastSunnyAxesMaintenanceProgressBatch, "Sunny skill axes maintenance"));
+
+        private ChartBatchResult runKeyPatternAxesMaintenance(
+            IReadOnlyList<Guid> work,
+            ProgressNotification? notification,
+            Func<BeatmapInfo, EzKeyPatternMaintenanceResult?> compute)
+        {
+            int workers = Math.Min(analysisWorkerCount, Math.Max(work.Count, 1));
+            var pending = new BlockingCollection<(Guid Id, EzKeyPatternMaintenanceResult? Result)>(sunny_maintenance_queue_capacity);
+
+            lastKeyPatternAxesMaintenanceProgressBatch = -1;
+
+            try
+            {
+                return runKeyPatternAxesMaintenanceWithQueue(work, notification, compute, pending, workers);
+            }
+            finally
+            {
+                pending.Dispose();
+            }
+        }
+
+        private ChartBatchResult runKeyPatternAxesMaintenanceWithQueue(
+            IReadOnlyList<Guid> work,
+            ProgressNotification? notification,
+            Func<BeatmapInfo, EzKeyPatternMaintenanceResult?> compute,
+            BlockingCollection<(Guid Id, EzKeyPatternMaintenanceResult? Result)> pending,
+            int workers)
+            => runGuidMaintenanceWithQueue(
+                work,
+                notification,
+                compute,
+                pending,
+                workers,
+                "ez-keypattern-axes",
+                batch =>
+                {
+                    int failed = 0;
+                    int processed = 0;
+                    var toStore = new List<(Guid Id, EzKeyPatternMaintenanceResult?)>();
+
+                    foreach (var (id, result) in batch)
+                    {
+                        if (result == null)
+                        {
+                            failed++;
+                            continue;
+                        }
+
+                        if (!result.RequiresStore)
+                        {
+                            processed++;
+                            continue;
+                        }
+
+                        toStore.Add((id, result));
+                    }
+
+                    (int stored, int storeFailed) = skillStore.ApplyKeyPatternMaintenanceBatch(toStore);
+                    return (processed + stored, failed + storeFailed);
+                },
+                beatmap => ((IWorkingBeatmapCache)beatmapManager).Invalidate(beatmap),
+                r => r is { RequiresStore: true },
+                (n, committed, total, final) =>
+                    updateMaintenanceBatchProgress(n, committed, total, final, ref lastKeyPatternAxesMaintenanceProgressBatch, "KeyPattern axes maintenance"));
+
+        private ChartBatchResult runGuidMaintenanceWithQueue<TBatchResult>(
+            IReadOnlyList<Guid> work,
+            ProgressNotification? notification,
+            Func<BeatmapInfo, TBatchResult?> compute,
+            BlockingCollection<(Guid Id, TBatchResult? Result)> pending,
+            int workers,
+            string threadPrefix,
+            Func<IReadOnlyList<(Guid Id, TBatchResult? Result)>, (int Processed, int Failed)> applyBatch,
+            Action<BeatmapInfo> invalidateBeatmap,
+            Func<TBatchResult?, bool> shouldInvalidateBeatmap,
+            Action<ProgressNotification?, int, int, bool> reportBatchProgress)
+        {
+            int total = work.Count;
+            int next = -1;
+            int realmShutdown = 0;
+            int processed = 0;
+            int failed = 0;
+            var storeBatch = new List<(Guid Id, TBatchResult? Result)>(sunny_maintenance_store_batch_size);
+
+            var writer = new Thread(writePending, 4 * 1024 * 1024)
+            {
+                IsBackground = true,
+                Name = $"{threadPrefix}-write",
+            };
+
+            var threads = new Thread[workers];
+
+            writer.Start();
+
+            for (int i = 0; i < workers; i++)
+            {
+                threads[i] = new Thread(runComputeWorker, 4 * 1024 * 1024)
+                {
+                    IsBackground = true,
+                    Name = $"{threadPrefix}-compute-{i}",
+                };
+
+                threads[i].Start();
+            }
+
+            foreach (var thread in threads)
+                thread.Join();
+
+            completePending();
+            writer.Join();
+
+            return new ChartBatchResult(processed + failed, processed, failed, Volatile.Read(ref realmShutdown) != 0);
+
+            void completePending()
+            {
+                try
+                {
+                    pending.CompleteAdding();
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }
+
+            void enqueue(Guid id, TBatchResult? result)
+            {
+                try
+                {
+                    pending.Add((id, result));
+                }
+                catch (ObjectDisposedException)
+                {
+                    Interlocked.Exchange(ref realmShutdown, 1);
+                    completePending();
+                }
+                catch (InvalidOperationException)
+                {
+                    Interlocked.Exchange(ref realmShutdown, 1);
+                }
+            }
+
+            void runComputeWorker()
+            {
+                while (Volatile.Read(ref realmShutdown) == 0)
+                {
+                    if (notification?.State == ProgressNotificationState.Cancelled)
+                        return;
+
+                    int index = Interlocked.Increment(ref next);
+
+                    if (index >= total)
+                        return;
+
+                    sleepIfRequired();
+                    Guid id = work[index];
+
+                    try
+                    {
+                        BeatmapInfo? beatmap = realmAccess.Run(r => r.Find<BeatmapInfo>(id)?.Detach());
+                        TBatchResult? result = beatmap == null ? default : compute(beatmap);
+                        enqueue(id, result);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        Interlocked.Exchange(ref realmShutdown, 1);
+                        completePending();
+                        return;
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.Log($"{threadPrefix} compute failed on {id}: {e}");
+                        enqueue(id, default);
+                    }
+                }
+            }
+
+            void writePending()
+            {
+                try
+                {
+                    foreach (var item in pending.GetConsumingEnumerable())
+                    {
+                        if (Volatile.Read(ref realmShutdown) != 0)
+                            continue;
+
+                        sleepIfRequired();
+                        storeBatch.Add(item);
+
+                        if (storeBatch.Count >= sunny_maintenance_store_batch_size)
+                            flushStoreBatch(finalProgress: false);
+                    }
+
+                    if (storeBatch.Count > 0 && Volatile.Read(ref realmShutdown) == 0)
+                        flushStoreBatch(finalProgress: true);
+                }
+                finally
+                {
+                    storeBatch.Clear();
+                }
+            }
+
+            void flushStoreBatch(bool finalProgress)
+            {
+                if (storeBatch.Count == 0)
+                    return;
+
+                if (Volatile.Read(ref realmShutdown) != 0)
+                {
+                    storeBatch.Clear();
+                    return;
+                }
+
+                try
+                {
+                    var batchCopy = storeBatch.ToArray();
+                    (int batchProcessed, int batchFailed) = applyBatch(batchCopy);
+                    processed += batchProcessed;
+                    failed += batchFailed;
+                    storeBatch.Clear();
+
+                    foreach (var (id, result) in batchCopy)
+                    {
+                        if (result != null && shouldInvalidateBeatmap(result))
+                        {
+                            BeatmapInfo? beatmap = realmAccess.Run(r => r.Find<BeatmapInfo>(id)?.Detach());
+
+                            if (beatmap != null)
+                                invalidateBeatmap(beatmap);
+                        }
+                    }
+
+                    if (Volatile.Read(ref realmShutdown) == 0)
+                        reportBatchProgress(notification, processed + failed, total, finalProgress);
+                }
+                catch (ObjectDisposedException)
+                {
+                    Interlocked.Exchange(ref realmShutdown, 1);
+                    storeBatch.Clear();
+                }
+                catch (Exception e)
+                {
+                    Logger.Log($"{threadPrefix} maintenance store batch failed: {e}");
+                    failed += storeBatch.Count;
+                    storeBatch.Clear();
+                }
+            }
+        }
+
+        private ChartBatchResult runSunnyMaintenance(
+            IReadOnlyList<Guid> work,
+            ProgressNotification? notification,
+            Func<BeatmapInfo, EzSunnyMaintenanceResult?> compute)
+        {
+            int workers = Math.Min(analysisWorkerCount, Math.Max(work.Count, 1));
+            var pending = new BlockingCollection<(Guid Id, EzSunnyMaintenanceResult? Result)>(sunny_maintenance_queue_capacity);
+
+            lastSunnyMaintenanceProgressBatch = -1;
+
+            try
+            {
+                return runSunnyMaintenanceWithQueue(work, notification, compute, pending, workers);
+            }
+            finally
+            {
+                pending.Dispose();
+            }
+        }
+
+        private ChartBatchResult runSunnyMaintenanceWithQueue(
+            IReadOnlyList<Guid> work,
+            ProgressNotification? notification,
+            Func<BeatmapInfo, EzSunnyMaintenanceResult?> compute,
+            BlockingCollection<(Guid Id, EzSunnyMaintenanceResult? Result)> pending,
+            int workers)
+        {
+            int total = work.Count;
+            int next = -1;
+            int realmShutdown = 0;
+            int processed = 0;
+            int failed = 0;
+            var storeBatch = new List<(Guid Id, EzSunnyMaintenanceResult? Result)>(sunny_maintenance_store_batch_size);
+
+            var writer = new Thread(writePending, 4 * 1024 * 1024)
+            {
+                IsBackground = true,
+                Name = "ez-sunny-write",
+            };
+
+            var threads = new Thread[workers];
+
+            writer.Start();
+
+            for (int i = 0; i < workers; i++)
+            {
+                threads[i] = new Thread(runComputeWorker, 4 * 1024 * 1024)
+                {
+                    IsBackground = true,
+                    Name = $"ez-sunny-compute-{i}",
+                };
+
+                threads[i].Start();
+            }
+
+            foreach (var thread in threads)
+                thread.Join();
+
+            completePending();
+            writer.Join();
+
+            return new ChartBatchResult(processed + failed, processed, failed, Volatile.Read(ref realmShutdown) != 0);
+
+            void completePending()
+            {
+                try
+                {
+                    pending.CompleteAdding();
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }
+
+            void enqueue(Guid id, EzSunnyMaintenanceResult? result)
+            {
+                try
+                {
+                    pending.Add((id, result));
+                }
+                catch (ObjectDisposedException)
+                {
+                    Interlocked.Exchange(ref realmShutdown, 1);
+                    completePending();
+                }
+                catch (InvalidOperationException)
+                {
+                    Interlocked.Exchange(ref realmShutdown, 1);
+                }
+            }
+
+            void runComputeWorker()
+            {
+                while (Volatile.Read(ref realmShutdown) == 0)
+                {
+                    if (notification?.State == ProgressNotificationState.Cancelled)
+                        return;
+
+                    int index = Interlocked.Increment(ref next);
+
+                    if (index >= total)
+                        return;
+
+                    sleepIfRequired();
+                    Guid id = work[index];
+
+                    try
+                    {
+                        BeatmapInfo? beatmap = realmAccess.Run(r => r.Find<BeatmapInfo>(id)?.Detach());
+                        EzSunnyMaintenanceResult? result = beatmap == null ? null : compute(beatmap);
+
+                        if (beatmap != null && result is { RequiresStore: true, Star: >= 0 })
+                            ((IWorkingBeatmapCache)beatmapManager).Invalidate(beatmap);
+
+                        enqueue(id, result);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        Interlocked.Exchange(ref realmShutdown, 1);
+                        completePending();
+                        return;
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.Log($"Sunny compute failed on {id}: {e}");
+                        enqueue(id, null);
+                    }
+                }
+            }
+
+            void writePending()
+            {
+                try
+                {
+                    foreach (var item in pending.GetConsumingEnumerable())
+                    {
+                        if (Volatile.Read(ref realmShutdown) != 0)
+                            continue;
+
+                        sleepIfRequired();
+
+                        storeBatch.Add(item);
+
+                        if (storeBatch.Count >= sunny_maintenance_store_batch_size)
+                            flushStoreBatch(finalProgress: false);
+                    }
+
+                    if (storeBatch.Count > 0 && Volatile.Read(ref realmShutdown) == 0)
+                        flushStoreBatch(finalProgress: true);
+                }
+                finally
+                {
+                    storeBatch.Clear();
+                }
+            }
+
+            void flushStoreBatch(bool finalProgress)
+            {
+                if (storeBatch.Count == 0)
+                    return;
+
+                if (Volatile.Read(ref realmShutdown) != 0)
+                {
+                    storeBatch.Clear();
+                    return;
+                }
+
+                try
+                {
+                    var batchCopy = storeBatch.ToArray();
+                    (int batchProcessed, int batchFailed) = skillStore.ApplySunnyMaintenanceBatch(batchCopy);
+                    processed += batchProcessed;
+                    failed += batchFailed;
+                    storeBatch.Clear();
+
+                    if (Volatile.Read(ref realmShutdown) == 0)
+                        updateSunnyMaintenanceBatchProgress(notification, processed + failed, total, finalProgress);
+                }
+                catch (ObjectDisposedException)
+                {
+                    Interlocked.Exchange(ref realmShutdown, 1);
+                    storeBatch.Clear();
+                }
+                catch (Exception e)
+                {
+                    Logger.Log($"Sunny maintenance store batch failed: {e}");
+                    failed += storeBatch.Count;
+                    storeBatch.Clear();
+                }
+            }
+        }
+
         /// <summary>
         /// How many charts the analysis passes compute at once.
         /// </summary>
@@ -2320,6 +3241,7 @@ namespace osu.Game.Database
         /// The per-chart work is CPU bound and independent, so a single thread leaves most of the machine idle: one
         /// chart is a beatmap load, a conversion, and then the systems that read it. Workers are real threads rather
         /// than pool tasks because the engines behind them are per-thread state, and one core is left for the UI.
+        /// Sunny SR uses <see cref="runSunnyMaintenance"/>: compute stays parallel; results store in batches of <see cref="sunny_maintenance_store_batch_size"/>.
         /// </remarks>
         private static int analysisWorkerCount => Math.Clamp(Environment.ProcessorCount - 1, 1, 8);
 
@@ -2405,7 +3327,15 @@ namespace osu.Game.Database
         /// <summary>Outcome of one <see cref="runChartBatch{T}"/>.</summary>
         private readonly record struct ChartBatchResult(int Attempted, int Processed, int Failed, bool Aborted);
 
-        private int lastNotificationProgressReported = -1;
+        private float lastNotificationProgressReported = -1;
+
+        private int lastSunnyMaintenanceProgressBatch = -1;
+
+        private int lastChartChainMaintenanceProgressBatch = -1;
+
+        private int lastSunnyAxesMaintenanceProgressBatch = -1;
+
+        private int lastKeyPatternAxesMaintenanceProgressBatch = -1;
 
         private const int notification_progress_update_interval = 25;
 
@@ -2417,7 +3347,7 @@ namespace osu.Game.Database
 
         private readonly Lock notificationTextLock = new Lock();
 
-        private void updateNotificationProgress(ProgressNotification? notification, int processedCount, int totalCount)
+        private void updateNotificationProgress(ProgressNotification? notification, int processedCount, int totalCount, float progressStart = 0, float progressScale = 1)
         {
             if (notification == null)
                 return;
@@ -2425,20 +3355,25 @@ namespace osu.Game.Database
             // a fixed interval means batches smaller than it never report anything between the initial 0 and
             // completion, which reads as a permanently stuck progress bar.
             int updateInterval = Math.Max(1, Math.Min(notification_progress_update_interval, totalCount / 20));
+            float progress = progressStart + progressScale * processedCount / totalCount;
+            float progressInterval = progressScale * updateInterval / totalCount;
 
             bool shouldUpdate = processedCount == 0 ||
                                 processedCount >= totalCount ||
-                                processedCount - lastNotificationProgressReported >= updateInterval;
+                                progress - Volatile.Read(ref lastNotificationProgressReported) >= progressInterval;
 
             if (!shouldUpdate)
                 return;
 
             // Several analysis workers report at once; a stale value here only means a redundant UI update.
-            Volatile.Write(ref lastNotificationProgressReported, processedCount);
+            Volatile.Write(ref lastNotificationProgressReported, progress);
 
             Schedule(() =>
             {
                 if (notification.State == ProgressNotificationState.Cancelled)
+                    return;
+
+                if (progress < notification.Progress)
                     return;
 
                 LocalisableString baseText;
@@ -2450,11 +3385,77 @@ namespace osu.Game.Database
                 }
 
                 notification.Text = $"{baseText} ({EzAnalysisNotificationStrings.Progress(processedCount, totalCount)})";
-                notification.Progress = (float)processedCount / totalCount;
+                notification.Progress = progress;
             });
 
             if (processedCount > 0 && processedCount % 25 == 0)
                 Logger.Log($"Background progress: {processedCount} of {totalCount}");
+        }
+
+        private void updateSunnyMaintenanceBatchProgress(ProgressNotification? notification, int committedCount, int totalCount, bool finalProgressUpdate)
+            => updateMaintenanceBatchProgress(notification, committedCount, totalCount, finalProgressUpdate, ref lastSunnyMaintenanceProgressBatch, "Sunny maintenance");
+
+        private void updateChartChainMaintenanceBatchProgress(ProgressNotification? notification, int committedCount, int totalCount, bool finalProgressUpdate)
+            => updateMaintenanceBatchProgress(notification, committedCount, totalCount, finalProgressUpdate, ref lastChartChainMaintenanceProgressBatch, "Chart chain maintenance");
+
+        private void updateMaintenanceBatchProgress(
+            ProgressNotification? notification,
+            int committedCount,
+            int totalCount,
+            bool finalProgressUpdate,
+            ref int lastCompletedBatches,
+            string progressLogLabel)
+        {
+            if (notification == null)
+                return;
+
+            int completedBatches = committedCount / sunny_maintenance_store_batch_size;
+
+            if (!finalProgressUpdate)
+            {
+                if (committedCount == 0 || completedBatches <= Volatile.Read(ref lastCompletedBatches))
+                    return;
+            }
+
+            int displayCount = finalProgressUpdate ? committedCount : completedBatches * sunny_maintenance_store_batch_size;
+
+            if (!finalProgressUpdate && displayCount == 0)
+                return;
+
+            Volatile.Write(ref lastCompletedBatches, completedBatches);
+
+            updateMaintenanceBatchProgressUi(notification, displayCount, totalCount, finalProgressUpdate, progressLogLabel);
+        }
+
+        private void updateMaintenanceBatchProgressUi(ProgressNotification? notification, int displayCount, int totalCount, bool finalProgressUpdate, string progressLogLabel)
+        {
+            if (notification == null)
+                return;
+
+            float progress = totalCount > 0 ? (float)displayCount / totalCount : 1;
+
+            Schedule(() =>
+            {
+                if (notification.State == ProgressNotificationState.Cancelled && !finalProgressUpdate)
+                    return;
+
+                if (progress < notification.Progress)
+                    return;
+
+                LocalisableString baseText;
+
+                lock (notificationTextLock)
+                {
+                    if (!notificationBaseText.TryGetValue(notification, out baseText))
+                        baseText = notification.Text;
+                }
+
+                notification.Text = $"{baseText} ({EzAnalysisNotificationStrings.Progress(displayCount, totalCount)})";
+                notification.Progress = progress;
+
+                if (displayCount > 0 && displayCount % sunny_maintenance_store_batch_size == 0)
+                    Logger.Log($"{progressLogLabel} progress: {displayCount} of {totalCount}");
+            });
         }
 
         private void completeNotification(ProgressNotification? notification, int processedCount, int totalCount, int? failedCount = null)

@@ -23,10 +23,14 @@ using osu.Game.Configuration;
 using osu.Game.Database;
 using osu.Game.EzOsuGame.Analysis;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.HUD;
 using osu.Game.EzOsuGame.Identity;
 using osu.Game.EzOsuGame.Localization;
+using osu.Game.EzOsuGame.LocalProfile;
 using osu.Game.EzOsuGame.Skills.Mina;
 using osu.Game.EzOsuGame.Skills.PPP;
+using osu.Game.EzOsuGame.Skills.SkillTag;
+using osu.Game.EzOsuGame.Skills.SSR;
 using osu.Game.EzOsuGame.UI;
 using osu.Game.EzOsuGame.UserInterface;
 using osu.Game.Graphics;
@@ -60,7 +64,7 @@ namespace osu.Game.Screens.Select
         private DifficultyRangeSlider difficultyRangeSlider = null!;
         private SortModeDropdown sortDropdown = null!; // Ez功能
         private SkillAxisDropdown sortAxisDropdown = null!;
-        private ShearedDropdown<GroupModeDropdownItem> groupDropdown = null!;
+        private GroupModeDropdown groupDropdown = null!;
         private SkillAxisDropdown groupAxisDropdown = null!;
         private GridContainer skillAxisRow = null!;
         private EzKeyModeSelector csSelector = null!;
@@ -70,7 +74,11 @@ namespace osu.Game.Screens.Select
         private readonly Bindable<string> configCollectionFilter = new Bindable<string>();
         private Bindable<string> configSkillSortAxis = null!;
         private Bindable<string> configSkillGroupAxis = null!;
-        private Bindable<string> configAnalysisSystemSelection = null!;
+        /// <summary>
+        /// Relay for wedge right-radar mode. <see cref="SongSelect"/> sets <see cref="Bindable{T}.BindTarget"/> to <see cref="BeatmapDetailsArea.RightRadarMode"/>.
+        /// Only this control subscribes to changes for skill-axis refresh.
+        /// </summary>
+        public Bindable<EzRadarDisplayMode> RightRadarMode { get; } = new Bindable<EzRadarDisplayMode>(EzRadarDisplayMode.MSDSkillDual);
 
         [Resolved]
         private Ez2ConfigManager ezConfig { get; set; } = null!;
@@ -226,12 +234,12 @@ namespace osu.Game.Screens.Select
                                     {
                                         new[]
                                         {
-                                            sortDropdown = new SortModeDropdown(SongSelectStrings.Sort)
+                                            sortDropdown = new SortModeDropdown(SongSelectStrings.Sort, RightRadarMode)
                                             {
                                                 RelativeSizeAxes = Axes.X,
                                             },
                                             Empty(),
-                                            groupDropdown = new GroupModeDropdown(SongSelectStrings.Group)
+                                            groupDropdown = new GroupModeDropdown(SongSelectStrings.Group, RightRadarMode)
                                             {
                                                 RelativeSizeAxes = Axes.X,
                                             },
@@ -351,7 +359,6 @@ namespace osu.Game.Screens.Select
             ezConfig.BindWith(Ez2Setting.KeySoundPreviewMode, ksPreviewButton.State);
             configSkillSortAxis = ezConfig.GetBindable<string>(Ez2Setting.SongSelectSkillSortAxis);
             configSkillGroupAxis = ezConfig.GetBindable<string>(Ez2Setting.SongSelectSkillGroupAxis);
-            configAnalysisSystemSelection = ezConfig.GetBindable<string>(Ez2Setting.AnalysisSystemSelection);
 
             ruleset.BindValueChanged(_ =>
             {
@@ -370,9 +377,11 @@ namespace osu.Game.Screens.Select
 
                 updateCriteria();
             });
-            configAnalysisSystemSelection.BindValueChanged(_ =>
+            RightRadarMode.BindValueChanged(_ =>
             {
                 refreshSkillAxisDropdowns();
+                sortDropdown.NotifyRightRadarModeChanged();
+                groupDropdown.NotifyRightRadarModeChanged();
                 updateCriteria();
             });
             mods.BindValueChanged(m =>
@@ -486,7 +495,7 @@ namespace osu.Game.Screens.Select
 
         private void refreshSkillAxisDropdowns()
         {
-            var axes = buildSkillAxisItems(ruleset.Value?.OnlineID ?? -1);
+            var axes = buildSkillAxisItems(ruleset.Value?.OnlineID ?? -1, RightRadarMode.Value);
             sortAxisDropdown.SetAxes(axes, configSkillSortAxis.Value);
             groupAxisDropdown.SetAxes(axes, configSkillGroupAxis.Value);
             updateSkillAxisDropdownVisibility();
@@ -519,21 +528,37 @@ namespace osu.Game.Screens.Select
                 configSkillGroupAxis.Value = string.Empty;
         }
 
-        private static List<SkillAxisDropdownItem> buildSkillAxisItems(int rulesetOnlineId)
+        private static List<SkillAxisDropdownItem> buildSkillAxisItems(int rulesetOnlineId, EzRadarDisplayMode rightRadarMode)
         {
             var items = new List<SkillAxisDropdownItem>();
 
-            if (EzRulesetReadout.Selected(rulesetOnlineId) is not { } readout)
-                return items;
-
-            switch (readout.SkillRating)
+            switch (rightRadarMode.SkillAxisSystem())
             {
+                case EzAnalysisSystem.KeyPattern:
+                    if (rulesetOnlineId != EzLocalProfileConstants.MANIA_RULESET_ID)
+                        break;
+
+                    foreach (var axis in EzKeyPatternAxisExtensions.RadarAxes)
+                        items.Add(new SkillAxisDropdownItem(EzAnalysisSystem.KeyPattern, axis.ToMetaId(), axis.Meta().DisplayName));
+                    break;
+
                 case EzAnalysisSystem.Mina:
+                    if (rulesetOnlineId != EzLocalProfileConstants.MANIA_RULESET_ID)
+                        break;
+
                     foreach (var axis in EzMinaSkillAxisExtensions.RadarAxes)
                         items.Add(new SkillAxisDropdownItem(EzAnalysisSystem.Mina, axis.ToMetaId(), axis.Meta().DisplayName));
                     break;
 
+                case EzAnalysisSystem.SSR:
+                    foreach (var axis in EzSunnySrSkillAxisExtensions.ChartAxes)
+                        items.Add(new SkillAxisDropdownItem(EzAnalysisSystem.SSR, axis.ToMetaId(), axis.Meta().DisplayName));
+                    break;
+
                 case EzAnalysisSystem.PPP:
+                    if (!EzPPPSkillCatalog.SupportsRuleset(rulesetOnlineId))
+                        break;
+
                     foreach (var spec in EzPPPSkillCatalog.MetricsFor(rulesetOnlineId))
                     {
                         if (!spec.InRadar || spec.MetricId.StartsWith("_pad", StringComparison.Ordinal))
@@ -822,19 +847,26 @@ namespace osu.Game.Screens.Select
             [Resolved]
             private IBindable<RulesetInfo> ruleset { get; set; } = null!;
 
-            private Bindable<SortMode> configSortMode { get; } = new Bindable<SortMode>();
-            private Bindable<string>? analysisSystemSelection;
+            private readonly IBindable<EzRadarDisplayMode> rightRadarMode;
 
-            public SortModeDropdown(LocalisableString label)
+            private Bindable<SortMode> configSortMode { get; } = new Bindable<SortMode>();
+
+            public SortModeDropdown(LocalisableString label, IBindable<EzRadarDisplayMode> rightRadarMode)
                 : base(label)
             {
+                this.rightRadarMode = rightRadarMode;
+            }
+
+            public void NotifyRightRadarModeChanged()
+            {
+                updateAvailableItems();
+                updateCurrentFromConfig();
             }
 
             [BackgroundDependencyLoader]
-            private void load(OsuConfigManager config, Ez2ConfigManager ezConfig)
+            private void load(OsuConfigManager config)
             {
                 config.BindWith(OsuSetting.SongSelectSortingMode, configSortMode);
-                analysisSystemSelection = ezConfig.GetBindable<string>(Ez2Setting.AnalysisSystemSelection);
             }
 
             protected override void LoadAsyncComplete()
@@ -844,11 +876,6 @@ namespace osu.Game.Screens.Select
                     updateAvailableItems();
                     updateCurrentFromConfig();
                 }, true);
-                analysisSystemSelection?.BindValueChanged(_ =>
-                {
-                    updateAvailableItems();
-                    updateCurrentFromConfig();
-                });
                 configSortMode.BindValueChanged(_ => updateCurrentFromConfig());
                 Current.BindValueChanged(currentChanged);
 
@@ -857,7 +884,7 @@ namespace osu.Game.Screens.Select
 
             private void updateAvailableItems()
             {
-                bool hasSkillAxes = buildSkillAxisItems(ruleset.Value?.OnlineID ?? -1).Count > 0;
+                bool hasSkillAxes = buildSkillAxisItems(ruleset.Value?.OnlineID ?? -1, rightRadarMode.Value).Count > 0;
                 Items = Enum.GetValues<SortMode>().Where(m => m != SortMode.SkillAxis || hasSkillAxes).ToArray();
             }
 
@@ -925,19 +952,26 @@ namespace osu.Game.Screens.Select
             [Resolved]
             private IBindable<RulesetInfo> ruleset { get; set; } = null!;
 
-            private Bindable<GroupMode> configGroupMode { get; } = new Bindable<GroupMode>();
-            private Bindable<string>? analysisSystemSelection;
+            private readonly IBindable<EzRadarDisplayMode> rightRadarMode;
 
-            public GroupModeDropdown(LocalisableString label)
+            private Bindable<GroupMode> configGroupMode { get; } = new Bindable<GroupMode>();
+
+            public GroupModeDropdown(LocalisableString label, IBindable<EzRadarDisplayMode> rightRadarMode)
                 : base(label)
             {
+                this.rightRadarMode = rightRadarMode;
+            }
+
+            public void NotifyRightRadarModeChanged()
+            {
+                updateAvailableItems();
+                updateCurrentFromConfig();
             }
 
             [BackgroundDependencyLoader]
-            private void load(OsuConfigManager config, Ez2ConfigManager ezConfig)
+            private void load(OsuConfigManager config)
             {
                 config.BindWith(OsuSetting.SongSelectGroupMode, configGroupMode);
-                analysisSystemSelection = ezConfig.GetBindable<string>(Ez2Setting.AnalysisSystemSelection);
             }
 
             protected override void LoadAsyncComplete()
@@ -949,11 +983,6 @@ namespace osu.Game.Screens.Select
                     updateAvailableItems();
                     updateCurrentFromConfig();
                 }, true);
-                analysisSystemSelection?.BindValueChanged(_ =>
-                {
-                    updateAvailableItems();
-                    updateCurrentFromConfig();
-                });
                 configGroupMode.BindValueChanged(_ => updateCurrentFromConfig());
                 Current.BindValueChanged(currentChanged);
 
@@ -976,7 +1005,7 @@ namespace osu.Game.Screens.Select
                             break;
 
                         case GroupMode.SkillAxis:
-                            if (buildSkillAxisItems(ruleset.Value?.OnlineID ?? -1).Count == 0)
+                            if (buildSkillAxisItems(ruleset.Value?.OnlineID ?? -1, rightRadarMode.Value).Count == 0)
                                 break;
 
                             items.Add(new GroupModeDropdownItem(GroupMode.SkillAxis, EzSongSelectStrings.SKILL_AXIS));

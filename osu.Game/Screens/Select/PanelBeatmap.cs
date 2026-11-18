@@ -76,9 +76,6 @@ namespace osu.Game.Screens.Select
         private EzAnalysisCache ezAnalysisCache { get; set; } = null!;
 
         [Resolved]
-        private EzAnalysisDatabase ezAnalysisDatabase { get; set; } = null!;
-
-        [Resolved]
         private IRulesetStore rulesets { get; set; } = null!;
 
         [Resolved]
@@ -226,7 +223,7 @@ namespace osu.Game.Screens.Select
                                                     Anchor = Anchor.CentreLeft,
                                                     Scale = new Vector2(0.875f),
                                                 },
-                                                displaySR = new EzDisplaySR(EzManiaSummary.EMPTY, StarRatingDisplaySize.Small, animated: true)
+                                                displaySR = new EzDisplaySR(null, StarRatingDisplaySize.Small, animated: true)
                                                 {
                                                     Origin = Anchor.CentreLeft,
                                                     Anchor = Anchor.CentreLeft,
@@ -337,10 +334,6 @@ namespace osu.Game.Screens.Select
             applyPanelKps(EzSongSelectAnalysisDisplay.EMPTY);
             lastStarDifficulty = default;
 
-            if (ruleset.Value is RulesetInfo rulesetInfo
-                && EzPanelKpsMetrics.TryResolveBaselineFromSqlite(ezAnalysisDatabase, beatmap, rulesetInfo, mods.Value, out var baselineKps))
-                applyPanelKps(baselineKps);
-
             computeStarRating();
             updateKeyCount();
 
@@ -364,7 +357,7 @@ namespace osu.Game.Screens.Select
         {
             var values = ezAnalysisCache.ReadVariantValues(beatmap, mods.Value, EzReadoutValues.Live(lastStarDifficulty));
 
-            displaySR.Current.Value = new EzManiaSummary(null, null, values.SkillStar);
+            displaySR.Current.Value = values.SkillStar;
 
             if (values.SkillStar is null)
                 displaySR.Hide();
@@ -416,7 +409,7 @@ namespace osu.Game.Screens.Select
             ezDisplayTag.Beatmap = null;
             scratchText = null;
 
-            displaySR.Current.Value = EzManiaSummary.EMPTY;
+            displaySR.Current.Value = null;
             ezDisplayKpc.ManiaSummary = null;
             ezDisplayKpc.Hide();
             applyPanelKps(EzSongSelectAnalysisDisplay.EMPTY);
