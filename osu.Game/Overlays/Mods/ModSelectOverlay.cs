@@ -760,7 +760,8 @@ namespace osu.Game.Overlays.Mods
                 foreach (var column in Child)
                 {
                     var topLeft = column.ToSpaceOfOtherDrawable(Vector2.Zero, ScrollContent);
-                    var bottomRight = column.ToSpaceOfOtherDrawable(new Vector2(column.DrawWidth, 0), ScrollContent);
+                    float columnFlowShearX = Child.Shear.X;
+                    var bottomRight = column.ToSpaceOfOtherDrawable(new Vector2(column.DrawWidth - column.DrawHeight * columnFlowShearX, 0), ScrollContent);
 
                     bool isCurrentlyVisible = Precision.AlmostBigger(topLeft.X, leftVisibleBound)
                                               && Precision.DefinitelyBigger(rightVisibleBound, bottomRight.X);
