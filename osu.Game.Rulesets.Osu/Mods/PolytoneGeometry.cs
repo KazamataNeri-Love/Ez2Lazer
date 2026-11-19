@@ -12,52 +12,57 @@ namespace osu.Game.Rulesets.Osu.Mods
     /// 屏幕表现等价于截面比例 <see cref="RatioAt"/> 下的等比缩放与径向收敛。
     /// 物件与区域边界必须共用同一份换算，否则两者会错位。
     /// </summary>
+    /// <remarks>
+    /// 相机到击打层的距离取视角锥的顶点深度，物件沿光轴匀速推进，
+    /// 因此 <c>1/ratio</c> 随进度线性 —— 与针孔投影逐点一致。
+    /// </remarks>
     internal readonly struct PolytoneGeometry
     {
-        /// <summary>
-        /// 远端截面比例下限。再小物件出生时会挤成一个点，实际不可读。
-        /// </summary>
-        public const float MINIMUM_SPAWN_RATIO = 0.08f;
-
         /// <summary>
         /// 消失点（相机正对的 playfield 位置）。X/Y 不变时，所有轨迹都沿它与物件的连线。
         /// </summary>
         public readonly Vector2 VanishingPoint;
 
         /// <summary>
-        /// 截面比例收敛到 0 的深度，由视角决定。
+        /// 相机到击打层的距离，由视角决定。
         /// </summary>
         public readonly float ApexDepth;
 
         /// <summary>
-        /// 出生层（由出生深度决定）的截面比例。
+        /// 出生层到击打层的距离与 <see cref="ApexDepth"/> 之比，即投影公式的深度系数。
         /// </summary>
-        public readonly float SpawnRatio;
+        public readonly float DepthScale;
 
         public PolytoneGeometry(float viewAngle, float spawnDepth)
         {
             VanishingPoint = OsuPlayfield.BASE_SIZE * 0.5f;
             ApexDepth = OsuPlayfield.BASE_SIZE.X * 0.5f / MathF.Tan(MathHelper.DegreesToRadians(viewAngle));
-            SpawnRatio = Math.Clamp(1 - spawnDepth / ApexDepth, MINIMUM_SPAWN_RATIO, 0.99f);
+            DepthScale = spawnDepth / ApexDepth;
         }
+
+        /// <summary>
+        /// 出生层（由出生深度决定）的截面比例。
+        /// </summary>
+        public float SpawnRatio => 1f / (1f + DepthScale);
 
         /// <summary>
         /// 截面比例。<paramref name="progress"/> 0 为出生、1 为到达击打层。
         /// </summary>
-        /// <param name="perspectiveBlend">0 = 线性逼近，1 = 针孔投影（后段爆冲），中间为混合。</param>
-        public float RatioAt(double progress, float perspectiveBlend)
+        public float RatioAt(double progress)
         {
             float u = (float)Math.Clamp(progress, 0, 1);
-            float linear = SpawnRatio + (1 - SpawnRatio) * u;
-
-            if (perspectiveBlend <= 0)
-                return linear;
-
-            float gamma = (1 - SpawnRatio) / SpawnRatio;
-            float projected = 1 / (1 + gamma * (1 - u));
-
-            return linear + (projected - linear) * perspectiveBlend;
+            return 1f / (1f + DepthScale * (1f - u));
         }
+
+        /// <summary>
+        /// 给定截面比例对应的深度（相机到该截面的距离）。
+        /// </summary>
+        public float DepthAt(float ratio) => ratio <= 0 ? float.PositiveInfinity : ApexDepth * (1f / ratio - 1f);
+
+        /// <summary>
+        /// 给定深度的截面比例。
+        /// </summary>
+        public float RatioAtDepth(float depth) => ApexDepth / (ApexDepth + depth);
 
         public Vector2 Project(Vector2 position, float ratio) => VanishingPoint + (position - VanishingPoint) * ratio;
     }
