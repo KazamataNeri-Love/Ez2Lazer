@@ -24,4 +24,13 @@
          这里直接引用 4.1.5.16（本地重编 freetype，源码与构建流程见 _lab/android-16kb）覆盖它。 -->
     <PackageReference Include="McEndu.FreeTypeSharp" Version="4.1.5.16" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- 同上：framework 传递的 ppy.Veldrid.SPIRV 1.0.15-g5911265ec3 内 android 库为 4 KB，
+         改为本地重编的 1.0.15.16（mellinoe/veldrid-spirv @5911265）。 -->
+    <PackageReference Include="ppy.Veldrid.SPIRV" Version="1.0.15.16" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 真正进 APK 的是 ez2lazer.Veldrid 携带的那份同名片库，一并改为 2026.1110.3。 -->
+    <PackageReference Include="ez2lazer.Veldrid" Version="2026.1110.3" />
+  </ItemGroup>
 </Project>
