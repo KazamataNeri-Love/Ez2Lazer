@@ -50,7 +50,6 @@ using osu.Game.EzOsuGame.Material;
 using osu.Game.EzOsuGame.Overlays;
 using osu.Game.EzOsuGame.Performance;
 using osu.Game.EzOsuGame.Playback;
-using osu.Game.EzOsuGame.Pets;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.EzOsuGame.Screens.Play;
 using osu.Game.EzOsuGame.Wiki;
@@ -1274,9 +1273,6 @@ namespace osu.Game
                         menuScreen.MakeCurrent();
                 },
             }, topMostOverlayContent.Add);
-
-            // TODO：如果支持启动动画模型，再另外考虑加载顺序。
-            loadComponentSingleFile(new EzDesktopPetLayer(), topMostOverlayContent.Add, true);
 
             onScreenDisplay = new OnScreenDisplay();
 
