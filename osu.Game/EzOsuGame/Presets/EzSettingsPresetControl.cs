@@ -21,6 +21,8 @@ using osu.Game.Overlays;
 using osu.Game.Overlays.Dialog;
 using osu.Game.Overlays.Notifications;
 using osu.Game.Overlays.Settings;
+using osu.Game.Rulesets;
+using osu.Game.Rulesets.Configuration;
 using osu.Game.Skinning;
 using osuTK;
 
@@ -63,6 +65,15 @@ namespace osu.Game.EzOsuGame.Presets
 
         [Resolved]
         private SkinManager skins { get; set; } = null!;
+
+        [Resolved]
+        private RulesetStore rulesets { get; set; } = null!;
+
+        [Resolved]
+        private IRulesetConfigCache rulesetConfigs { get; set; } = null!;
+
+        // Mania 的规则集设置管理器。首次取用失败（规则集缓存尚未加载）时留空，下次重试。
+        private IRulesetConfigManager? maniaConfig;
 
         [Resolved(CanBeNull = true)]
         private IDialogOverlay? dialogOverlay { get; set; }
@@ -194,7 +205,7 @@ namespace osu.Game.EzOsuGame.Presets
             string name = store.NextDefaultName(index => EzSettingsStrings.SETTINGS_PRESET_DEFAULT_NAME.Format(index));
 
             // 用当前设置直接作为新预设的内容，省掉「新建后再点一次使用当前的设置」。
-            var document = EzSettingsPresetBridge.Capture(ezConfig, osuConfig, skins, name);
+            var document = EzSettingsPresetBridge.Capture(ezConfig, osuConfig, skins, getManiaConfig(), name);
 
             store.Save(document);
 
@@ -202,7 +213,7 @@ namespace osu.Game.EzOsuGame.Presets
         });
 
         /// <summary>
-        /// 把当前皮肤与三组设置整个写回选中的预设。
+        /// 把当前皮肤、全部设置与 Mania 滚动速度整个写回选中的预设。
         /// </summary>
         private void useCurrentSettings()
         {
@@ -218,7 +229,7 @@ namespace osu.Game.EzOsuGame.Presets
 
         private void overwriteWithCurrent(EzSettingsPresetDocument preset)
         {
-            var captured = EzSettingsPresetBridge.Capture(ezConfig, osuConfig, skins, preset.Name, preset.Id);
+            var captured = EzSettingsPresetBridge.Capture(ezConfig, osuConfig, skins, getManiaConfig(), preset.Name, preset.Id);
 
             // 就地改写原对象，让下拉的 Current 引用保持有效。
             preset.SchemaVersion = captured.SchemaVersion;
@@ -265,7 +276,7 @@ namespace osu.Game.EzOsuGame.Presets
 
         private void applyPreset(EzSettingsPresetDocument document)
         {
-            var report = EzSettingsPresetBridge.Apply(document, ezConfig, osuConfig, skins);
+            var report = EzSettingsPresetBridge.Apply(document, ezConfig, osuConfig, skins, getManiaConfig());
 
             foreach (string failure in report.Failed)
                 Logger.Log($"[Ez] 设置预设「{document.Name}」写入失败：{failure}", Ez2ConfigManager.LOGGER_NAME, LogLevel.Important);
@@ -314,6 +325,8 @@ namespace osu.Game.EzOsuGame.Presets
             // 改名只修改对象内容，下拉的 Current 引用不变；必须显式重建列表才会重算显示文本。
             return new EditSettingsPresetPopover(store, current, refreshList);
         }
+
+        private IRulesetConfigManager? getManiaConfig() => maniaConfig ??= EzSettingsPresetRulesets.GetManiaConfig(rulesets, rulesetConfigs);
 
         private void withSuppressedApply(Action action)
         {

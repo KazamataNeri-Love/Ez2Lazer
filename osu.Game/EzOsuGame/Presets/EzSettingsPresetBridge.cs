@@ -9,6 +9,7 @@ using osu.Framework.Bindables;
 using osu.Game.Configuration;
 using osu.Game.Database;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.Rulesets.Configuration;
 using osu.Game.Skinning;
 
 namespace osu.Game.EzOsuGame.Presets
@@ -30,9 +31,16 @@ namespace osu.Game.EzOsuGame.Presets
         public const string OSU_PREFIX = "Osu.";
 
         /// <summary>
+        /// 规则集设置的键前缀，后接规则集短名与设置枚举名（例如 <c>Rs.mania.ScrollSpeed</c>）。
+        /// </summary>
+        public const string RULESET_PREFIX = "Rs.";
+
+        public const string MANIA_SETTINGS_PREFIX = RULESET_PREFIX + EzSettingsPresetRulesets.MANIA_SHORT_NAME + ".";
+
+        /// <summary>
         /// 捕获当前设置。皮肤以 ID + 名字双写。
         /// </summary>
-        public static EzSettingsPresetDocument Capture(Ez2ConfigManager ez, OsuConfigManager osu, SkinManager skins, string name, Guid? id = null)
+        public static EzSettingsPresetDocument Capture(Ez2ConfigManager ez, OsuConfigManager osu, SkinManager skins, IRulesetConfigManager? maniaConfig, string name, Guid? id = null)
         {
             var document = new EzSettingsPresetDocument
             {
@@ -54,6 +62,12 @@ namespace osu.Game.EzOsuGame.Presets
                     document.Settings[OSU_PREFIX + setting] = value;
             }
 
+            foreach (string key in EzSettingsPresetCatalog.ManiaScrollSettings)
+            {
+                if (tryCapture(maniaConfig?.GetRawBindable(key), out string value))
+                    document.Settings[MANIA_SETTINGS_PREFIX + key] = value;
+            }
+
             var skin = skins.CurrentSkinInfo.Value;
             document.SkinId = skin.ID.ToString();
             document.SkinName = skin.Value.Name;
@@ -64,9 +78,14 @@ namespace osu.Game.EzOsuGame.Presets
         /// <summary>
         /// 应用预设。逐项独立容错：单项失败不会中断其余项。
         /// </summary>
-        public static EzSettingsPresetApplyReport Apply(EzSettingsPresetDocument document, Ez2ConfigManager ez, OsuConfigManager osu, SkinManager skins)
+        /// <remarks>
+        /// 规则集设置写在内存 bindable 上，落盘由 <c>IRulesetConfigManager.Save()</c> 在方法末尾同步完成：
+        /// 它的后台保存有 100ms 去抖，退出早于去抖时改动会丢。
+        /// </remarks>
+        public static EzSettingsPresetApplyReport Apply(EzSettingsPresetDocument document, Ez2ConfigManager ez, OsuConfigManager osu, SkinManager skins, IRulesetConfigManager? maniaConfig)
         {
             var report = new EzSettingsPresetApplyReport();
+            bool wroteRulesetSetting = false;
 
             foreach ((string key, string value) in document.Settings)
             {
@@ -84,6 +103,18 @@ namespace osu.Game.EzOsuGame.Presets
                     else
                         report.Skipped.Add(key);
                 }
+                else if (key.StartsWith(MANIA_SETTINGS_PREFIX, StringComparison.Ordinal))
+                {
+                    IBindable? bindable = maniaConfig?.GetRawBindable(key.Substring(MANIA_SETTINGS_PREFIX.Length));
+
+                    if (bindable == null)
+                        report.Skipped.Add(key);
+                    else
+                    {
+                        tryApply(key, bindable, value, report);
+                        wroteRulesetSetting = true;
+                    }
+                }
                 else
                 {
                     report.Skipped.Add(key);
@@ -91,8 +122,12 @@ namespace osu.Game.EzOsuGame.Presets
             }
 
             // 皮肤放最后：切换皮肤会触发 EzSkin.json 自动应用等后续动作，
-            // 但两者覆盖的设置项集合不相交（预设只碰 Mania 与布局，EzSkin 只碰皮肤外观），故先后顺序不影响结果。
+            // 但两者覆盖的设置项集合不相交（预设只碰判定、评级线与布局，EzSkin 只碰皮肤外观），故先后顺序不影响结果。
             applySkin(document, skins, report);
+
+            // 规则集设置的后台保存有 100ms 去抖：这里同步落盘，避免临界窗口内退出丢改动。
+            if (wroteRulesetSetting)
+                maniaConfig?.Save();
 
             return report;
         }
@@ -105,7 +140,6 @@ namespace osu.Game.EzOsuGame.Presets
                 report.Skipped.Add(key);
                 return;
             }
-
             if (!(bindable is IParseable parseable))
             {
                 report.Failed.Add($"{key}: {bindable.GetType().Name} 不支持 IParseable");
@@ -205,7 +239,7 @@ namespace osu.Game.EzOsuGame.Presets
         public bool SkinMissing;
 
         /// <summary>
-        /// 被跳过的键：枚举项已删除/改名，或该项未被注册。
+        /// 被跳过的键：枚举项已删除/改名、该项未被注册，或规则集设置当前取不到。
         /// </summary>
         public List<string> Skipped { get; } = new List<string>();
 

@@ -23,6 +23,8 @@ using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Input.Bindings;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Notifications;
+using osu.Game.Rulesets;
+using osu.Game.Rulesets.Configuration;
 using osu.Game.Skinning;
 using osuTK;
 
@@ -65,6 +67,15 @@ namespace osu.Game.EzOsuGame.Presets
 
         [Resolved]
         private SkinManager skins { get; set; } = null!;
+
+        [Resolved]
+        private RulesetStore rulesets { get; set; } = null!;
+
+        [Resolved]
+        private IRulesetConfigCache rulesetConfigs { get; set; } = null!;
+
+        // Mania 的规则集设置管理器。首次取用失败（规则集缓存尚未加载）时留空，下次重试。
+        private IRulesetConfigManager? maniaConfig;
 
         [Resolved]
         private OsuColour colours { get; set; } = null!;
@@ -199,12 +210,14 @@ namespace osu.Game.EzOsuGame.Presets
             return base.OnPressed(e);
         }
 
+        private IRulesetConfigManager? getManiaConfig() => maniaConfig ??= EzSettingsPresetRulesets.GetManiaConfig(rulesets, rulesetConfigs);
+
         /// <summary>
-        /// 「使用当前的设置」：把当前皮肤与三组设置抓成新内容（保留 <see cref="EzSettingsPresetDocument.Id"/>）。
+        /// 「使用当前的设置」：把当前皮肤、全部设置与 Mania 滚动速度抓成新内容（保留 <see cref="EzSettingsPresetDocument.Id"/>）。
         /// </summary>
         private void useCurrentSettings()
         {
-            working = EzSettingsPresetBridge.Capture(ezConfig, osuConfig, skins, nameTextBox.Current.Value, preset.Id);
+            working = EzSettingsPresetBridge.Capture(ezConfig, osuConfig, skins, getManiaConfig(), nameTextBox.Current.Value, preset.Id);
             updatePreview();
             flashFilled();
         }

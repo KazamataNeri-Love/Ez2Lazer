@@ -9,15 +9,15 @@ using System.Text.Json.Serialization;
 namespace osu.Game.EzOsuGame.Presets
 {
     /// <summary>
-    /// 一套「设置预设方案」：皮肤 + Ez Mania 设置 + 图像布局。
+    /// 一套「设置预设方案」：皮肤 + 判定与评级线 + 背景与布局缩放 + Mania 滚动速度 + 本地账户名。
     /// </summary>
     /// <remarks>
     /// 存为数据目录 <c>settings-presets/&lt;guid&gt;.json</c>，一个预设一个文件：
     /// 手改 / 分享都无需动数据库，也不涉及 Realm schema 迁移（Edge 常年合并上游，迁移代价高）。
     /// <para>
-    /// 键一律带前缀（<c>"Ez2.ManiaHitMode"</c> / <c>"Osu.UIScale"</c>），沿用 <c>EzTurboMode</c> 的
-    /// <c>$"{typeof(TLookup).Name}.{lookup}"</c> 惯例，保证 <see cref="Configuration.Ez2Setting"/> 与
-    /// <c>OsuSetting</c> 的同名项不会串味。
+    /// 键一律带前缀（<c>"Ez2.ManiaJudgeMode"</c> / <c>"Osu.UIScale"</c> / <c>"Rs.mania.ScrollSpeed"</c>），
+    /// 沿用 <c>EzTurboMode</c> 的 <c>$"{typeof(TLookup).Name}.{lookup}"</c> 惯例，
+    /// 保证 <see cref="Configuration.Ez2Setting"/>、<c>OsuSetting</c> 与规则集设置的键不会串味。
     /// </para>
     /// </remarks>
     public sealed class EzSettingsPresetDocument
