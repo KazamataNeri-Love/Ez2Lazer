@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 #nullable disable
@@ -75,6 +75,14 @@ namespace osu.Game.Rulesets.Configuration
 
             return true;
         }
+
+        /// <summary>
+        /// 按键取原始 bindable（不返回绑定副本）。键为设置枚举名，与 Realm 中存放该项所用的键同构：
+        /// 供不引用具体规则集的调用方（例如设置预设）按名字批量读写。
+        /// </summary>
+        /// <returns>未注册该键时返回 null。</returns>
+        public IBindable? GetRawBindable(string key)
+            => Enum.TryParse<TLookup>(key, out TLookup lookup) && ConfigStore.TryGetValue(lookup, out IBindable? bindable) ? bindable : null;
 
         protected override void AddBindable<TBindable>(TLookup lookup, Bindable<TBindable> bindable)
         {

@@ -116,7 +116,7 @@ namespace osu.Game.Database
         /// Ez2Lazer schema revision. Bump when adding Ez-persisted fields; do not change <see cref="schema_version"/> for Ez-only work.
         ///
         /// Ez2Lazer-only revisions are tracked separately via <see cref="EZ_REALM_SCHEMA_VERSION"/>.
-        /// The on-disk Realm schema version is <see cref="EzFileSchemaVersion"/> (schema_version * 1000 + EZ_REALM_SCHEMA_VERSION, currently 52010).
+        /// The on-disk Realm schema version is <see cref="EzFileSchemaVersion"/> (schema_version * 1000 + EZ_REALM_SCHEMA_VERSION, currently 52013).
         /// Ez v1: Add ScoreInfo hit/health mode (later renamed: Judgement=>JudgeMode, health kept).
         /// Ez v2: Add BeatmapInfo.HasVideo and HasStoryboard.
         /// Ez v3: Add BeatmapInfo.SunnyStarRating.
@@ -130,13 +130,15 @@ namespace osu.Game.Database
         /// Ez v10: Add EzChartDan (nomod chart-dan + skillset label stamps).
         /// Ez v11: Reorder EzEnumJudgeMode/EzEnumHealthMode (StableClassic = 1; Mania private modes at 31+);
         ///         add canonical ScoreInfo.JudgeMode/HealthMode columns and migrate the legacy ManiaHitMode/ManiaHealthMode data into them.
+        /// Ez v13: Persist ScoreInfo.SessionOffsetPlusMania/SessionOffsetPlusNonMania so race ghosts can be re-judged with the
+        ///         offset the score was actually played at. Rows written before this version default to 0 (= no record).
         /// </summary>
         /// <remarks>
         /// BeatmapInfo's per-system rating columns were replaced by the embedded
         /// <see cref="EzRatingData"/> as part of v12: the v11-to-v12 migration creates the record
         /// for every existing row, so the version number itself does not change.
         /// </remarks>
-        public const int EZ_REALM_SCHEMA_VERSION = 12;
+        public const int EZ_REALM_SCHEMA_VERSION = 13;
 
         /// <summary>
         /// Smallest file that is worth rewriting. A smaller file does not cost meaningful space, and the rewrite
@@ -1691,6 +1693,10 @@ namespace osu.Game.Database
 
                     break;
                 }
+
+                case 13:
+                    // ScoreInfo 新增的两个 OffsetPlus 列由 Realm 默认填 0，即「无记录」，与改动前行为等价。
+                    break;
             }
 
             EzRealmMigrationContributorRegistry.ApplyContributors(migration, targetEzVersion);

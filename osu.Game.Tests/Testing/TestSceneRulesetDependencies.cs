@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using osu.Framework.Allocation;
 using osu.Framework.Audio.Sample;
+using osu.Framework.Bindables;
 using osu.Framework.Configuration.Tracking;
 using osu.Framework.Graphics.Shaders;
 using osu.Framework.Graphics.Textures;
@@ -99,6 +100,8 @@ namespace osu.Game.Tests.Testing
             public void LoadInto(TrackedSettings settings)
             {
             }
+
+            public IBindable? GetRawBindable(string key) => null;
 
             public void Dispose()
             {
