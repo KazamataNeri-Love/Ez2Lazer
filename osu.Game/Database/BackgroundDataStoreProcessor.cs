@@ -377,7 +377,7 @@ namespace osu.Game.Database
         /// <summary>
         /// [Ez] Realm 维护：全量成绩重算（修复被错误后台转换破坏的本地成绩）。
         /// <list type="bullet">
-        /// <item>mania 且有 replay：Session ForStored 重算（与选歌右键「原始环境重算」同款路径）。</item>
+        /// <item>mania 且有 replay：Session ForStored 重算（与选歌右键「原始档位重算」同款路径）。</item>
         /// <item>stable legacy 且无 replay：重走干净的官方 <see cref="StandardisedScoreMigrationTools.UpdateFromLegacy(ScoreInfo, WorkingBeatmap)"/>（从 LegacyTotalScore 重转，修复被写坏的 Total/Acc/Rank）。</item>
         /// <item>嵌入 Ez 模式但无 replay：跳过（官方算法不理解 Ez 判定语义，重算只会二次破坏）。</item>
         /// <item>其余：官方 <see cref="ScoreManager.Recalculate"/>。</item>
@@ -517,7 +517,7 @@ namespace osu.Game.Database
             {
                 try
                 {
-                    // 与选歌右键「原始环境重算」一致：Session ForStored（嵌入 HM/HM；无嵌入按双 Lazer）。
+                    // 与选歌右键「原始档位重算」一致：Session ForStored（嵌入 HM/HM；无嵌入按双 Lazer）。
                     // 后台线程串行执行，同步阻塞等待即可。
                     EzScoreRecalculationService.RecalculateAsync(scoreManager, beatmapManager, ezReplaySession, score, ReplayRunPurpose.ForStored)
                                                .GetAwaiter().GetResult();
