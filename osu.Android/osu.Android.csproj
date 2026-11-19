@@ -19,4 +19,9 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Essentials" Version="8.0.3" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Android 16 要求 16 KB 页对齐；framework 传递的 4.1.5 里 aar 仍是 4 KB，
+         这里直接引用 4.1.5.16（本地重编 freetype，源码与构建流程见 _lab/android-16kb）覆盖它。 -->
+    <PackageReference Include="McEndu.FreeTypeSharp" Version="4.1.5.16" />
+  </ItemGroup>
 </Project>
