@@ -659,9 +659,9 @@ namespace osu.Game.Screens.Select
                 if (Score.OnlineID > 0)
                     items.Add(new OsuMenuItem(CommonStrings.CopyLink, MenuItemType.Standard, () => game?.CopyToClipboard($@"{api.Endpoints.WebsiteUrl}/scores/{Score.OnlineID}")));
 
-                items.Add(new OsuMenuItem(EzSongSelectStrings.RECALCULATE_SCORE_ORIGINAL_ENV, MenuItemType.Standard,
+                items.Add(new OsuMenuItem(EzSongSelectStrings.RECALCULATE_SCORE_ORIGINAL_MODE, MenuItemType.Standard,
                     () => _ = EzScoreRecalculationService.RecalculateAsync(scoreManager, beatmaps, replaySession, Score, ReplayRunPurpose.ForStored, analysisCache: ezAnalysisCache)));
-                items.Add(new OsuMenuItem(EzSongSelectStrings.RECALCULATE_SCORE_CURRENT_ENV, MenuItemType.Standard,
+                items.Add(new OsuMenuItem(EzSongSelectStrings.RECALCULATE_SCORE_CURRENT_MODE, MenuItemType.Standard,
                     () => _ = EzScoreRecalculationService.RecalculateAsync(scoreManager, beatmaps, replaySession, Score, ReplayRunPurpose.ForLive, analysisCache: ezAnalysisCache)));
                 items.Add(new OsuMenuItem(EzSongSelectStrings.RENAME_PLAYER, MenuItemType.Standard, () => dialogOverlay?.Push(new RenamePlayerDialog(Score, scoreManager))));
 
