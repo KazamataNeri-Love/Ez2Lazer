@@ -1,93 +1,30 @@
-# 4–18K Alignment Plan
+# 4–18K 技能引擎对齐记录
 
-Goal: move the current Ez skill pipeline toward mania-hub-style 4–18K support, while keeping the codebase stable and testable.
+> **状态（2026-11-20）：引擎侧 4–18K 支持已实现。** 本文前半记录已落地的实现，后半列出仍未覆盖的下游工作；早期方案不再是当前实施计划。
 
-## Status
+## 当前实现
 
-- **Phase 1 (abstraction)** — done: `IEzMsdEngine` + `EzCalcNote`; `SupportsKeyCount` is the
-  single capability check; `.osu` file-hint plumbing is gone with the text path.
-- **Phase 2 (compute)** — done: NuGet `MinaCalc 0.4.2` was replaced by the mania-hub n-key
-  build (`minaclac-74.0.wasm`, Wasmtime host). MSD and SSR share one note-array path, so
-  beatmap-side and play-side axes come from the same engine.
-- **Phase 3 (downstream)** — partially done: `DATA-ChartDan-Keymode-Routing` is closed
-  (5K / 8K–18K chart dan borrows the 4K xxy table; the radar no longer draws the engine's 0.18
-  sliver). Still open: `DATA-PatternAxis-KeymodeSet` and `DATA-Skillset-Dan-Coverage-10K+` in
-  `DATA-FOLLOWUPS.md`.
-- **Phase 4 (regression coverage)** — engine-level done (4–18K routing, zero vector for
-  unsupported keys, chord masks, negative-time shift, trap recovery); chart-dan /
-  player-aggregation end-to-end coverage still open.
-- **Phase 5 (extraction)** — not started, still optional.
+- `IEzMsdEngine` / `EzNKeyMsdEngine` 提供统一的技能计算入口，`SupportsKeyCount` 是引擎能力判断的唯一来源。
+- MSD 与 SSR 共享由 `EzCalcNote` 表示的 note-array 路径；4–18K 支持由嵌入式 n-key MinaCalc WebAssembly 引擎提供，并由 Wasmtime 宿主执行。旧的 `.osu` 文本解析分支和 MinaCalc 0.4.2 限制已退出当前路径。
+- 引擎级测试覆盖支持范围、非支持键数、输入转换和错误恢复；下游模式/键数覆盖仍见 [DATA-FOLLOWUPS.md](./DATA-FOLLOWUPS.md)。
+- 超出 4–18K 的键数不由引擎处理。17/18 列过宽和弦是已知模块限制，异常引擎实例会被丢弃重建；参见待办中的已知限制。
+- 图表段位映射和玩家段位收录并未随引擎支持范围自动扩展。5K、8–18K 图表段位使用 4K 区间表回退；10K 以上尚未进入 tracked skillset / filing / ladder 范围。
 
-## Scope
+## 尚未完成的下游项
 
-This plan focuses on the skill pipeline under `osu.Game/EzOsuGame/Skills`:
+以 [DATA-FOLLOWUPS.md](./DATA-FOLLOWUPS.md) 的状态为准：
 
-- beatmap MSD / SSR calculation
-- chart analysis and chart-dan derivation
-- player SSR aggregation
-- dan skillset filing / buckets / ladders
-- test coverage for supported keymodes
+- `DATA-PatternAxis-KeymodeSet`：重新推导 5K、9K 与 10–18K 的 pattern 轴集合。
+- `DATA-Skillset-Dan-Coverage-10K+`：决定并实现 10–18K 的 skillset 段位收录、分桶和阶梯覆盖。
+- 把代表性键数的图表分析、段位估算和玩家聚合端到端覆盖补齐；现有引擎级测试不能替代这些消费端验证。
+- 独立 DLL / 项目提取仍是可选的未来方向，不是当前支持 4–18K 的前置条件。
 
-## Current blockers
+## 范围与验证边界
 
-1. The current calculation engine is `MinaCalc 0.4.2`.
-2. That engine only supports:
-   - 4K via note-array APIs
-   - 4K / 6K / 7K via `.osu` text parsing
-3. 5K and 8K+ are currently blocked in the live pipeline.
-4. Several downstream consumers still encode old assumptions about supported keymodes.
+技能链包括图表 MSD/SSR、图表元数据与段位、玩家聚合，以及 skillset filing / buckets / ladders。变更引擎输入转换或聚合语义时，需评估算法版本和派生数据失效范围；具体规则见 [Skills-README.md](./Skills-README.md)。
 
-## Recommended implementation strategy
+提交新键数支持时，同时检查引擎路由、图表分析、段位映射、玩家聚合和对应测试。不要再添加硬编码 4/6/7K 引擎分支；需要键数能力判断时使用 `IEzMsdEngine.SupportsKeyCount`。
 
-### Phase 1 — Stabilize the abstraction layer
+## 历史方案
 
-- Keep the game code calling a single internal skill engine interface.
-- New interfaces introduced during this work must use the `IEz` prefix.
-- Ensure all `.osu` text calls use a stable file hint convention.
-- Centralize keycount capability checks in one place.
-- Add tests for 4K, 6K, 7K, 8K, and 18K routing decisions.
-
-### Phase 2 — Expand compute support inside `osu.Game`
-
-- Replace the current limited engine path with a 4–18K-capable implementation.
-- Update MSD and SSR compute paths together.
-- Make sure beatmap-side and play-side paths return the same axis vocabulary.
-- Keep existing persistence and filing contracts stable.
-
-### Phase 3 — Align downstream consumers
-
-- Update `EzChartSkillInfoComputer` so pattern / motion / LN metadata remains consistent across keymodes.
-- Review `EzDanSkillsetFiling`, `EzDanSkillsetBuckets`, and `EzDanLadders` for keymode-specific assumptions.
-- Decide which features are truly 4K-only and which should be generalized.
-
-### Phase 4 — Add regression coverage
-
-- Add test charts for representative keymodes.
-- Verify non-zero results for supported keys.
-- Verify unsupported or intentionally skipped keys fail cleanly.
-- Add end-to-end tests for chart-side MSD, chart-dan, and player aggregation.
-
-### Phase 5 — Optional later extraction
-
-If the engine becomes stable and reusable, consider extracting the pure analysis core into a separate DLL or project.
-
-This is optional. For the initial 4–18K alignment, keeping the logic inside `osu.Game` is usually the lower-risk path.
-
-## Decision rule for architecture
-
-Use the following rule of thumb:
-
-- If the goal is fastest alignment with the least integration work: keep it in `osu.Game`.
-- If the goal is long-term reuse across multiple products: extract a DLL later.
-
-## Tracking
-
-- Keep long-running follow-ups in `DATA-FOLLOWUPS.md`.
-- Mark each phase complete only when code and tests are updated together.
-
-## Suggested first implementation target
-
-1. Introduce a shared skill-engine interface.
-2. Route `EzBeatmapMsdComputer`, `EzChartDanEstimator`, and `EzPlayerMinaAggregator` through it.
-3. Add tests proving the routing works before changing the heavy compute logic.
-
+本文件早期关于替换 MinaCalc、接入 `.osu` 文本路径、初建引擎抽象及“5K / 8K+ 尚被引擎阻塞”的条目已经过期。现行引擎和仍开放的消费端事项以源码、测试和 [DATA-FOLLOWUPS.md](./DATA-FOLLOWUPS.md) 为准。

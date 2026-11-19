@@ -41,8 +41,9 @@ env：`Ez2ConfigManager.ResolveEnvironment(purpose, score?, ignoreOffset?)`。Se
 
 | 路径 | OffsetPlus* 进判窗？ |
 |------|---------------------|
-| 真实对局 Drawable | **是** |
-| replay Session（Panel/Graph/Race/重算） | **否**（帧已是有效输入） |
+| 真实对局 Drawable | **是**（当前全局设置） |
+| replay Session（Panel / Graph / 重算） | **否**（帧已是有效输入） |
+| 角逐 ghost（Race） | **是**，取该成绩落盘的 `ScoreInfo.SessionOffsetPlus*`；判定档仍取当前设置 |
 
 禁止：Drawable 已加 offset，Session `ResultForPress` 再叠一遍。
 
