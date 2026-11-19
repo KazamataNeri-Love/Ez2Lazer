@@ -36,9 +36,9 @@
 
 | 文档 | 用途 / 状态 |
 |---|---|
-| [桌宠使用说明.md](./桌宠使用说明.md) | 桌宠启用与配置 |
-| [Pets/Live2D测试指南.md](./Pets/Live2D测试指南.md) | Live2D 桌宠测试步骤 |
-| [Pets/Release资源包规范.md](./Pets/Release资源包规范.md) | 桌宠资源包格式与发布要求 |
+| [桌宠使用说明.md](./桌宠使用说明.md) | 桌宠启用与配置；**仅纯净侧 `Ez2Lazer` 适用**，Edge 与 Android 已于 2026-11-20 移除桌宠，本文在 Edge 仅作历史参考 |
+| [Pets/Live2D测试指南.md](./Pets/Live2D测试指南.md) | Live2D 桌宠测试步骤；同上，Edge/Android 已移除 |
+| [Pets/Release资源包规范.md](./Pets/Release资源包规范.md) | 桌宠资源包格式与发布要求；同上，Edge/Android 已移除 |
 
 ## 来源与维护口径
 
