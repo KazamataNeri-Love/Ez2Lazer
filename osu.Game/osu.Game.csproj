@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup Label="Project">
     <TargetFramework>net11.0</TargetFramework>
     <OutputType>Library</OutputType>
@@ -69,7 +69,6 @@
       <NoWarn>NU1510</NoWarn>
     </PackageReference>
     <PackageReference Include="TagLibSharp" Version="2.3.0"/>
-    <PackageReference Include="Live2DCSharpSDK" Version="1.0.0.6"/>
     <!-- In-process WebAssembly host for the vendored n-key MinaCalc (4-18K mania MSD/SunnySR). -->
     <PackageReference Include="Wasmtime" Version="50.0.1" />
 
