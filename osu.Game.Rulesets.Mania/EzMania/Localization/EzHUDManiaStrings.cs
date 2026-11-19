@@ -36,6 +36,35 @@ namespace osu.Game.Rulesets.Mania.EzMania.Localization
         public static readonly LocalisableString EFFECT_END_DURATION_LABEL = new EzLocalizationManager.EzLocalisableString("动效结束时长", "Effect End Duration");
         public static readonly LocalisableString EFFECT_END_DURATION_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("动画结束阶段的持续时间（毫秒）", "Duration of the animation end phase (milliseconds).");
 
+        // NeriComboCounter
+        public static readonly LocalisableString PEAK_SCALE_LABEL = new EzLocalizationManager.EzLocalisableString("峰值缩放", "Peak Scale");
+        public static readonly LocalisableString PEAK_SCALE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("连击变化时数字放大的峰值倍数，不随连打累积", "Peak scale applied to the combo digits; it does not accumulate during combos.");
+
+        public static readonly LocalisableString TILT_HEIGHT_LABEL = new EzLocalizationManager.EzLocalisableString("峰值斜排高度", "Peak Tilt Height");
+        public static readonly LocalisableString TILT_HEIGHT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "峰值时数字沿斜线展开，最高位与最低位的绝对竖直偏移等于该值，单位为字高。静止时回到水平，位数变化时两端绝对值不变",
+            "On the peak the digits spread on a tilt; the absolute vertical offset of the first and last digit equals this value, in glyph heights. They return to a level line at rest, and the absolute offset stays the same as the digit count changes.");
+
+        public static readonly LocalisableString EXPAND_WIDTH_LABEL = new EzLocalizationManager.EzLocalisableString("峰值水平展开", "Peak Horizontal Spread");
+        public static readonly LocalisableString EXPAND_WIDTH_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "峰值时数字额外拉开，最高位与最低位的绝对水平偏移等于该值，单位为字高。静止时回到原间距，位数变化时两端绝对值不变",
+            "On the peak the digits spread horizontally; the absolute horizontal offset of the first and last digit equals this value, in glyph heights. They return to the resting spacing afterwards, and the absolute offset stays the same as the digit count changes.");
+
+        public static readonly LocalisableString SHIFT_WIDTH_LABEL = new EzLocalizationManager.EzLocalisableString("峰值X轴位移", "Peak Horizontal Shift");
+        public static readonly LocalisableString SHIFT_WIDTH_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "峰值时整组数字沿水平方向移动，单位为字高，正值向右。静止时回到原位",
+            "On the peak the whole group of digits shifts horizontally, in glyph heights; positive values move right. It returns to the original position at rest.");
+
+        public static readonly LocalisableString SHIFT_HEIGHT_LABEL = new EzLocalizationManager.EzLocalisableString("峰值Y轴位移", "Peak Vertical Shift");
+        public static readonly LocalisableString SHIFT_HEIGHT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "峰值时整组数字沿竖直方向移动，单位为字高，正值向下。仅当组件锚点位于顶部或底部时生效，静止时回到原位",
+            "On the peak the whole group of digits shifts vertically, in glyph heights; positive values move down. It only applies when the anchor sits at the top or the bottom, and it returns to the original position at rest.");
+
+        public static readonly LocalisableString ROLL_DURATION_LABEL = new EzLocalizationManager.EzLocalisableString("数字滚动时长", "Digit Rolling Duration");
+        public static readonly LocalisableString ROLL_DURATION_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "数字变化时的滚动时长（毫秒），0 为瞬时切换",
+            "Duration of the digit roll animation in milliseconds; 0 switches instantly.");
+
         // EzHUDHitTiming
         public static readonly LocalisableString OFFSET_NUMBER_FONT_LABEL = new EzLocalizationManager.EzLocalisableString("偏移数字字体", "Offset Number Font");
         public static readonly LocalisableString OFFSET_NUMBER_FONT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("设置偏移数值的字体样式", "Set the font style for offset numbers.");

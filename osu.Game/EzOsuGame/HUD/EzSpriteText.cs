@@ -23,7 +23,7 @@ namespace osu.Game.EzOsuGame.HUD
     public abstract partial class EzSpriteText : OsuSpriteText, IEzGameplayWarmUp
     {
         // 与 Argon 位图字体相同：度量先缩到纹理的 1/8，Font.Size 再决定绘制大小。
-        internal const float GLYPH_METRIC_SCALE = 0.125f;
+        internal const float GLYPH_METRIC_SCALE = EzGlyphStore.GLYPH_METRIC_SCALE;
 
         protected override char FixedWidthReferenceCharacter => '5';
 
@@ -31,7 +31,7 @@ namespace osu.Game.EzOsuGame.HUD
         private Bindable<string> themeName = null!;
 
         private readonly Func<char, string> getLookup;
-        private GlyphStore? glyphStore;
+        private EzGlyphStore? glyphStore;
 
         [Resolved]
         private Ez2ConfigManager ezConfig { get; set; } = null!;
@@ -82,7 +82,7 @@ namespace osu.Game.EzOsuGame.HUD
         /// </summary>
         public Task WarmUpAsync(CancellationToken cancellationToken)
         {
-            GlyphStore? store = glyphStore;
+            EzGlyphStore? store = glyphStore;
             string fontName = EzGameThemeNames.Normalize(ThemeName.Value);
 
             if (store == null)
@@ -99,17 +99,17 @@ namespace osu.Game.EzOsuGame.HUD
         protected override TextBuilder CreateTextBuilder(ITexturedGlyphLookupStore store) => base.CreateTextBuilder(glyphStore);
 
         /// <summary>
-        /// 创建 GlyphStore 实例（允许子类自定义）
+        /// 创建字形查找存储（允许子类自定义）
         /// </summary>
-        protected virtual GlyphStore CreateGlyphStore(EzResourceStore resources, Func<char, string> getLookup)
+        protected virtual EzGlyphStore CreateGlyphStore(EzResourceStore resources, Func<char, string> getLookup)
         {
-            return new GlyphStore(resources, getLookup, GetPossiblePaths);
+            return new EzGlyphStore(resources, getLookup, GetPossiblePaths);
         }
 
         /// <summary>
         /// 预加载字符（允许子类自定义预加载范围）
         /// </summary>
-        protected virtual void PreloadCharacters(GlyphStore store, string fontName, List<Texture>? uploads = null)
+        protected virtual void PreloadCharacters(EzGlyphStore store, string fontName, List<Texture>? uploads = null)
         {
             foreach (char c in GetPreloadSpecialChars())
                 rememberUpload(store.Get(fontName, c), uploads);
@@ -142,70 +142,5 @@ namespace osu.Game.EzOsuGame.HUD
         /// <param name="character">原始字符</param>
         /// <returns>可能的路径数组，按优先级排序</returns>
         protected abstract string[] GetPossiblePaths(string themeName, string lookup, char character);
-
-        /// <summary>
-        /// GlyphStore - 纹理字符查找存储
-        /// </summary>
-        protected class GlyphStore : ITexturedGlyphLookupStore
-        {
-            private readonly EzResourceStore resources;
-            private readonly Func<char, string> getLookup;
-            private readonly Func<string, string, char, string[]> getPathResolver;
-
-            private readonly Dictionary<char, ITexturedCharacterGlyph?> cache = new Dictionary<char, ITexturedCharacterGlyph?>();
-            private readonly Lock cacheLock = new Lock();
-
-            public GlyphStore(EzResourceStore resources, Func<char, string> getLookup, Func<string, string, char, string[]> getPathResolver)
-            {
-                this.resources = resources;
-                this.getLookup = getLookup;
-                this.getPathResolver = getPathResolver;
-            }
-
-            public ITexturedCharacterGlyph? Get(string? textureName, char character)
-            {
-                lock (cacheLock)
-                {
-                    if (cache.TryGetValue(character, out var cached))
-                        return cached;
-                }
-
-                string lookup = getLookup(character);
-                TexturedCharacterGlyph? glyph = null;
-
-                if (textureName != null)
-                {
-                    string themeName = textureName.Replace(" ", "_");
-                    string[] possiblePaths = getPathResolver(themeName, lookup, character);
-                    Texture? texture = resources.GetGlyph(possiblePaths);
-
-                    if (texture != null)
-                    {
-                        glyph = new TexturedCharacterGlyph(
-                            new CharacterGlyph(character, 0, 0, texture.Width, texture.Height, null),
-                            texture,
-                            GLYPH_METRIC_SCALE);
-                    }
-                }
-
-                lock (cacheLock)
-                {
-                    if (cache.TryGetValue(character, out var cached))
-                        return cached;
-
-                    cache[character] = glyph;
-                    return glyph;
-                }
-            }
-
-            public Task<ITexturedCharacterGlyph?> GetAsync(string fontName, char character)
-                => Task.Run(() => Get(fontName, character));
-
-            public void ClearCache()
-            {
-                lock (cacheLock)
-                    cache.Clear();
-            }
-        }
     }
 }

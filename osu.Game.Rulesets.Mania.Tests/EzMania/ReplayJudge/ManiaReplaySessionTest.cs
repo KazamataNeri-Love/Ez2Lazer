@@ -458,6 +458,25 @@ namespace osu.Game.Rulesets.Mania.Tests.EzMania.ReplayJudge
             Assert.That(tickResultsUnderLazer, Is.EqualTo(tickResultsUnderEz2Ac));
         }
 
+        /// <summary>
+        /// 角逐 ghost 走「仿真器内 offset」而非帧位移：环境带 <see cref="GameplayEnvironment.OffsetPlusMania"/>
+        /// 且 <see cref="GameplayEnvironment.ApplyInputOffsetViaReplayFrameShift"/> 为 false 时判定必须按该值变化，
+        /// 否则按成绩记录值重判会静默退化成零补偿。
+        /// </summary>
+        [Test]
+        public void TestEnvironmentOffsetAppliesWithoutFrameShift()
+        {
+            var (score, beatmap, environment) = LazerTapReplayFixtures.CreateTwoNoteColumnTap();
+            var noShift = environment with { ApplyInputOffsetViaReplayFrameShift = false };
+
+            var baseline = ManiaReplaySession.Run(score.DeepClone(), beatmap, noShift with { OffsetPlusMania = 0 });
+            var shifted = ManiaReplaySession.Run(score.DeepClone(), beatmap, noShift with { OffsetPlusMania = -200 });
+
+            // fixture 的按下比 note 早 100ms；再叠 -200ms 会把两键全部推到窗口之外。
+            Assert.That(baseline.ScoreInfo.TotalScore, Is.GreaterThan(0));
+            Assert.That(shifted.ScoreInfo.TotalScore, Is.LessThan(baseline.ScoreInfo.TotalScore));
+        }
+
         private static List<HitResult> tickResults(IReadOnlyList<HitEvent> events)
             => events.Where(e => e.HitObject is HoldNoteTick).Select(e => e.Result).ToList();
     }
