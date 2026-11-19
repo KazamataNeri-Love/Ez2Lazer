@@ -39,6 +39,13 @@ namespace osu.Game.EzOsuGame.Scoring
         EzScoreTimeline RunTimelineDirect(Score score, IBeatmap beatmap, ReplayRunPurpose purpose, CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// <see cref="RunTimelineDirect(Score, IBeatmap, ReplayRunPurpose, CancellationToken)"/> 的环境显式版：
+        /// 判定口径完全由调用方给定，不经 <see cref="Configuration.Ez2ConfigManager.ResolveEnvironment"/>。
+        /// 角逐 ghost 用它把「档位取当前设置、高阶 Offset 取成绩记录值」直接交给 Session。
+        /// </summary>
+        EzScoreTimeline RunTimelineDirect(Score score, IBeatmap beatmap, IGameplayEnvironment environment, CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// 统一请求入口：支持更复杂的场景（如同时需要 Score + Timeline）。
         /// </summary>
         Task<ReplayRunResult> RunRequestAsync(ReplayRunRequest request, CancellationToken cancellationToken = default);

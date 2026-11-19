@@ -53,6 +53,9 @@ namespace osu.Game.EzOsuGame.Scoring
         public EzScoreTimeline RunTimelineDirect(Score score, IBeatmap beatmap, ReplayRunPurpose purpose, CancellationToken cancellationToken = default)
             => requireSession(score).RunTimelineDirect(score, beatmap, purpose, cancellationToken);
 
+        public EzScoreTimeline RunTimelineDirect(Score score, IBeatmap beatmap, IGameplayEnvironment environment, CancellationToken cancellationToken = default)
+            => requireSession(score).RunTimelineDirect(score, beatmap, environment, cancellationToken);
+
         public Task<ReplayRunResult> RunRequestAsync(ReplayRunRequest request, CancellationToken cancellationToken = default)
         {
             var session = tryResolve(request.Score);

@@ -53,7 +53,7 @@ namespace osu.Game.EzOsuGame.Scoring
                 return null;
 
             var playableBeatmap = usesBeatmapProvider ? null : resolvePlayableBeatmap(beatmaps, scoreInfo, sharedPlayableBeatmap, cancellationToken);
-            var resolvedEnvironment = GlobalConfigStore.EzConfig.ResolveEnvironment(ReplayRunPurpose.ForLive, scoreInfo, ignoreOffset: true);
+            var resolvedEnvironment = ResolveGhostEnvironment(scoreInfo);
 
             // The key names the chart, not the conversion: a converted instance is not needed to identify one.
             string? cacheKey = getCacheKey(scoreInfo, timelineMode, resolvedEnvironment, workingBeatmap.BeatmapInfo);
@@ -112,7 +112,7 @@ namespace osu.Game.EzOsuGame.Scoring
                     timeline = session.RunTimelineDirect(
                         databasedScore,
                         playableBeatmap!,
-                        ReplayRunPurpose.ForLive,
+                        resolvedEnvironment,
                         cancellationToken);
                     break;
                 }
@@ -151,6 +151,21 @@ namespace osu.Game.EzOsuGame.Scoring
             return EzScoreRacePlayableResolver.GetSessionReady(workingBeatmap, scoreInfo.Ruleset, scoreInfo.Mods, cancellationToken);
         }
 
+        /// <summary>
+        /// 角逐 ghost 的判定环境：判定档、血量档、判定优先级与 BMS 语义取当前设置，高阶 Offset 取该成绩自己的记录值。
+        /// </summary>
+        /// <remarks>
+        /// 基环境用 <c>ignoreOffset: true</c> 取，只为确保当前全局 offset 不会以任何形式混入；
+        /// 两个 offset 字段都覆写，因为不同规则集读的字段不同，填错的一侧无人消费。
+        /// 成绩上的 offset 在改动前的老行与导入成绩里恒为 0，等价于改动前的行为。
+        /// </remarks>
+        internal static GameplayEnvironment ResolveGhostEnvironment(ScoreInfo scoreInfo)
+            => GlobalConfigStore.EzConfig.ResolveEnvironment(ReplayRunPurpose.ForLive, scoreInfo, ignoreOffset: true) with
+            {
+                OffsetPlusMania = scoreInfo.SessionOffsetPlusMania,
+                OffsetPlusNonMania = scoreInfo.SessionOffsetPlusNonMania,
+            };
+
         private static string? getCacheKey(ScoreInfo? scoreInfo, EzScoreRaceGhostTimelineMode timelineMode, IGameplayEnvironment environment, IBeatmapInfo? beatmap)
         {
             string? identity = getScoreIdentity(scoreInfo);
@@ -166,7 +181,7 @@ namespace osu.Game.EzOsuGame.Scoring
             switch (timelineMode)
             {
                 case EzScoreRaceGhostTimelineMode.ManiaSession:
-                    return $"{identity}|m|{modFp}|{beatmapFp}|hm{(int)environment.JudgeMode}|hh{(int)environment.HealthMode}|jp{(int)environment.JudgePrecedence}";
+                    return $"{identity}|m|{modFp}|{beatmapFp}|hm{(int)environment.JudgeMode}|hh{(int)environment.HealthMode}|jp{(int)environment.JudgePrecedence}|offset:{environment.OffsetPlusMania:F3}";
 
                 case EzScoreRaceGhostTimelineMode.OsuSession:
                 case EzScoreRaceGhostTimelineMode.TaikoSession:

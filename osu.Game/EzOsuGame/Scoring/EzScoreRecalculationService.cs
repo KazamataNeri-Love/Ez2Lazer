@@ -67,8 +67,13 @@ namespace osu.Game.EzOsuGame.Scoring
                 return;
             }
 
+            var environment = ResolveRecalculationEnvironment(scoreInfo, purpose);
+
             var result = await replaySession.RunRequestAsync(
-                new ReplayRunRequest(databasedScore.DeepClone(), playableBeatmap, purpose),
+                new ReplayRunRequest(databasedScore.DeepClone(), playableBeatmap, purpose)
+                {
+                    EnvironmentOverride = environment,
+                },
                 cancellationToken).ConfigureAwait(false);
 
             if (result.WasCancelled || !result.IsValidReplay || result.Score.ScoreInfo == null)
@@ -89,19 +94,34 @@ namespace osu.Game.EzOsuGame.Scoring
                         cachedKps = cached.KpsList;
                 }
 
+                // 重算环境已带成绩记录的 offset，Session 写出的 TimeOffset 已含补偿，不能再叠一次。
                 EzScoreBonusCalculator.Apply(result.Score.ScoreInfo, playableBeatmap, cachedKps, convertedKeyCount(workingBeatmap, scoreInfo, cancellationToken));
                 EzScoreBonusProvider.Store(scoreInfo, result.Score.ScoreInfo.EzBonus);
             }
 
-            scoreManager.ApplyEzSessionRecalculation(scoreInfo, result.Score.ScoreInfo, purpose, result.ResolvedEnvironment!);
+            scoreManager.ApplyEzSessionRecalculation(scoreInfo, result.Score.ScoreInfo, purpose, environment);
         }
+
+        /// <summary>
+        /// 重算的判定环境：判定档 / 血量档 / 判定优先级按 <paramref name="purpose"/> 解析，高阶 Offset 取成绩记录值。
+        /// </summary>
+        /// <remarks>
+        /// 重算只换判定档、不换手感。成绩落盘的 OffsetPlus 是这条成绩的固有属性，
+        /// 用当前全局 offset 重判会让同一份 replay 在不同设置下得出不同结果，也会顺手把记录值覆盖掉。
+        /// </remarks>
+        internal static GameplayEnvironment ResolveRecalculationEnvironment(ScoreInfo scoreInfo, ReplayRunPurpose purpose)
+            => GlobalConfigStore.EzConfig.ResolveEnvironment(purpose, scoreInfo, ignoreOffset: true) with
+            {
+                OffsetPlusMania = scoreInfo.SessionOffsetPlusMania,
+                OffsetPlusNonMania = scoreInfo.SessionOffsetPlusNonMania,
+            };
 
         /// <summary>
         /// 用钉死的判定档重算一条 mania 成绩并写回 Realm。
         /// </summary>
         /// <remarks>
         /// <para>非标准入口，常规重算必须走 <see cref="RecalculateAsync"/>。</para>
-        /// <para>不读任何用户设置，档位由调用方钉死，结果与机器、配置无关。</para>
+        /// <para>不读任何用户设置：档位由调用方钉死，高阶 Offset 取成绩记录值（成绩属性，不是设置），结果与机器、配置无关。</para>
         /// <para>
         /// 不复用 <see cref="RecalculateAsync"/> 的回退链：对非官方判定语义的成绩（例如迁移中的 38），
         /// 无 replay / 谱面缺失时回落到 <see cref="ScoreManager.Recalculate"/> 等于用官方算法重写 Ez 语义成绩。
@@ -139,17 +159,23 @@ namespace osu.Game.EzOsuGame.Scoring
             if (playableBeatmap.HitObjects.Count == 0)
                 return false;
 
+            var environment = GameplayEnvironment.ForMigration(judgeMode) with
+            {
+                OffsetPlusMania = scoreInfo.SessionOffsetPlusMania,
+                OffsetPlusNonMania = scoreInfo.SessionOffsetPlusNonMania,
+            };
+
             var result = await replaySession.RunRequestAsync(
                 new ReplayRunRequest(databasedScore.DeepClone(), playableBeatmap, ReplayRunPurpose.ForLive)
                 {
-                    EnvironmentOverride = GameplayEnvironment.ForMigration(judgeMode)
+                    EnvironmentOverride = environment
                 },
                 cancellationToken).ConfigureAwait(false);
 
-            if (result.WasCancelled || !result.IsValidReplay || result.Score.ScoreInfo == null || result.ResolvedEnvironment == null)
+            if (result.WasCancelled || !result.IsValidReplay || result.Score.ScoreInfo == null)
                 return false;
 
-            scoreManager.ApplyEzSessionRecalculation(scoreInfo, result.Score.ScoreInfo, ReplayRunPurpose.ForLive, result.ResolvedEnvironment);
+            scoreManager.ApplyEzSessionRecalculation(scoreInfo, result.Score.ScoreInfo, ReplayRunPurpose.ForLive, environment);
             return true;
         }
 
@@ -204,7 +230,11 @@ namespace osu.Game.EzOsuGame.Scoring
             }
 
             var sessionInfo = result.Score.ScoreInfo;
-            EzScoreBonusCalculator.Apply(sessionInfo, playableBeatmap, cachedKps, convertedKeyCount(workingBeatmap, scoreInfo, cancellationToken));
+
+            // 补算走 ForStored（判定环境 offset = 0），TimeOffset 同样是裸误差，按成绩记录值校正。
+            EzScoreBonusCalculator.Apply(sessionInfo, playableBeatmap, cachedKps, convertedKeyCount(workingBeatmap, scoreInfo, cancellationToken),
+                offsetCorrectionMs: EzScoreBonusCalculator.RecordedOffsetMs(scoreInfo));
+
             return sessionInfo.EzBonus;
         }
 

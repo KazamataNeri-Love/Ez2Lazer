@@ -1715,7 +1715,9 @@ namespace osu.Game.Screens.Play
                         cachedKps = result.KpsList;
                 }
 
-                EzScoreBonusCalculator.Apply(score.ScoreInfo, GameplayState.Beatmap, cachedKps);
+                // 实机 HitEvents 的 TimeOffset 是「原始时钟 − 物件时刻」，不含补偿；按当局记录的 OffsetPlus 校正后再算附加分。
+                EzScoreBonusCalculator.Apply(score.ScoreInfo, GameplayState.Beatmap, cachedKps,
+                    offsetCorrectionMs: EzScoreBonusCalculator.RecordedOffsetMs(score.ScoreInfo));
             }
 
             // the import process will re-attach managed beatmap/rulesets to this score. we don't want this for now, so create a temporary copy to import.

@@ -58,6 +58,18 @@ namespace osu.Game.EzOsuGame.Scoring
             return timeline;
         }
 
+        /// <summary>
+        /// 用调用方给定的环境跑一遍 replay，只取 timeline。
+        /// 角逐 HUD 借此把「判定档取当前设置、高阶 Offset 取成绩记录值」这类组合口径直接交给 Session，
+        /// 不必让 <see cref="Ez2ConfigManager.ResolveEnvironment"/> 承担更多分支。
+        /// </summary>
+        public EzScoreTimeline RunTimelineDirect(Score score, IBeatmap beatmap, IGameplayEnvironment environment, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var (_, timeline) = RunWithTimeline(score.DeepClone(), beatmap, environment, cancellationToken);
+            return timeline;
+        }
+
         public async Task<ReplayRunResult> RunRequestAsync(ReplayRunRequest request, CancellationToken cancellationToken = default)
         {
             try

@@ -7,10 +7,12 @@ using NUnit.Framework;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.ControlPoints;
 using osu.Game.EzOsuGame.Scoring.Bonus;
+using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mania.Objects;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Osu.Objects;
 using osu.Game.Rulesets.Scoring;
+using osu.Game.Scoring;
 
 namespace osu.Game.Tests.EzOsuGame.Scoring
 {
@@ -229,6 +231,68 @@ namespace osu.Game.Tests.EzOsuGame.Scoring
 
             Assert.That(result.JudgeBonus, Is.EqualTo(judgePortion(1, 4, 40)));
             Assert.That(result.ErrorMalus, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void TestOffsetCorrectionPullsEarlyHitBackToFullValue()
+        {
+            var beatmap = new Beatmap();
+            var note = new Note { StartTime = 1000, Column = 0 };
+            beatmap.Difficulty.CircleSize = 4;
+            beatmap.HitObjects.Add(note);
+
+            // 早打 30ms：裸口径拿不到满价值。
+            var events = new[]
+            {
+                new HitEvent(-30, 1, HitResult.Great, note, null, null),
+            };
+
+            var raw = EzScoreBonusCalculator.Calculate(beatmap, events, 1, new FixedKps(40)).LowErrorRate;
+            var corrected = EzScoreBonusCalculator.Calculate(beatmap, events, 1, new FixedKps(40), offsetCorrectionMs: 30).LowErrorRate;
+
+            Assert.That(raw.JudgeBonus, Is.LessThan(judgePortion(1, 4, 40)));
+            Assert.That(corrected.JudgeBonus, Is.EqualTo(judgePortion(1, 4, 40)), "+30ms 补偿应把早打 30ms 的 note 拉回满价值");
+        }
+
+        [Test]
+        public void TestOffsetCorrectionIsNotAppliedToMisses()
+        {
+            var beatmap = new Beatmap();
+            var note = new Note { StartTime = 1000, Column = 0 };
+            note.HitWindows = new FixedMissWindows(120);
+            beatmap.Difficulty.CircleSize = 4;
+            beatmap.HitObjects.Add(note);
+
+            var events = new[]
+            {
+                new HitEvent(-150, 1, HitResult.Miss, note, null, null),
+            };
+
+            var result = EzScoreBonusCalculator.Calculate(beatmap, events, 1, new FixedKps(40), offsetCorrectionMs: 40).LowErrorRate;
+
+            Assert.That(result.ErrorMalus, Is.EqualTo(-EzScoreBonusFormula.JUDGE_BONUS_MAX), "Miss 的误差取窗口边界，不参与 offset 校正");
+        }
+
+        [Test]
+        public void TestRecordedOffsetMsFollowsRuleset()
+        {
+            var mania = new ScoreInfo
+            {
+                Ruleset = new RulesetInfo { OnlineID = 3, ShortName = @"mania" },
+                SessionOffsetPlusMania = 21,
+                SessionOffsetPlusNonMania = -9,
+            };
+
+            Assert.That(EzScoreBonusCalculator.RecordedOffsetMs(mania), Is.EqualTo(21));
+
+            var osu = new ScoreInfo
+            {
+                Ruleset = new RulesetInfo { OnlineID = 0, ShortName = @"osu" },
+                SessionOffsetPlusMania = 21,
+                SessionOffsetPlusNonMania = -9,
+            };
+
+            Assert.That(EzScoreBonusCalculator.RecordedOffsetMs(osu), Is.EqualTo(-9));
         }
 
         private static Beatmap createChart(double bpm, int chordSize, int quarterBeats)

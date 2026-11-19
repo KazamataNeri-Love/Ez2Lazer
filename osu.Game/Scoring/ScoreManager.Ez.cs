@@ -27,6 +27,8 @@ namespace osu.Game.Scoring
             List<HitEvent>? hitEvents = null;
             int? maniaJudgeMode = null;
             int? maniaHealthMode = null;
+            double? sessionOffsetMania = null;
+            double? sessionOffsetNonMania = null;
 
             Realm.Write(realm =>
             {
@@ -45,6 +47,8 @@ namespace osu.Game.Scoring
                 hitEvents = managed.HitEvents.ToList();
                 maniaJudgeMode = managed.JudgeMode;
                 maniaHealthMode = managed.HealthMode;
+                sessionOffsetMania = managed.SessionOffsetPlusMania;
+                sessionOffsetNonMania = managed.SessionOffsetPlusNonMania;
             });
 
             if (accuracy == null)
@@ -68,6 +72,8 @@ namespace osu.Game.Scoring
 
             scoreInfo.JudgeMode = maniaJudgeMode!.Value;
             scoreInfo.HealthMode = maniaHealthMode!.Value;
+            scoreInfo.SessionOffsetPlusMania = sessionOffsetMania!.Value;
+            scoreInfo.SessionOffsetPlusNonMania = sessionOffsetNonMania!.Value;
             scoreInfo.EzBonus = sessionInfo.EzBonus;
 
             if (scoreInfo.OnlineID > 0 || scoreInfo.LegacyOnlineID > 0)
@@ -100,6 +106,10 @@ namespace osu.Game.Scoring
                 scoreInfo.JudgeMode = (int)environment.JudgeMode;
                 scoreInfo.HealthMode = (int)environment.HealthMode;
             }
+
+            // 判定口径与记录同源：写回本次实际使用的 offset，使角逐还原与再次重算都落在同一基准上。
+            scoreInfo.SessionOffsetPlusMania = environment.OffsetPlusMania;
+            scoreInfo.SessionOffsetPlusNonMania = environment.OffsetPlusNonMania;
 
             if (scoreInfo.OnlineID > 0 || scoreInfo.LegacyOnlineID > 0)
             {

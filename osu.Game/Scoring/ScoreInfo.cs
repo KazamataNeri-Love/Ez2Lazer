@@ -310,15 +310,14 @@ namespace osu.Game.Scoring
         public EzOsuGame.Scoring.Bonus.EzScoreBonusSet? EzBonus { get; set; }
 
         /// <summary>
-        /// Ez2Lazer: Mania offset-plus setting at gameplay start (submission eligibility snapshot).
+        /// Ez2Lazer: 本局开局时的 Mania 高阶 Offset 设置。
+        /// 既是官方上传资格判定的依据，也是角逐 HUD 按成绩自身口径重判该回放的依据。
         /// </summary>
-        [Ignored]
         public double SessionOffsetPlusMania { get; set; }
 
         /// <summary>
-        /// Ez2Lazer: Non-mania offset-plus setting at gameplay start (submission eligibility snapshot).
+        /// Ez2Lazer: 本局开局时的非 Mania 高阶 Offset 设置。语义同 <see cref="SessionOffsetPlusMania"/>。
         /// </summary>
-        [Ignored]
         public double SessionOffsetPlusNonMania { get; set; }
 
         /// <summary>

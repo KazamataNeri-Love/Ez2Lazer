@@ -26,8 +26,20 @@ namespace osu.Game.EzOsuGame.Scoring.Bonus
     /// </summary>
     public static class EzScoreBonusCalculator
     {
+        /// <summary>
+        /// 成绩记录的高阶 Offset，按规则集取。
+        /// 实机判定的 <see cref="HitEvent.TimeOffset"/> 是「原始时钟 − 物件时刻」，不含补偿，
+        /// 用它把误差校正到与实际判定口径一致。
+        /// </summary>
+        public static double RecordedOffsetMs(ScoreInfo score)
+            => score.Ruleset.OnlineID == 3 ? score.SessionOffsetPlusMania : score.SessionOffsetPlusNonMania;
+
+        /// <param name="offsetCorrectionMs">
+        /// 加到每颗 note 误差上的高阶 Offset 修正，用于把不含补偿的 <see cref="HitEvent.TimeOffset"/> 校正到含补偿口径。
+        /// 传入的 HitEvents 已经由带 offset 的判定环境产出时（例如重算）必须传 0，否则会叠两遍。
+        /// </param>
         public static EzScoreBonusSet Calculate(IBeatmap playableBeatmap, IReadOnlyList<HitEvent> hitEvents, double rate, IEzKpsSectionLookup? kps = null,
-                                                IReadOnlyList<double>? cachedKps = null, int? keyCount = null)
+                                                IReadOnlyList<double>? cachedKps = null, int? keyCount = null, double offsetCorrectionMs = 0)
         {
             if (rate <= 0 || double.IsNaN(rate))
                 rate = 1;
@@ -76,7 +88,7 @@ namespace osu.Game.EzOsuGame.Scoring.Bonus
                 double gameplayRate = e.GameplayRate is > 0 ? e.GameplayRate.Value : rate;
                 bool isMiss = e.Result == HitResult.Miss;
                 double missBoundary = resolveMissBoundary(e.HitObject, gameplayRate);
-                double errorMs = isMiss ? missBoundary : Math.Abs(e.TimeOffset) / gameplayRate;
+                double errorMs = isMiss ? missBoundary : Math.Abs(e.TimeOffset + offsetCorrectionMs) / gameplayRate;
                 bool error = isMiss || errorMs > cross;
                 double weight = error
                     ? EzScoreBonusFormula.ErrorWeight(sectionKps, keys)
@@ -123,7 +135,8 @@ namespace osu.Game.EzOsuGame.Scoring.Bonus
         /// </summary>
         /// <param name="playableBeatmap">与 <see cref="ScoreInfo.HitEvents"/> 同一次运行的可玩谱面。</param>
         /// <param name="keyCount">转谱完成后的键数。为空时用 <paramref name="playableBeatmap"/> 的 CircleSize。</param>
-        public static void Apply(ScoreInfo score, IBeatmap playableBeatmap, IReadOnlyList<double>? cachedKps = null, int? keyCount = null)
+        /// <param name="offsetCorrectionMs">语义见 <see cref="Calculate"/>；默认 0 表示 HitEvents 已含补偿。</param>
+        public static void Apply(ScoreInfo score, IBeatmap playableBeatmap, IReadOnlyList<double>? cachedKps = null, int? keyCount = null, double offsetCorrectionMs = 0)
         {
             if (score.HitEvents.Count == 0 || playableBeatmap.HitObjects.Count == 0)
             {
@@ -131,7 +144,8 @@ namespace osu.Game.EzOsuGame.Scoring.Bonus
                 return;
             }
 
-            score.EzBonus = Calculate(playableBeatmap, score.HitEvents, ModUtils.CalculateRateWithMods(score.Mods), cachedKps: cachedKps, keyCount: keyCount);
+            score.EzBonus = Calculate(playableBeatmap, score.HitEvents, ModUtils.CalculateRateWithMods(score.Mods), cachedKps: cachedKps, keyCount: keyCount,
+                offsetCorrectionMs: offsetCorrectionMs);
         }
 
         /// <summary>
