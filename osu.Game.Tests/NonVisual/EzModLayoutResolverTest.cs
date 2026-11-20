@@ -230,6 +230,16 @@ namespace osu.Game.Tests.NonVisual
             Assert.That(layout.ColumnShear, Is.EqualTo(0.1f));
         }
 
+        [TestCase(null, 0f)]
+        [TestCase(0f, 0f)]
+        [TestCase(0.1f, 0.1f)]
+        [TestCase(-0.1f, 0f)]
+        [TestCase(0.3f, 0.2f)]
+        public void TestColumnShearNormalisation(float? saved, float expected)
+        {
+            Assert.That(EzModLayoutResolver.NormaliseColumnShear(saved), Is.EqualTo(expected));
+        }
+
         [Test]
         public void TestColumnShearRoundTrip()
         {

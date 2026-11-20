@@ -27,7 +27,7 @@ namespace osu.Game.EzOsuGame.Overlays
             var bindable = external ?? new BindableDouble(EzModLayoutResolver.DEFAULT_COLUMN_SHEAR)
             {
                 MinValue = 0,
-                MaxValue = EzModLayoutResolver.DEFAULT_COLUMN_SHEAR,
+                MaxValue = EzModLayoutResolver.MAX_COLUMN_SHEAR,
                 Precision = 0.01,
                 Default = EzModLayoutResolver.DEFAULT_COLUMN_SHEAR,
             };

@@ -157,10 +157,11 @@ namespace osu.Game.EzOsuGame.Mods
     /// </summary>
     public static class EzModLayoutResolver
     {
-        public const float DEFAULT_COLUMN_SHEAR = 0.2f;
+        public const float DEFAULT_COLUMN_SHEAR = 0;
+        public const float MAX_COLUMN_SHEAR = 0.2f;
 
         public static float NormaliseColumnShear(float? value) =>
-            Math.Clamp(value ?? DEFAULT_COLUMN_SHEAR, 0, DEFAULT_COLUMN_SHEAR);
+            Math.Clamp(value ?? DEFAULT_COLUMN_SHEAR, 0, MAX_COLUMN_SHEAR);
 
         public static readonly ModType[] DEFAULT_TYPE_ORDER =
         {
