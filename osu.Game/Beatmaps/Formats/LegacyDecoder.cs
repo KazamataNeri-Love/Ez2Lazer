@@ -1,8 +1,9 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using osu.Framework.Extensions;
 using osu.Framework.Logging;
 using osu.Game.Audio;
@@ -174,11 +175,42 @@ namespace osu.Game.Beatmaps.Formats
             );
         }
 
-        protected string CleanFilename(string path) => path
-                                                       // User error which is supported by stable (https://github.com/ppy/osu/issues/21204)
-                                                       .Replace(@"\\", @"\")
-                                                       .Trim('"')
-                                                       .ToStandardisedPath();
+        protected string CleanFilename(string path) => stripControlCharacters(path
+                                                                               // User error which is supported by stable (https://github.com/ppy/osu/issues/21204)
+                                                                               .Replace(@"\\", @"\")
+                                                                               .Trim('"')
+                                                                               .ToStandardisedPath());
+
+        /// <summary>
+        /// 去掉路径里的控制字符：坏谱面或转换工具会把空字符写进 Sample / Sprite 等事件的文件名，
+        /// 它们会一路传到文件系统 API 并抛 <see cref="ArgumentException"/>，最终让整个加载流程崩掉。
+        /// </summary>
+        private static string stripControlCharacters(string path)
+        {
+            if (!hasControlCharacter(path))
+                return path;
+
+            var builder = new StringBuilder(path.Length);
+
+            foreach (char c in path)
+            {
+                if (!char.IsControl(c))
+                    builder.Append(c);
+            }
+
+            return builder.ToString();
+        }
+
+        private static bool hasControlCharacter(string path)
+        {
+            foreach (char c in path)
+            {
+                if (char.IsControl(c))
+                    return true;
+            }
+
+            return false;
+        }
 
         public enum Section
         {
