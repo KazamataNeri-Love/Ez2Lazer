@@ -1025,7 +1025,7 @@ namespace osu.Game.Screens.Select
 
         protected override float GetPanelXOffset(Drawable panel)
         {
-            return base.GetPanelXOffset(panel) + (((ICarouselPanel)panel).Selected.Value ? 0 : selectionFocusOffset);
+            return ((ICarouselPanel)panel).Selected.Value ? 0 : selectionFocusOffset;
         }
 
         #endregion

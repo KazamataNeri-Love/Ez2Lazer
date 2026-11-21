@@ -110,6 +110,15 @@ namespace osu.Game.Screens.Select
             Masking = true;
             CornerRadius = CORNER_RADIUS;
 
+            statusPill = new BeatmapSetOnlineStatusPill
+            {
+                Anchor = Anchor.CentreLeft,
+                Origin = Anchor.CentreLeft,
+                ShowUnknownStatus = true,
+                TextSize = OsuFont.Style.Caption1.Size,
+                TextPadding = new MarginPadding { Horizontal = 6, Vertical = 1 },
+            };
+
             InternalChildren = new Drawable[]
             {
                 new EzSongSelectWedgeBackground(),
@@ -126,29 +135,6 @@ namespace osu.Game.Screens.Select
                     Spacing = new Vector2(0f, 4f),
                     Children = new Drawable[]
                     {
-                        new ShearAligningWrapper(new Container
-                        {
-                            Shear = -OsuGame.SHEAR,
-                            RelativeSizeAxes = Axes.X,
-                            AutoSizeAxes = Axes.Y,
-                            Children = new Drawable[]
-                            {
-                                statusPill = new BeatmapSetOnlineStatusPill
-                                {
-                                    Anchor = Anchor.CentreLeft,
-                                    Origin = Anchor.CentreLeft,
-                                    ShowUnknownStatus = true,
-                                    TextSize = OsuFont.Style.Caption1.Size,
-                                    TextPadding = new MarginPadding { Horizontal = 6, Vertical = 1 },
-                                },
-                                new EzManiaModeFlow
-                                {
-                                    Anchor = Anchor.CentreRight,
-                                    Origin = Anchor.CentreRight,
-                                    Margin = new MarginPadding { Right = 10f },
-                                },
-                            },
-                        }),
                         new ShearAligningWrapper(new Container
                         {
                             Shear = -OsuGame.SHEAR,
@@ -221,7 +207,7 @@ namespace osu.Game.Screens.Select
                             AutoSizeAxes = Axes.Y,
                             Margin = new MarginPadding { Left = -SongSelect.WEDGE_CONTENT_MARGIN },
                             Padding = new MarginPadding { Right = -SongSelect.WEDGE_CONTENT_MARGIN },
-                            Child = difficultyDisplay = new DifficultyDisplay(),
+                            Child = difficultyDisplay = new DifficultyDisplay(statusPill),
                         }),
                     },
                 }
