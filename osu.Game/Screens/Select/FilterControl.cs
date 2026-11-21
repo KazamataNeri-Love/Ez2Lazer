@@ -17,6 +17,7 @@ using osu.Framework.Input;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
 using osu.Framework.Threading;
+using osu.Framework.Testing;
 using osu.Game.Beatmaps;
 using osu.Game.Collections;
 using osu.Game.Configuration;
@@ -127,7 +128,7 @@ namespace osu.Game.Screens.Select
             RelativeSizeAxes = Axes.X;
             AutoSizeAxes = Axes.Y;
 
-            Shear = OsuGame.SHEAR;
+            Shear = Vector2.Zero;
             Margin = new MarginPadding { Top = -CORNER_RADIUS, Right = -40 };
 
             InternalChildren = new Drawable[]
@@ -348,6 +349,7 @@ namespace osu.Game.Screens.Select
         protected override void LoadComplete()
         {
             base.LoadComplete();
+            Scheduler.AddOnce(flattenShearsWhenControlsLoaded);
 
             difficultyRangeSlider.LowerBound = config.GetBindable<double>(OsuSetting.DisplayStarsMinimum);
             difficultyRangeSlider.UpperBound = config.GetBindable<double>(OsuSetting.DisplayStarsMaximum);
@@ -469,6 +471,33 @@ namespace osu.Game.Screens.Select
             updateEzControlVisibility();
             updateVisibleResultsActionAvailability();
             updateCriteria();
+        }
+
+        private void flattenShears()
+        {
+            Shear = Vector2.Zero;
+
+            foreach (var drawable in this.ChildrenOfType<Drawable>())
+                drawable.Shear = Vector2.Zero;
+        }
+
+        private void flattenShearsWhenControlsLoaded()
+        {
+            if (!searchTextBox.IsLoaded
+                || !showConvertedBeatmapsButton.IsLoaded
+                || !difficultyRangeSlider.IsLoaded
+                || !sortDropdown.IsLoaded
+                || !groupDropdown.IsLoaded
+                || !csSelector.IsLoaded
+                || !ksPreviewButton.IsLoaded
+                || !ezAnalysisFilterButton.IsLoaded
+                || !storyboardVideoFilterButton.IsLoaded)
+            {
+                Scheduler.AddOnce(flattenShearsWhenControlsLoaded);
+                return;
+            }
+
+            flattenShears();
         }
 
         private void updateEzControlVisibility()
@@ -713,6 +742,8 @@ namespace osu.Game.Screens.Select
 
         protected override void PopIn()
         {
+            flattenShears();
+
             this.MoveToX(0, SongSelect.ENTER_DURATION, Easing.OutQuint)
                 .FadeIn(SongSelect.ENTER_DURATION / 3, Easing.In);
         }

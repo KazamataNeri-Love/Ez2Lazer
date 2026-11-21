@@ -1,10 +1,13 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System.Linq;
 using NUnit.Framework;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Testing;
 using osu.Game.Screens.Select;
+using osuTK;
 
 namespace osu.Game.Tests.Visual.SongSelect
 {
@@ -34,6 +37,12 @@ namespace osu.Game.Tests.Visual.SongSelect
         public void TestSearch()
         {
             AddStep("search for text", () => filterControl.Search("test search"));
+        }
+
+        [Test]
+        public void TestFilterControlHasNoShearedDrawables()
+        {
+            AddUntilStep("filter control and descendants have no shear", () => filterControl.Shear == Vector2.Zero && filterControl.ChildrenOfType<Drawable>().All(drawable => drawable.Shear == Vector2.Zero));
         }
     }
 }
