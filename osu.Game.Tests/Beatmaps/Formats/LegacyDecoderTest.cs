@@ -29,6 +29,14 @@ namespace osu.Game.Tests.Beatmaps.Formats
             }
         }
 
+        [Test]
+        public void TestCleanFilenameRemovesControlCharacters()
+        {
+            var decoder = new LineLoggingDecoder(14);
+
+            Assert.That(decoder.CleanFilenameForTest("sample\0.wav"), Is.EqualTo("sample.wav"));
+        }
+
         private class LineLoggingDecoder : LegacyDecoder<TestModel>
         {
             public readonly List<string> ParsedLines = new List<string>();
@@ -37,6 +45,8 @@ namespace osu.Game.Tests.Beatmaps.Formats
                 : base(version)
             {
             }
+
+            public string CleanFilenameForTest(string path) => CleanFilename(path);
 
             protected override bool ShouldSkipLine(string line)
             {

@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
@@ -51,7 +51,19 @@ namespace osu.Game.Skinning
 
         public IEnumerable<string> AllAvailableSamples => hitSamples?.GetAvailableResources() ?? Array.Empty<string>();
 
-        protected internal ISample? GetSampleFromSkinFiles(string lookup, bool isHitsound) => (isHitsound ? hitSamples : samples)?.Get(lookup);
+        protected internal ISample? GetSampleFromSkinFiles(string lookup, bool isHitsound)
+        {
+            try
+            {
+                return (isHitsound ? hitSamples : samples)?.Get(lookup);
+            }
+            catch (Exception e) when (e is ArgumentException or IOException or NotSupportedException)
+            {
+                // 坏谱面或皮肤可能带出非法文件名（空字符、非法字符），这里只记录，不让加载流程中断。
+                Logger.Log($"Could not load sample \"{lookup.Replace("\0", "\\0")}\": {e.Message}", LoggingTarget.Runtime, LogLevel.Important);
+                return null;
+            }
+        }
 
         protected internal ISample? GetSampleFromResourceFiles(string lookup, bool isHitsound) => (isHitsound ? resourceHitSamples : resources?.AudioManager?.Samples)?.Get(lookup);
 
