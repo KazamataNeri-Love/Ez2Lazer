@@ -77,6 +77,8 @@
 | `EzOsuGame/Screens/Select/EzSoloSongSelect.QuickRotation.cs` | **Ez** 快速轮换分部 |
 | `EzOsuGame/Overlays/CollectionZipExporter.cs` / `SelectedBeatmapExporter.cs` / `VisibleBeatmapZipExporter.cs` | 导出逻辑（非绘制） |
 
+筛选板块保持平直：`FilterControl` 及已加载的后代 Drawable 在控件加载完成和展开时清除 Shear；视觉回归见 `TestSceneBeatmapFilterControl.TestFilterControlHasNoShearedDrawables`。
+
 皮肤目标层：`skinnableContent = new SkinnableContainer(new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.SongSelect))` —— Ez 皮肤组件在选歌场景的落点。
 
 ---
