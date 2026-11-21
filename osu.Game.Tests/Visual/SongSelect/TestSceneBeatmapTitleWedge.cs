@@ -19,6 +19,7 @@ using osu.Framework.Testing;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.ControlPoints;
 using osu.Game.Beatmaps.Drawables;
+using osu.Game.EzOsuGame.UserInterface;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Online.API;
 using osu.Game.Online.API.Requests;
@@ -163,6 +164,35 @@ namespace osu.Game.Tests.Visual.SongSelect
             });
             AddUntilStep("play count is -", () => this.ChildrenOfType<BeatmapTitleWedge.Statistic>().ElementAt(0).Text.ToString(), () => Is.EqualTo("-"));
             AddUntilStep("favourites count is -", () => this.ChildrenOfType<BeatmapTitleWedge.FavouriteButton>().Single().Text.ToString(), () => Is.EqualTo("-"));
+        }
+
+        [Test]
+        public void TestOnlineStatusFitsBesideAnalysisVariant()
+        {
+            var beatmap = createTestBeatmapFromRuleset(new OsuRuleset().RulesetInfo);
+            beatmap.BeatmapInfo.Status = BeatmapOnlineStatus.LocallyModified;
+            var rankedBeatmap = createTestBeatmapFromRuleset(beatmap.BeatmapInfo.Ruleset);
+            rankedBeatmap.BeatmapInfo.Status = BeatmapOnlineStatus.Ranked;
+
+            AddStep("use half the available width", () => titleWedge.Width = 0.5f);
+            setRuleset(beatmap.BeatmapInfo.Ruleset);
+            selectBeatmap(beatmap);
+
+            BeatmapSetOnlineStatusPill status() => titleWedge.ChildrenOfType<BeatmapSetOnlineStatusPill>().Single();
+            EzMetricVariantChip variant() => titleWedge.ChildrenOfType<EzMetricVariantChip>().Single();
+
+            AddUntilStep("status and analysis variant are visible", () =>
+                status() is { Status: BeatmapOnlineStatus.LocallyModified, Alpha: 1 } && titleWedge.ChildrenOfType<EzMetricVariantChip>().Any(v => v.IsPresent));
+            AddAssert("status is on the same row to the right of the analysis variant", () =>
+            {
+                var badge = status().ScreenSpaceDrawQuad;
+                var button = variant().ScreenSpaceDrawQuad;
+                return Math.Abs(badge.Centre.Y - button.Centre.Y) < 1 && badge.TopLeft.X > button.TopRight.X;
+            });
+            AddAssert("status stays inside the difficulty panel", () => difficultyDisplay.ScreenSpaceDrawQuad.Contains(status().ScreenSpaceDrawQuad.BottomRight));
+
+            selectBeatmap(rankedBeatmap);
+            AddUntilStep("status changes to ranked", () => status().Status == BeatmapOnlineStatus.Ranked);
         }
 
         [Test]

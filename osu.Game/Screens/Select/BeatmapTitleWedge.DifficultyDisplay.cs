@@ -77,6 +77,7 @@ namespace osu.Game.Screens.Select
 
             // Mirrors the live difficulty; re-binding the cache's shared bindable per update would stack handlers.
             private readonly Bindable<StarDifficulty> liveDifficulty = new Bindable<StarDifficulty>();
+            private readonly BeatmapSetOnlineStatusPill statusPill;
 
             protected override void Dispose(bool isDisposing)
             {
@@ -86,8 +87,9 @@ namespace osu.Game.Screens.Select
                     liveDifficulty.UnbindAll();
             }
 
-            public DifficultyDisplay()
+            public DifficultyDisplay(BeatmapSetOnlineStatusPill statusPill)
             {
+                this.statusPill = statusPill;
                 RelativeSizeAxes = Axes.X;
                 AutoSizeAxes = Axes.Y;
             }
@@ -116,7 +118,7 @@ namespace osu.Game.Screens.Select
                                 RelativeSizeAxes = Axes.X,
                                 Height = 20,
                                 Margin = new MarginPadding { Vertical = 5f },
-                                Padding = new MarginPadding { Left = SongSelect.WEDGE_CONTENT_MARGIN },
+                                Padding = new MarginPadding { Left = SongSelect.WEDGE_CONTENT_MARGIN, Right = 10f },
                                 RowDimensions = new[] { new Dimension(GridSizeMode.AutoSize) },
                                 ColumnDimensions = new[]
                                 {
@@ -126,6 +128,7 @@ namespace osu.Game.Screens.Select
                                     new Dimension(GridSizeMode.AutoSize),
                                     new Dimension(GridSizeMode.Absolute, 6),
                                     new Dimension(GridSizeMode.AutoSize, maxSize: 160),
+                                    new Dimension(GridSizeMode.AutoSize),
                                 },
                                 Content = new[]
                                 {
@@ -184,7 +187,9 @@ namespace osu.Game.Screens.Select
                                         {
                                             Anchor = Anchor.CentreLeft,
                                             Origin = Anchor.CentreLeft,
+                                            Margin = new MarginPadding { Right = 6f },
                                         },
+                                        statusPill,
                                     }
                                 },
                             }),
