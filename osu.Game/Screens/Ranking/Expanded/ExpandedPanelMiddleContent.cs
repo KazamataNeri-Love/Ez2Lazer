@@ -11,6 +11,7 @@ using osu.Framework.Localisation;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.Drawables;
 using osu.Game.Database;
+using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Scoring;
 using osu.Game.EzOsuGame.Scoring.Bonus;
 using osu.Game.Graphics;
@@ -232,7 +233,8 @@ namespace osu.Game.Screens.Ranking.Expanded
                                 {
                                     new Dimension(GridSizeMode.AutoSize),
                                 }
-                            }
+                            },
+                            createIidxStatistics(),
                         }
                     }
                 }
@@ -240,6 +242,53 @@ namespace osu.Game.Screens.Ranking.Expanded
 
             if (score.Date != default)
                 AddInternal(new PlayedOnText(score.Date, true));
+        }
+
+        private Drawable createIidxStatistics()
+        {
+            if (score.Ruleset.OnlineID != 3 || !score.MaximumStatistics.TryGetValue(HitResult.Perfect, out int maximumPerfect) || maximumPerfect <= 0)
+                return Empty();
+
+            if (EzScoreInfoExtensions.ResolveDisplayJudgeMode(score) is not (EzEnumJudgeMode.IIDX_HD or EzEnumJudgeMode.LR2_HD or EzEnumJudgeMode.Raja_NM))
+                return Empty();
+
+            int perfect = score.Statistics.GetValueOrDefault(HitResult.Perfect);
+            int great = score.Statistics.GetValueOrDefault(HitResult.Great);
+
+            if (perfect < 0 || great < 0 || (long)perfect + great > maximumPerfect)
+                return Empty();
+
+            // Apply the IIDX weights to the saved Mania judgements.
+            long exScore = 2L * perfect + great;
+            long maximumExScore = 2L * maximumPerfect;
+            long gap = maximumExScore - exScore;
+            string level = (exScore * 9 / maximumExScore) switch
+            {
+                >= 8 => "AAA",
+                7 => "AA",
+                6 => "A",
+                5 => "B",
+                4 => "C",
+                3 => "D",
+                2 => "E",
+                _ => "F",
+            };
+
+            var row = new IidxStatistic[]
+            {
+                new IidxStatistic("EX Score", $"{exScore} / {maximumExScore}"),
+                new IidxStatistic("Max", gap == 0 ? "0" : $"− {gap}"),
+                new IidxStatistic("DJ Level", level),
+            };
+            statisticDisplays.AddRange(row);
+
+            return new GridContainer
+            {
+                RelativeSizeAxes = Axes.X,
+                AutoSizeAxes = Axes.Y,
+                Content = new[] { row },
+                RowDimensions = new[] { new Dimension(GridSizeMode.AutoSize) },
+            };
         }
 
         protected override void LoadComplete()
@@ -268,6 +317,23 @@ namespace osu.Game.Screens.Ranking.Expanded
                 if (!withFlair)
                     FinishTransforms(true);
             });
+        }
+
+        private partial class IidxStatistic : StatisticDisplay
+        {
+            private readonly string value;
+
+            public IidxStatistic(string header, string value)
+                : base(header)
+            {
+                this.value = value;
+            }
+
+            protected override Drawable CreateContent() => new OsuSpriteText
+            {
+                Font = OsuFont.Torus.With(size: 16, weight: FontWeight.SemiBold),
+                Text = value,
+            };
         }
 
         internal partial class ClickableMetadata : OsuHoverContainer

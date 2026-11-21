@@ -13,6 +13,7 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Testing;
 using osu.Game.Beatmaps;
+using osu.Game.EzOsuGame.Configuration;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Localisation;
 using osu.Game.Models;
@@ -20,6 +21,7 @@ using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Osu;
 using osu.Game.Rulesets.Osu.Mods;
+using osu.Game.Rulesets.Scoring;
 using osu.Game.Scoring;
 using osu.Game.Screens.Ranking;
 using osu.Game.Screens.Ranking.Expanded;
@@ -150,6 +152,70 @@ namespace osu.Game.Tests.Visual.Ranking
                 score.Accuracy = 0.975;
                 showPanel(score, withFlair);
             });
+        }
+
+        [TestCase(EzEnumJudgeMode.IIDX_HD, 938, 62, "1938 / 2000", "− 62", "AAA")]
+        [TestCase(EzEnumJudgeMode.LR2_HD, 938, 62, "1938 / 2000", "− 62", "AAA")]
+        [TestCase(EzEnumJudgeMode.Raja_NM, 777, 223, "1777 / 2000", "− 223", "AA")]
+        [TestCase(EzEnumJudgeMode.Raja_NM, 778, 222, "1778 / 2000", "− 222", "AAA")]
+        [TestCase(EzEnumJudgeMode.IIDX_HD, 1000, 0, "2000 / 2000", "0", "AAA")]
+        public void TestIidxStatistics(EzEnumJudgeMode judgeMode, int perfect, int great, string exScore, string gap, string level)
+        {
+            AddStep("show Mania score", () =>
+            {
+                var score = TestResources.CreateTestScoreInfo(rulesetStore.GetRuleset(3));
+                score.JudgeMode = (int)judgeMode;
+                score.Statistics.Clear();
+                score.Statistics[HitResult.Perfect] = perfect;
+                score.Statistics[HitResult.Great] = great;
+                score.MaximumStatistics.Clear();
+                score.MaximumStatistics[HitResult.Perfect] = 1000;
+                Child = new ExpandedPanelMiddleContentContainer(score, false) { Height = ScorePanel.EXPANDED_HEIGHT };
+            });
+
+            AddUntilStep("show the EX score, MAX gap and DJ level below judgements", () =>
+            {
+                var judgements = this.ChildrenOfType<HitResultStatistic>().ToArray();
+                var playedOn = this.ChildrenOfType<PlayedOnText>().SingleOrDefault();
+
+                if (judgements.Length == 0 || playedOn == null)
+                    return false;
+
+                float judgementBottom = judgements.Max(j => j.ScreenSpaceDrawQuad.BottomLeft.Y);
+                float dateTop = playedOn.ScreenSpaceDrawQuad.TopLeft.Y;
+                var row = this.ChildrenOfType<OsuSpriteText>().Where(t => t.Alpha == 1
+                    && t.ScreenSpaceDrawQuad.TopLeft.Y > judgementBottom && t.ScreenSpaceDrawQuad.BottomLeft.Y < dateTop);
+                return new[] { "EX SCORE", exScore, "MAX", gap, "DJ LEVEL", level }.All(value => row.Any(t => t.Text.ToString() == value));
+            });
+        }
+
+        [TestCase(0, EzEnumJudgeMode.IIDX_HD, 1000, 938, 62)]
+        [TestCase(3, EzEnumJudgeMode.IIDX_HD, 0, 938, 62)]
+        [TestCase(3, EzEnumJudgeMode.IIDX_HD, 1000, 938, 63)]
+        [TestCase(3, EzEnumJudgeMode.Lazer, 1000, 938, 62)]
+        [TestCase(3, EzEnumJudgeMode.StableClassic, 1000, 938, 62)]
+        [TestCase(3, EzEnumJudgeMode.EZ2AC, 1000, 938, 62)]
+        [TestCase(3, EzEnumJudgeMode.O2Jam, 1000, 938, 62)]
+        [TestCase(3, EzEnumJudgeMode.Malody_E, 1000, 938, 62)]
+        [TestCase(3, EzEnumJudgeMode.Malody_B, 1000, 938, 62)]
+        [TestCase(3, (EzEnumJudgeMode)(-1), 1000, 938, 62)]
+        [TestCase(3, (EzEnumJudgeMode)99, 1000, 938, 62)]
+        public void TestIidxStatisticsHidden(int rulesetId, EzEnumJudgeMode judgeMode, int maximumPerfect, int perfect, int great)
+        {
+            AddStep("show score without applicable EX statistics", () =>
+            {
+                var score = TestResources.CreateTestScoreInfo(rulesetStore.GetRuleset(rulesetId));
+                score.JudgeMode = (int)judgeMode;
+                score.HealthMode = (int)EzEnumHealthMode.IIDX_HD;
+                score.Statistics[HitResult.Perfect] = perfect;
+                score.Statistics[HitResult.Great] = great;
+                score.MaximumStatistics.Clear();
+                score.MaximumStatistics[HitResult.Perfect] = maximumPerfect;
+                showPanel(score);
+            });
+
+            AddUntilStep("wait for the score statistics", () => this.ChildrenOfType<HitResultStatistic>().Any());
+            AddAssert("hide all three EX statistics", () => !this.ChildrenOfType<OsuSpriteText>().Any(t => t.Text.ToString() is "EX SCORE" or "MAX" or "DJ LEVEL"));
         }
 
         private void showPanel(ScoreInfo score, bool withFlair = false) =>
