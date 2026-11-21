@@ -293,6 +293,41 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly LocalisableString SCORE_COMPARE_BAR_HEIGHT_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("柱体主轴像素高度；满柱对应整谱理论满分", "Pixel height of the bar axis; full bar equals theoretical max score.");
         public static readonly LocalisableString SCORE_COMPARE_BAR_WIDTH_LABEL = new EzLocalizationManager.EzLocalisableString("柱状图宽度", "Bar Width");
         public static readonly LocalisableString SCORE_COMPARE_BAR_WIDTH_DESCRIPTION = new EzLocalizationManager.EzLocalisableString("单根柱体的像素宽度", "Pixel width of each bar.");
+
+        public static readonly LocalisableString SCORE_COMPARE_BORDER_THICKNESS_LABEL = new EzLocalizationManager.EzLocalisableString("柱体边框厚度", "Bar Border Thickness");
+        public static readonly LocalisableString SCORE_COMPARE_BORDER_THICKNESS_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "边框厚度占柱宽的比例；0 为不描边，最小钳制到 1 像素。",
+            "Border thickness as a fraction of bar width; 0 disables the border, clamped to at least 1px.");
+
+        public static readonly LocalisableString SCORE_COMPARE_SHEEN_WIDTH_LABEL = new EzLocalizationManager.EzLocalisableString("柱体高光宽度", "Bar Sheen Width");
+        public static readonly LocalisableString SCORE_COMPARE_SHEEN_WIDTH_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "中央高光条宽度占柱宽的比例；0 为不绘制高光。",
+            "Central sheen strip width as a fraction of bar width; 0 disables the sheen.");
+
+        public static readonly LocalisableString SCORE_COMPARE_SHOW_TITLE_LABEL = new EzLocalizationManager.EzLocalisableString("显示说明文字", "Show Caption");
+        public static readonly LocalisableString SCORE_COMPARE_SHOW_TITLE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "显示柱体顶部的对比条件文字。",
+            "Show the comparison metric caption above each bar.");
+
+        public static readonly LocalisableString SCORE_COMPARE_SHOW_VALUE_LABEL = new EzLocalizationManager.EzLocalisableString("显示分数", "Show Score");
+        public static readonly LocalisableString SCORE_COMPARE_SHOW_VALUE_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "显示柱体底部的分数数字。",
+            "Show the score value below each bar.");
+
+        public static readonly LocalisableString SCORE_COMPARE_NOW_COLOUR_LABEL = new EzLocalizationManager.EzLocalisableString("当前柱颜色", "Current Bar Colour");
+        public static readonly LocalisableString SCORE_COMPARE_NOW_COLOUR_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "当前分数柱的独立颜色，不随对比条件变化。",
+            "Independent colour of the current-score bar; does not follow the comparison metric.");
+
+        public static readonly LocalisableString SCORE_COMPARE_CONDITION1_COLOUR_LABEL = new EzLocalizationManager.EzLocalisableString("对比柱 1 颜色", "Compare Bar 1 Colour");
+        public static readonly LocalisableString SCORE_COMPARE_CONDITION1_COLOUR_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "第一根对比柱的独立颜色，不随对比条件变化。",
+            "Independent colour of the first comparison bar; does not follow the comparison metric.");
+
+        public static readonly LocalisableString SCORE_COMPARE_CONDITION2_COLOUR_LABEL = new EzLocalizationManager.EzLocalisableString("对比柱 2 颜色", "Compare Bar 2 Colour");
+        public static readonly LocalisableString SCORE_COMPARE_CONDITION2_COLOUR_DESCRIPTION = new EzLocalizationManager.EzLocalisableString(
+            "第二根对比柱的独立颜色，不随对比条件变化。",
+            "Independent colour of the second comparison bar; does not follow the comparison metric.");
         public static readonly LocalisableString SCORE_COMPARE_NOW_LABEL = new EzLocalizationManager.EzLocalisableString("当前", "Now");
 
         public static readonly LocalisableString SCORE_COMPARE_BACKGROUND_VISIBLE_LABEL = new EzLocalizationManager.EzLocalisableString("显示背景", "Show Background");

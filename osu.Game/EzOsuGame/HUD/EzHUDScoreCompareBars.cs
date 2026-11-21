@@ -10,6 +10,7 @@ using osu.Framework.Bindables;
 using osu.Framework.Extensions;
 using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Graphics;
+using osu.Framework.Graphics.Colour;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Localisation;
@@ -17,6 +18,7 @@ using osu.Game.Configuration;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.EzOsuGame.Material;
 using osu.Game.EzOsuGame.Scoring;
+using osu.Game.EzOsuGame.Screens;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Localisation.SkinComponents;
@@ -78,6 +80,42 @@ namespace osu.Game.EzOsuGame.HUD
             Precision = 1,
         };
 
+        [SettingSource(typeof(EzHUDStrings), nameof(EzHUDStrings.SCORE_COMPARE_BORDER_THICKNESS_LABEL), nameof(EzHUDStrings.SCORE_COMPARE_BORDER_THICKNESS_DESCRIPTION),
+            SettingControlType = typeof(SettingsPercentageSlider<float>))]
+        public BindableFloat BorderThicknessPercent { get; } = new BindableFloat(0.04f)
+        {
+            MinValue = 0,
+            MaxValue = 0.3f,
+            Precision = 0.01f,
+        };
+
+        [SettingSource(typeof(EzHUDStrings), nameof(EzHUDStrings.SCORE_COMPARE_SHEEN_WIDTH_LABEL), nameof(EzHUDStrings.SCORE_COMPARE_SHEEN_WIDTH_DESCRIPTION),
+            SettingControlType = typeof(SettingsPercentageSlider<float>))]
+        public BindableFloat SheenWidthPercent { get; } = new BindableFloat(0.12f)
+        {
+            MinValue = 0,
+            MaxValue = 0.5f,
+            Precision = 0.01f,
+        };
+
+        [SettingSource(typeof(EzHUDStrings), nameof(EzHUDStrings.SCORE_COMPARE_SHOW_TITLE_LABEL), nameof(EzHUDStrings.SCORE_COMPARE_SHOW_TITLE_DESCRIPTION))]
+        public BindableBool ShowTitle { get; } = new BindableBool(true);
+
+        [SettingSource(typeof(EzHUDStrings), nameof(EzHUDStrings.SCORE_COMPARE_SHOW_VALUE_LABEL), nameof(EzHUDStrings.SCORE_COMPARE_SHOW_VALUE_DESCRIPTION))]
+        public BindableBool ShowValue { get; } = new BindableBool(true);
+
+        [SettingSource(typeof(EzHUDStrings), nameof(EzHUDStrings.SCORE_COMPARE_NOW_COLOUR_LABEL), nameof(EzHUDStrings.SCORE_COMPARE_NOW_COLOUR_DESCRIPTION),
+            SettingControlType = typeof(EzSettingsColour))]
+        public BindableColour4 NowBarColour { get; } = new BindableColour4(Colour4.FromHex("99EB47").Opacity(0.85f));
+
+        [SettingSource(typeof(EzHUDStrings), nameof(EzHUDStrings.SCORE_COMPARE_CONDITION1_COLOUR_LABEL), nameof(EzHUDStrings.SCORE_COMPARE_CONDITION1_COLOUR_DESCRIPTION),
+            SettingControlType = typeof(EzSettingsColour))]
+        public BindableColour4 CompareCondition1BarColour { get; } = new BindableColour4(Colour4.FromHex("2E576B").Opacity(0.85f));
+
+        [SettingSource(typeof(EzHUDStrings), nameof(EzHUDStrings.SCORE_COMPARE_CONDITION2_COLOUR_LABEL), nameof(EzHUDStrings.SCORE_COMPARE_CONDITION2_COLOUR_DESCRIPTION),
+            SettingControlType = typeof(EzSettingsColour))]
+        public BindableColour4 CompareCondition2BarColour { get; } = new BindableColour4(Colour4.FromHex("FFDD55").Opacity(0.85f));
+
         [SettingSource(typeof(EzHUDStrings), nameof(EzHUDStrings.SCORE_COMPARE_BACKGROUND_VISIBLE_LABEL), nameof(EzHUDStrings.SCORE_COMPARE_BACKGROUND_VISIBLE_DESCRIPTION))]
         public BindableBool BackgroundVisible { get; } = new BindableBool(true);
 
@@ -116,9 +154,6 @@ namespace osu.Game.EzOsuGame.HUD
         private EzScoreRaceService? interestService;
 
         private IBindableDictionary<string, EzScoreRaceState>? stateLookup;
-
-        [Resolved]
-        private OsuColour colours { get; set; } = null!;
 
         public EzHUDScoreCompareBars()
         {
@@ -169,8 +204,23 @@ namespace osu.Game.EzOsuGame.HUD
             BarDirection.BindValueChanged(_ => layoutBars(), true);
             BarHeight.BindValueChanged(_ => layoutBars(), true);
             BarWidth.BindValueChanged(_ => layoutBars(), true);
+            BorderThicknessPercent.BindValueChanged(_ => layoutBars(), true);
+            SheenWidthPercent.BindValueChanged(_ => layoutBars(), true);
+
+            NowBarColour.BindValueChanged(_ => onBarColourChanged(), true);
+            CompareCondition1BarColour.BindValueChanged(_ => onBarColourChanged(), true);
+            CompareCondition2BarColour.BindValueChanged(_ => onBarColourChanged(), true);
+
+            ShowTitle.BindValueChanged(_ => updateTextVisibility(), true);
+            ShowValue.BindValueChanged(_ => updateTextVisibility(), true);
 
             layoutBars();
+        }
+
+        private void updateTextVisibility()
+        {
+            foreach (var bar in bars)
+                bar.SetTextVisibility(ShowTitle.Value, ShowValue.Value);
         }
 
         public void SyncMaterialCaptureState()
@@ -341,15 +391,15 @@ namespace osu.Game.EzOsuGame.HUD
 
             if (nowBarScore != lastNowBarScore)
             {
-                bars[0].UpdateValues(EzHUDStrings.SCORE_COMPARE_NOW_LABEL, formatScore(nowBarScore), nowBarScore, barScoreScale, getBarColour(isCurrent: true));
+                bars[0].UpdateValues(EzHUDStrings.SCORE_COMPARE_NOW_LABEL, formatScore(nowBarScore), nowBarScore, barScoreScale, getBarColour(0));
                 lastNowBarScore = nowBarScore;
             }
 
             if (CompareCondition1Setting.Value == EzScoreRaceMetric.TheoreticalMaxScore)
-                updateTheoreticalCompareBar(bars[1], CompareCondition1Setting.Value, barScoreScale);
+                updateTheoreticalCompareBar(1, CompareCondition1Setting.Value, barScoreScale);
 
             if (CompareCondition2Setting.Value == EzScoreRaceMetric.TheoreticalMaxScore)
-                updateTheoreticalCompareBar(bars[2], CompareCondition2Setting.Value, barScoreScale);
+                updateTheoreticalCompareBar(2, CompareCondition2Setting.Value, barScoreScale);
         }
 
         private void updateGhostCompareBar(int conditionIndex)
@@ -364,7 +414,7 @@ namespace osu.Game.EzOsuGame.HUD
 
             if (processor == null || !SupportsGhostRace)
             {
-                bars[conditionIndex].UpdateValues(metric.GetLocalisableDescription(), string.Empty, 0, barScoreScale, getBarColour(metric));
+                bars[conditionIndex].UpdateValues(metric.GetLocalisableDescription(), string.Empty, 0, barScoreScale, getBarColour(conditionIndex), 0);
                 return;
             }
 
@@ -375,7 +425,8 @@ namespace osu.Game.EzOsuGame.HUD
                 label,
                 barScore,
                 barScoreScale,
-                getBarColour(metric));
+                getBarColour(conditionIndex),
+                processor.State?.ScoreInfo.TotalScore);
         }
 
         private void updateStaticCompareBar(int conditionIndex)
@@ -390,7 +441,7 @@ namespace osu.Game.EzOsuGame.HUD
 
             if (scoreInfo == null || !SupportsGhostRace)
             {
-                bars[conditionIndex].UpdateValues(metric.GetLocalisableDescription(), string.Empty, 0, barScoreScale, getBarColour(metric));
+                bars[conditionIndex].UpdateValues(metric.GetLocalisableDescription(), string.Empty, 0, barScoreScale, getBarColour(conditionIndex));
                 return;
             }
 
@@ -401,18 +452,19 @@ namespace osu.Game.EzOsuGame.HUD
                 label,
                 barScore,
                 barScoreScale,
-                getBarColour(metric));
+                getBarColour(conditionIndex));
         }
 
-        private void updateTheoreticalCompareBar(CompareBar bar, EzScoreRaceMetric metric, long barScoreScale)
+        private void updateTheoreticalCompareBar(int barIndex, EzScoreRaceMetric metric, long barScoreScale)
         {
             long theoreticalScore = getTheoreticalScoreAtTime();
-            bar.UpdateValues(
+            bars[barIndex].UpdateValues(
                 metric.GetLocalisableDescription(),
                 formatScore(theoreticalScore),
                 theoreticalScore,
                 barScoreScale,
-                getBarColour(metric));
+                getBarColour(barIndex),
+                barScoreScale);
         }
 
         private void refreshStaticGhosts()
@@ -518,19 +570,37 @@ namespace osu.Game.EzOsuGame.HUD
             SyncMaterialCaptureState();
         }
 
-        private Color4 getBarColour(EzScoreRaceMetric metric = default, bool isCurrent = false)
+        /// <summary>按柱位取色：三根柱各自独立，不再随对比条件切换。</summary>
+        private Color4 getBarColour(int barIndex)
         {
-            const float alpha = 0.85f;
-
-            if (isCurrent)
-                return colours.Lime2.Opacity(alpha);
-
-            return metric switch
+            Colour4 colour = barIndex switch
             {
-                EzScoreRaceMetric.TotalScore => colours.YellowLight.Opacity(alpha),
-                EzScoreRaceMetric.MissCount => colours.Red2.Opacity(alpha),
-                _ => colours.Blue4.Opacity(alpha),
+                0 => NowBarColour.Value,
+                1 => CompareCondition1BarColour.Value,
+                _ => CompareCondition2BarColour.Value,
             };
+
+            return colour;
+        }
+
+        /// <summary>
+        /// 只刷新颜色派生，不重新挑选或重绑 ghost 成绩：拖取色器时不应触发 Realm 查询与分数跳变。
+        /// </summary>
+        private void onBarColourChanged()
+        {
+            lastNowBarScore = long.MinValue;
+
+            foreach (var bar in bars)
+                bar.InvalidateColour();
+
+            updateGhostCompareBar(1);
+            updateGhostCompareBar(2);
+
+            if (CompareCondition1Setting.Value == EzScoreRaceMetric.TheoreticalMaxScore)
+                updateTheoreticalCompareBar(1, CompareCondition1Setting.Value, getBarScoreScale());
+
+            if (CompareCondition2Setting.Value == EzScoreRaceMetric.TheoreticalMaxScore)
+                updateTheoreticalCompareBar(2, CompareCondition2Setting.Value, getBarScoreScale());
         }
 
         private static string formatScore(long score) => score.ToString("N0");
@@ -556,6 +626,8 @@ namespace osu.Game.EzOsuGame.HUD
             float barThickness = BarWidth.Value;
             float barAxisHeight = BarHeight.Value;
             var direction = BarDirection.Value;
+            float borderThickness = resolveBorderThickness(barThickness);
+            float sheenWidth = resolveSheenWidth(barThickness, borderThickness);
 
             Width = bars.Length * barThickness + (bars.Length - 1) * bar_spacing + container_padding * 2;
             Height = barAxisHeight + label_area_height + container_padding * 2;
@@ -563,7 +635,7 @@ namespace osu.Game.EzOsuGame.HUD
             for (int i = 0; i < bars.Length; i++)
             {
                 var bar = bars[i];
-                bar.Configure(direction, barAxisHeight, barThickness);
+                bar.Configure(direction, barAxisHeight, barThickness, borderThickness, sheenWidth);
 
                 bar.Anchor = Anchor.BottomLeft;
                 bar.Origin = Anchor.BottomLeft;
@@ -573,37 +645,98 @@ namespace osu.Game.EzOsuGame.HUD
             }
         }
 
+        private float resolveBorderThickness(float barThickness)
+        {
+            if (BorderThicknessPercent.Value <= 0)
+                return 0;
+
+            return Math.Clamp(barThickness * BorderThicknessPercent.Value, 1, Math.Max(1, barThickness * 0.35f));
+        }
+
+        private float resolveSheenWidth(float barThickness, float borderThickness)
+        {
+            if (SheenWidthPercent.Value <= 0)
+                return 0;
+
+            return Math.Clamp(barThickness * SheenWidthPercent.Value, 0, Math.Max(0, barThickness - 2 * borderThickness));
+        }
+
         private partial class CompareBar : CompositeDrawable
         {
             private const float min_bar_height = 3;
 
-            private Box bar = null!;
+            private Container frame = null!;
+            private Container fillReveal = null!;
+            private Container fillBody = null!;
+            private Box fillLeft = null!;
+            private Box fillRight = null!;
+            private Box sheen = null!;
+            private Box borderTop = null!;
+            private Box borderBottom = null!;
+            private Box borderLeft = null!;
+            private Box borderRight = null!;
             private OsuSpriteText titleText = null!;
             private OsuSpriteText valueText = null!;
             private Container barTrack = null!;
             private EzScoreCompareBarDirection direction = EzScoreCompareBarDirection.Upward;
             private float maxBarSize;
             private float barThickness;
+            private float borderThickness;
+            private float sheenWidth;
 
             private LocalisableString lastTitle;
             private string lastValue = string.Empty;
-            private float lastBarHeight = -1;
+            private float lastFillHeight = -1;
+            private float lastFrameHeight = -1;
             private Color4 lastBarColour;
+            private bool colourDirty;
 
             public CompareBar()
             {
                 RelativeSizeAxes = Axes.None;
             }
 
-            public void Configure(EzScoreCompareBarDirection barDirection, float maxSize, float thickness)
+            public void Configure(EzScoreCompareBarDirection barDirection, float maxSize, float thickness, float border, float sheenStripWidth)
             {
                 direction = barDirection;
                 maxBarSize = maxSize;
                 barThickness = thickness;
+                borderThickness = border;
+                sheenWidth = sheenStripWidth;
 
                 barTrack.Size = new Vector2(barThickness, maxSize);
                 Width = barThickness;
+
+                frame.Width = barThickness;
+
+                // 边框用四条独立 Box 绘制：框架的遮罩边框只叠加在子节点像素上，空框区域没有子节点，
+                // 且内层遮罩会替换外层遮罩信息，导致框内完全看不到边框。
+                float borderAlpha = borderThickness > 0 ? 1 : 0;
+                borderTop.Alpha = borderAlpha;
+                borderBottom.Alpha = borderAlpha;
+                borderLeft.Alpha = borderAlpha;
+                borderRight.Alpha = borderAlpha;
+
+                // 按当前框高重新套一次钳制：布局变化会把高度改回来，不能让它停在未钳制的边框厚度上。
+                applyBorderSize(frame.Height);
+
+                sheen.Width = sheenWidth;
+                sheen.Alpha = sheenWidth > 0 ? 1 : 0;
+
                 applyBarAnchor();
+            }
+
+            private void applyBorderSize(float frameHeight)
+            {
+                // 边框是 frame 的兄弟子节点，不会被任何遮罩裁剪；框比边框还薄时必须把四边钳进框内，
+                // 否则 0 分时会残留一条画到柱区之外的横线，框底也会比其它柱低一个边框厚度。
+                float capHeight = Math.Min(borderThickness, Math.Max(0, frameHeight) * 0.5f);
+                float capWidth = Math.Min(borderThickness, barThickness * 0.5f);
+
+                borderTop.Height = capHeight;
+                borderBottom.Height = capHeight;
+                borderLeft.Width = capWidth;
+                borderRight.Width = capWidth;
             }
 
             [BackgroundDependencyLoader]
@@ -627,10 +760,72 @@ namespace osu.Game.EzOsuGame.HUD
                         {
                             RelativeSizeAxes = Axes.None,
                             Size = new Vector2(barThickness, maxBarSize),
-                            Child = bar = new Box
+                            Child = frame = new Container
                             {
                                 RelativeSizeAxes = Axes.None,
-                                Width = barThickness,
+                                Children = new Drawable[]
+                                {
+                                    fillReveal = new Container
+                                    {
+                                        Masking = true,
+                                        RelativeSizeAxes = Axes.X,
+                                        Width = 1,
+                                        Child = fillBody = new Container
+                                        {
+                                            RelativeSizeAxes = Axes.X,
+                                            Width = 1,
+                                            Children = new Drawable[]
+                                            {
+                                                fillLeft = new Box
+                                                {
+                                                    RelativeSizeAxes = Axes.Both,
+                                                    Size = new Vector2(0.5f, 1),
+                                                },
+                                                fillRight = new Box
+                                                {
+                                                    Anchor = Anchor.TopRight,
+                                                    Origin = Anchor.TopRight,
+                                                    RelativeSizeAxes = Axes.Both,
+                                                    Size = new Vector2(0.5f, 1),
+                                                },
+                                                sheen = new Box
+                                                {
+                                                    Anchor = Anchor.TopCentre,
+                                                    Origin = Anchor.TopCentre,
+                                                    RelativeSizeAxes = Axes.Y,
+                                                    Height = 1,
+                                                    Width = barThickness,
+                                                },
+                                            },
+                                        },
+                                    },
+                                    borderTop = new Box
+                                    {
+                                        Anchor = Anchor.TopLeft,
+                                        Origin = Anchor.TopLeft,
+                                        RelativeSizeAxes = Axes.X,
+                                    },
+                                    borderBottom = new Box
+                                    {
+                                        Anchor = Anchor.BottomLeft,
+                                        Origin = Anchor.BottomLeft,
+                                        RelativeSizeAxes = Axes.X,
+                                    },
+                                    borderLeft = new Box
+                                    {
+                                        Anchor = Anchor.TopLeft,
+                                        Origin = Anchor.TopLeft,
+                                        RelativeSizeAxes = Axes.Y,
+                                        Height = 1,
+                                    },
+                                    borderRight = new Box
+                                    {
+                                        Anchor = Anchor.TopRight,
+                                        Origin = Anchor.TopRight,
+                                        RelativeSizeAxes = Axes.Y,
+                                        Height = 1,
+                                    },
+                                },
                             },
                         },
                         valueText = new OsuSpriteText
@@ -647,24 +842,38 @@ namespace osu.Game.EzOsuGame.HUD
 
             private void applyBarAnchor()
             {
-                if (direction == EzScoreCompareBarDirection.Upward)
-                {
-                    bar.Anchor = Anchor.BottomCentre;
-                    bar.Origin = Anchor.BottomCentre;
-                }
-                else
-                {
-                    bar.Anchor = Anchor.TopCentre;
-                    bar.Origin = Anchor.TopCentre;
-                }
+                Anchor anchor = direction == EzScoreCompareBarDirection.Upward ? Anchor.BottomCentre : Anchor.TopCentre;
+
+                frame.Anchor = frame.Origin = anchor;
+                fillReveal.Anchor = fillReveal.Origin = anchor;
+                fillBody.Anchor = fillBody.Origin = anchor;
             }
 
             public void ResetVisualCache()
             {
-                lastBarHeight = -1;
+                lastFillHeight = -1;
+                lastFrameHeight = -1;
+                colourDirty = true;
             }
 
-            public void UpdateValues(LocalisableString title, string value, long barScore, long maxBarScore, Color4 barColour)
+            /// <summary>
+            /// 基色来自外部设置时，当前值与缓存相同也要重算一次派生色。
+            /// </summary>
+            public void InvalidateColour() => colourDirty = true;
+
+            /// <summary>
+            /// 只隐藏文字、不改变布局：标题与分数仍占位，柱体位置不会随开关跳动。
+            /// </summary>
+            public void SetTextVisibility(bool showTitle, bool showValue)
+            {
+                titleText.Alpha = showTitle ? 1 : 0;
+                valueText.Alpha = showValue ? 1 : 0;
+            }
+
+            /// <param name="targetScore">
+            /// 固定框高用的终值分数；null 表示该柱没有可预知的终值，框高跟随填充一起增长。
+            /// </param>
+            public void UpdateValues(LocalisableString title, string value, long barScore, long maxBarScore, Color4 barColour, long? targetScore = null)
             {
                 Alpha = 1;
 
@@ -680,27 +889,75 @@ namespace osu.Game.EzOsuGame.HUD
                     lastValue = value;
                 }
 
-                if (lastBarColour != barColour)
+                if (colourDirty || lastBarColour != barColour)
                 {
-                    bar.Colour = barColour;
+                    buildBarColours(barColour, out var leftFill, out var rightFill, out var sheenColour, out var borderColour);
+
+                    fillLeft.Colour = leftFill;
+                    fillRight.Colour = rightFill;
+                    sheen.Colour = sheenColour;
+
+                    borderTop.Colour = borderBottom.Colour = borderLeft.Colour = borderRight.Colour = borderColour;
                     lastBarColour = barColour;
+                    colourDirty = false;
                 }
 
-                float ratio = maxBarScore <= 0 ? 0 : (float)barScore / maxBarScore;
-                ratio = Math.Clamp(ratio, 0, 1);
+                float fillHeight = getBarHeight(barScore, maxBarScore);
 
-                float barHeight = maxBarSize * ratio;
+                if (barScore > 0 && fillHeight < min_bar_height)
+                    fillHeight = min_bar_height;
 
-                if (barScore > 0 && barHeight < min_bar_height)
-                    barHeight = min_bar_height;
+                float frameHeight = targetScore is long target ? getBarHeight(target, maxBarScore) : fillHeight;
 
-                if (Math.Abs(lastBarHeight - barHeight) < 0.01f)
+                if (frameHeight < fillHeight)
+                    frameHeight = fillHeight;
+
+                if (Math.Abs(lastFillHeight - fillHeight) < 0.01f && Math.Abs(lastFrameHeight - frameHeight) < 0.01f)
                     return;
 
-                lastBarHeight = barHeight;
-                bar.RelativeSizeAxes = Axes.None;
-                bar.Width = barThickness;
-                bar.Height = barHeight;
+                lastFillHeight = fillHeight;
+                lastFrameHeight = frameHeight;
+
+                frame.Width = barThickness;
+                frame.Height = frameHeight;
+                fillReveal.Height = fillHeight;
+                fillBody.Height = frameHeight;
+
+                applyBorderSize(frameHeight);
+            }
+
+            private float getBarHeight(long score, long maxScore)
+            {
+                float ratio = maxScore <= 0 ? 0 : (float)score / maxScore;
+                return maxBarSize * Math.Clamp(ratio, 0, 1);
+            }
+
+            /// <summary>
+            /// 由基色派生柱体视觉：左右两半的横向渐变、中央高光条、四边描边色。
+            /// 高光与描边按“朝白插值”派生，任意基色下都能保持可见的白化量。
+            /// </summary>
+            private static void buildBarColours(Color4 baseColour, out ColourInfo leftFill, out ColourInfo rightFill, out Color4 sheenColour, out ColourInfo borderColour)
+            {
+                Colour4 baseValue = baseColour;
+
+                Colour4 edge = baseValue.Darken(0.22f);
+                Colour4 centre = baseValue.Lighten(0.10f);
+
+                leftFill = ColourInfo.GradientHorizontal(edge, centre);
+                rightFill = ColourInfo.GradientHorizontal(centre, edge);
+                sheenColour = towardsWhite(baseValue, 0.55f);
+                borderColour = towardsWhite(baseValue, 0.72f);
+            }
+
+            private static Colour4 towardsWhite(Colour4 colour, float amount)
+            {
+                float clamped = Math.Clamp(amount, 0, 1);
+
+                return new Colour4(
+                    colour.R + (1 - colour.R) * clamped,
+                    colour.G + (1 - colour.G) * clamped,
+                    colour.B + (1 - colour.B) * clamped,
+                    colour.A);
             }
         }
     }
