@@ -243,14 +243,9 @@ Mod 选择界面新增 **NeriMod** 分类列（橙色标识）。
 
 ## 五、容器与皮肤
 
-### Background / MusicPlayer 皮肤容器
+### Background 皮肤容器
 
-`GlobalSkinnableContainers` 新增两个容器，使游玩背景与音乐播放器都能被皮肤定制：
-
-| 容器 | 说明 | 布局文件 |
-|---|---|---|
-| **Background** | 游玩背景图层，渲染在游戏内容之下 | `Background.json` |
-| **MusicPlayer** | 音乐播放器界面 | `MusicPlayer.json` |
+`GlobalSkinnableContainers` 新增游玩背景皮肤容器（`Background`，布局文件 `Background.json`），使游玩背景图层也能被皮肤定制，渲染在游戏内容之下：
 
 - 背景层挂在 `DrawableRuleset` 的 `BackgroundLayer` 上，位于 `FrameStabilityContainer` 之外，不影响帧稳定性管线
 - 全局层与规则集专属层**各用一个宿主**：`SkinnableContainer` 每次 reload 会清空自己的 `ExternalTarget`，两个代理共用一个宿主会互相擦掉对方的组件；两者叠加显示，规则集层在上
@@ -329,22 +324,6 @@ BMS 的 BGM / 自动轨事件没有携带它们的 hit object，皮肤管线管�
 - `osu.Game/Rulesets/Configuration/IRulesetConfigManager.cs`
 - `osu.Game/Rulesets/Configuration/RulesetConfigManager.cs`
 - `osu.Game.Tests/NonVisual/RulesetConfigManagerRawBindableTest.cs`
-
-### 独立音乐播放器
-
-脱离选歌流程的独立音乐播放页：封面、曲目信息、播放控制、播放列表；整页是可布局的 Ez 场景（`MusicPlayer.json`），主菜单入口由 Visualizer 改为音乐播放器。
-
-**涉及文件：**
-- `osu.Game/EzOsuGame/Screens/MusicPlayer/`（`EzMusicPlayerScreen` / `Cover` / `Info` / `Controls` / `PlaylistPanel` / `LayoutDefaults`）
-- `osu.Game/EzOsuGame/HUD/MusicPlayer/EzVisualizerPlaylist.cs`
-- `osu.Game/Screens/Menu/MainMenu.cs`
-
-### 播放列表收藏夹过滤
-
-音乐播放器的播放列表面板支持限定到某个收藏夹，只列出该收藏夹内的谱面。
-
-**涉及文件：**
-- `osu.Game/Overlays/Music/PlaylistOverlay.cs`
 
 ### 主菜单 Logo 配色
 

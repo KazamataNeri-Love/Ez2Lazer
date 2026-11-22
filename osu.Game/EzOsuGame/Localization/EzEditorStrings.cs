@@ -369,8 +369,6 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly LocalisableString SCENE_LIBRARY_LABEL = new EzLocalizationManager.EzLocalisableString("场景库", "Scene library");
 
-        public static readonly LocalisableString SCENE_MUSIC_PLAYER = new EzLocalizationManager.EzLocalisableString("听歌界面", "Music player");
-
         public static readonly LocalisableString SCENE_GROUP_SONG_SELECT = new EzLocalizationManager.EzLocalisableString("选歌", "Song select");
 
         public static readonly LocalisableString SCENE_GROUP_GAMEPLAY = new EzLocalizationManager.EzLocalisableString("游玩", "Gameplay");
