@@ -62,13 +62,6 @@
 - `osu.Game/EzOsuGame/Configuration/Ez2ConfigManager.cs`
 - `osu.Game/EzOsuGame/Localization/EzSettingsStrings.cs`
 
-### UI 缩放随模式
-
-`ScalingContainer` 增加按当前规则集缩放 UI 的模式：开启后 Mania 等列数多的模式整体缩小界面元素，其它模式维持默认尺寸，取代原先按 `OnlineID` 硬编码的四个分支。
-
-**涉及文件：**
-- `osu.Game/Graphics/Containers/ScalingContainer.cs`
-
 ---
 
 ## 二、身份与成绩
