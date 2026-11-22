@@ -1,0 +1,59 @@
+name: 需求 / 改动任务（5 行思考）
+description: 规划功能开发、Bug 修复、重构、裁剪或上游同步任务（先落 Issue，拉入 Milestone 后再开分支编码）
+labels: ["status:idea"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 1. 痛点 / 目标
+      description: 解决什么具体问题？为什么现在需要它？
+      placeholder: 例如：选歌界面在窄屏下……
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: 2. 归属轨道（Scope）
+      description: 决定改动落点与长期维护流向
+      options:
+        - scope:core（Edge → master 主线定制，Android 默认继承）
+        - scope:android（仅 Android 衍生线：触屏 / 裁剪 / 专属 Ruleset）
+        - scope:upstream（通用修复或抽象，优先考虑回馈 SK-la/Ez2Lazer 消税）
+        - scope:experiment（高风险试错，强制隔离在 exp/* 分支）
+    validations:
+      required: true
+  - type: textarea
+    id: android_impact
+    attributes:
+      label: 2.1 三端影响说明
+      description: Android 端是直接继承、条件屏蔽，还是需要单独适配 / 裁剪？
+      placeholder: 例如：Android 直接继承，无需额外适配。
+    validations:
+      required: false
+  - type: textarea
+    id: maintenance_tax
+    attributes:
+      label: 3. 维护税评估（侵入度）
+      description: 预计修改哪些上游公共/热点文件？能否用独立目录、partial class 或主干 Hook 隔离？
+      placeholder: 例如：新增文件集中在 EzOsuGame/...，上游文件仅 1 处挂载点。
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 4. 验收标准（Done）
+      description: 改完后按哪 2~3 个具体操作或测试用例验证算通过？
+      placeholder: |
+        - [ ] Release 构建通过
+        - [ ] 具体操作场景 1
+        - [ ] 具体操作场景 2
+    validations:
+      required: false
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: 5. 非目标（Non-Goals）
+      description: 这次明确不做什么？（防止范围蔓延和 Agent 顺手改无关代码）
+      placeholder: 例如：本次不重构相邻的 XXX 模块，也不顺手修改其他面板样式。
+    validations:
+      required: false
