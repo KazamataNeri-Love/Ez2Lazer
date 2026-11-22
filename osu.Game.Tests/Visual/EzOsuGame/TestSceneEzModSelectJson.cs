@@ -6,6 +6,7 @@ using NUnit.Framework;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Testing;
 using osu.Game.EzOsuGame.Localization;
+using osu.Game.EzOsuGame.Mods;
 using osu.Game.EzOsuGame.Overlays;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Overlays.Mods;
@@ -47,6 +48,24 @@ namespace osu.Game.Tests.Visual.EzOsuGame
             AddStep("done editing", clickEditToggle);
             AddUntilStep("shear hidden", () => shearControl.Alpha == 0);
             AddUntilStep("new group hidden", () => newGroupButton.Alpha == 0);
+        }
+
+        [Test]
+        public void TestPopInFollowedByImmediateColumnRebuildDoesNotThrow()
+        {
+            LoadSongSelect();
+
+            AddStep("open mod overlay and rebuild columns immediately", () =>
+            {
+                modOverlay.Show();
+                var alternateMode = modOverlay.LayoutMode == EzModSelectLayoutMode.Horizontal
+                    ? EzModSelectLayoutMode.Vertical
+                    : EzModSelectLayoutMode.Horizontal;
+                modOverlay.SetLayoutMode(alternateMode);
+            });
+
+            AddWaitStep("wait for delayed pop-in sample callbacks", 5);
+            AddAssert("overlay remains visible without crashing", () => modOverlay.State.Value == Visibility.Visible);
         }
 
         private EzUserModSelectOverlay modOverlay => this.ChildrenOfType<EzUserModSelectOverlay>().Single();
