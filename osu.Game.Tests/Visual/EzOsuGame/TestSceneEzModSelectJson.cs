@@ -11,6 +11,7 @@ using osu.Game.EzOsuGame.Overlays;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Overlays.Mods;
 using osu.Game.Tests.Visual.SongSelect;
+using osuTK;
 using osuTK.Input;
 
 namespace osu.Game.Tests.Visual.EzOsuGame
@@ -66,6 +67,27 @@ namespace osu.Game.Tests.Visual.EzOsuGame
 
             AddWaitStep("wait for delayed pop-in sample callbacks", 5);
             AddAssert("overlay remains visible without crashing", () => modOverlay.State.Value == Visibility.Visible);
+        }
+
+        [Test]
+        public void TestZeroShearKeepsHorizontalColumnsAndPanelsVertical()
+        {
+            LoadSongSelect();
+
+            AddStep("open mod overlay in horizontal mode", () =>
+            {
+                modOverlay.Show();
+                modOverlay.SetLayoutMode(EzModSelectLayoutMode.Horizontal);
+            });
+            AddUntilStep("overlay visible", () => modOverlay.State.Value == Visibility.Visible);
+            AddUntilStep("columns loaded", () => modOverlay.ChildrenOfType<ModColumn>().Any(c => c.IsLoaded && c.ItemsLoaded));
+
+            enterEditMode();
+            AddStep("set column shear to 0", () => shearControl.Current.Value = 0);
+
+            AddAssert("column flow shear is zero", () => modOverlay.ChildrenOfType<ModSelectOverlay.ColumnFlowContainer>().Single().Shear == Vector2.Zero);
+            AddAssert("all columns have zero shear", () => modOverlay.ChildrenOfType<ModSelectColumn>().All(c => c.Shear == Vector2.Zero));
+            AddAssert("all panels have zero shear", () => modOverlay.ChildrenOfType<ModSelectPanel>().All(p => p.Shear == Vector2.Zero));
         }
 
         private EzUserModSelectOverlay modOverlay => this.ChildrenOfType<EzUserModSelectOverlay>().Single();
