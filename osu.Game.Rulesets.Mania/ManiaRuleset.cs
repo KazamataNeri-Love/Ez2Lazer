@@ -312,7 +312,6 @@ namespace osu.Game.Rulesets.Mania
                         new ManiaModNeriDance(),
                         new ManiaModOjamaEarthquake(),
                         new ManiaModSpinNotes(),
-                        new ManiaModTiltedTrack(),
                     };
 
                 case ModType.LA_Mod:

@@ -120,19 +120,8 @@ Mania 成绩以 Session 重算后写回 Realm；非 Mania 或无 replay 时回�
 
 **涉及文件：**
 - `osu.Game.Rulesets.Mania/UI/ManiaPlayfieldAdjustmentContainer.cs`
-- `osu.Game.Rulesets.Mania/UI/TiltBufferContainer.cs`
 - `osu.Game/EzOsuGame/Edit/Settings/Sections/EzSkinEditorStageSettingsSection.cs`
 - `osu.Game/EzOsuGame/Screens/EzColumnTab.cs`
-
-### Tilted Track（Mod 级）
-
-`ManiaModTiltedTrack` 用 Mod 的形式做同一件事：自带透视容器，把游玩区投影成后退的轨道，判定、输入、皮肤解析全部不动，只扭曲渲染。
-
-- 与皮肤级伪 3D **互斥**：皮肤级角度大于 0 时本 Mod 不生效（避免两层透视叠加）
-
-**涉及文件：**
-- `osu.Game.Rulesets.Mania/EzMania/Mods/LAsMods/ManiaModTiltedTrack.cs`
-- `osu.Game.Rulesets.Mania/ManiaRuleset.cs`
 
 ### 斜轨下的 note / hold 外观
 
@@ -176,7 +165,6 @@ Mod 选择界面新增 **NeriMod** 分类列（橙色标识）。
 | **ManiaModNeriDance** | Dance — 谱面舞蹈式左右摆动 |
 | **ManiaModOjamaEarthquake** | Ojama Earthquake — 游玩区沿固定折线路径平移，幅度随 Hi-Speed 增大，纯视觉不参与判定 |
 | **ManiaModSpinNotes** | Spin Notes — 音符下落全程绕自身中心自转，长条拆成普通音符 |
-| **ManiaModTiltedTrack** | Tilted Track — 透视斜轨（见「三、Mania 机制」） |
 
 #### Osu
 
