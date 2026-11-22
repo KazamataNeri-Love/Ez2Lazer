@@ -21,19 +21,6 @@
 - `osu.Game/EzOsuGame/Presets/`（`EzSettingsPresetControl` / `Bridge` / `Catalog` / `Document` / `Store` / `Rulesets` / `EditSettingsPresetPopover`）
 - `osu.Game/Overlays/Settings/Sections/General/QuickActionSettings.cs`
 
-### 自定义光标
-
-菜单光标可改用皮肤提供的光标贴图，并支持可选的拖尾效果；皮肤未提供时自动回退默认光标。开关位于「设置 → 自定义」。
-
-- 皮肤光标：`EzSkinCursor`；拖尾：`EzCursorTrail` / `EzLegacyCursorTrail`
-- 挂载与回退逻辑在 `MenuCursorContainer`，配置项为 `Ez2Setting.UseSkinCursor`
-
-**涉及文件：**
-- `osu.Game/Graphics/Cursor/EzSkinCursor.cs`
-- `osu.Game/Graphics/Cursor/EzCursorTrail.cs`
-- `osu.Game/Graphics/Cursor/EzLegacyCursorTrail.cs`
-- `osu.Game/Graphics/Cursor/MenuCursorContainer.cs`
-
 ### 从头播放音频
 
 选歌预览从音频开头（0ms）播放，忽略谱面的 `PreviewTime`。开关位于「设置 → 自定义」。
@@ -47,7 +34,7 @@
 
 ### 设置页「自定义」栏目
 
-设置侧栏最底部新增独立的「自定义」页（`EzCustomSection` → `EzCustomSettings`），收纳不属于任何上游分组的 Ez 开关，目前承载「使用皮肤光标」与「从头播放音频」。
+设置侧栏最底部新增独立的「自定义」页（`EzCustomSection` → `EzCustomSettings`），收纳不属于任何上游分组的 Ez 开关，目前承载「从头播放音频」。
 
 **涉及文件：**
 - `osu.Game/EzOsuGame/Overlays/EzCustomSection.cs`
