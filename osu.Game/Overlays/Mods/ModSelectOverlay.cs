@@ -370,7 +370,6 @@ namespace osu.Game.Overlays.Mods
         {
             foreach (var column in ContentView.Columns.OfType<ModColumn>())
                 column.AvailableMods = AvailableMods.Value.GetValueOrDefault(column.ModType, Array.Empty<ModState>());
-
         }
 
         private protected void ReplaceModColumns(IEnumerable<ModColumn> columns)
@@ -768,6 +767,8 @@ namespace osu.Game.Overlays.Mods
 
                 foreach (var column in Child)
                 {
+                    // DrawWidth/DrawPosition do not include shear effects, and we want to know the full extents of the columns post-shear,
+                    // so we have to manually compensate.
                     var topLeft = column.ToSpaceOfOtherDrawable(Vector2.Zero, ScrollContent);
                     float columnFlowShearX = Child.Shear.X;
                     var bottomRight = column.ToSpaceOfOtherDrawable(new Vector2(column.DrawWidth - column.DrawHeight * columnFlowShearX, 0), ScrollContent);
@@ -794,6 +795,7 @@ namespace osu.Game.Overlays.Mods
                 base.Add(dimContainer);
 
                 Debug.Assert(dimContainer != null);
+                dimContainer.Column.Shear = Vector2.Zero;
             }
         }
 

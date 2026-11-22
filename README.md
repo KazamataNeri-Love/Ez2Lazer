@@ -231,13 +231,13 @@ Mod 选择界面新增 **NeriMod** 分类列（橙色标识）。
 - `osu.Game.Rulesets.Osu/UI/OsuPlayfield.cs`
 - `osu.Game.Rulesets.Osu.Tests/PolytoneGeometryTest.cs`
 
-### Mod 选择界面去斜切
+### Mod 选择界面默认竖直与卡片尺寸微调
 
-取消 Mod 卡片与预设列原本的斜切（Shear）样式，并相应调整卡片高度与内外间距，使 Mod 选择界面与其它界面观感一致。
+保留上游动态列倾斜滑块（`EzModLayoutShearControl`），仅将新安装默认倾斜角设为 `0`（竖直），同时微调 Mod 卡片高度、开关宽度与内外间距。
 
 **涉及文件：**
-- `osu.Game/Overlays/Mods/ModColumn.cs`、`ModSelectColumn.cs`、`ModSelectPanel.cs`
-- `osu.Game/Overlays/Mods/ModPresetColumn.cs`、`ModPresetPanel.cs`、`AddPresetButton.cs`
+- `osu.Game/EzOsuGame/Mods/EzModLayout.cs`、`osu.Game/EzOsuGame/Overlays/EzModLayoutShearControl.cs`
+- `osu.Game/Overlays/Mods/ModColumn.cs`、`ModPanel.cs`、`ModSelectColumn.cs`、`ModSelectPanel.cs`、`ModPresetPanel.cs`、`AddPresetButton.cs`
 
 ---
 
