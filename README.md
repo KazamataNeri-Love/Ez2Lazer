@@ -152,20 +152,6 @@ Mania 成绩以 Session 重算后写回 Realm；非 Mania 或无 replay 时回�
 - `osu.Game.Rulesets.Mania/EzMania/Mods/LAsMods/ManiaModTiltedTrack.cs`
 - `osu.Game.Rulesets.Mania/ManiaRuleset.cs`
 
-### 速度补偿滚动
-
-`EzSpeedCompensationScrollAlgorithm` 在既有滚动算法上叠一层匀变速下落：速度随时间线性变化、面积守恒，走完容器的总时长不变，只改变运动在屏幕上的分布。
-
-- 令 r = 到判定线速度 / 常规速度，位置律为 `u' = 1 − [(2 − r)·w + (r − 1)·w²]`（`w = 1 − u`）
-- 端点导数分别为 r 与 2 − r，容器外按端点速度线性延伸，避免反演折叠；r = 1 时与原算法完全等价
-- 长条（hold）长度按两端实时重算，尾标跟随补偿曲线
-
-**涉及文件：**
-- `osu.Game.Rulesets.Mania/EzMania/Scrolling/EzSpeedCompensationScrollAlgorithm.cs`
-- `osu.Game/Rulesets/UI/Scrolling/Algorithms/IScrollAlgorithm.cs`
-- `osu.Game/Rulesets/UI/Scrolling/ScrollingHitObjectContainer.cs`
-- `osu.Game.Tests/ScrollAlgorithms/PositionDependentScrollTest.cs`
-
 ### 斜轨下的 note / hold 外观
 
 斜轨视角下按深度缩放 note 高度，长条中段与尾部遮罩单独处理，Legacy / Ez Pro / SbI 三套皮肤各自适配。
