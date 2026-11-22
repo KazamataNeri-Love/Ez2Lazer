@@ -107,17 +107,6 @@ Mania 成绩以 Session 重算后写回 Realm；非 Mania 或无 replay 时回�
 - `osu.Game/EzOsuGame/Screens/EzEditorSectionResultsSidebar.cs`
 - `osu.Game/EzOsuGame/Layout/EzLayoutFiles.cs`
 
-### 回放维护
-
-维护设置页新增回放维护面板：按玩家名统计本地成绩 / 回放数量（A–Z 排序），确认后批量清理。
-
-**涉及文件：**
-- `osu.Game/EzOsuGame/Maintenance/EzReplayMaintenanceSettings.cs`
-- `osu.Game/EzOsuGame/Maintenance/EzReplayMaintenanceDialog.cs`
-- `osu.Game/EzOsuGame/Maintenance/EzReplayMaintenanceService.cs`
-- `osu.Game/EzOsuGame/Localization/EzReplayMaintenanceStrings.cs`
-- `osu.Game/Overlays/Settings/Sections/MaintenanceSection.cs`
-
 ---
 
 ## 三、Mania 机制
