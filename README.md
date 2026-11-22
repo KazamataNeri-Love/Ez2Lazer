@@ -21,19 +21,6 @@
 - `osu.Game/EzOsuGame/Presets/`（`EzSettingsPresetControl` / `Bridge` / `Catalog` / `Document` / `Store` / `Rulesets` / `EditSettingsPresetPopover`）
 - `osu.Game/Overlays/Settings/Sections/General/QuickActionSettings.cs`
 
-### 自定义光标
-
-菜单光标可改用皮肤提供的光标贴图，并支持可选的拖尾效果；皮肤未提供时自动回退默认光标。开关位于「设置 → 自定义」。
-
-- 皮肤光标：`EzSkinCursor`；拖尾：`EzCursorTrail` / `EzLegacyCursorTrail`
-- 挂载与回退逻辑在 `MenuCursorContainer`，配置项为 `Ez2Setting.UseSkinCursor`
-
-**涉及文件：**
-- `osu.Game/Graphics/Cursor/EzSkinCursor.cs`
-- `osu.Game/Graphics/Cursor/EzCursorTrail.cs`
-- `osu.Game/Graphics/Cursor/EzLegacyCursorTrail.cs`
-- `osu.Game/Graphics/Cursor/MenuCursorContainer.cs`
-
 ### 从头播放音频
 
 选歌预览从音频开头（0ms）播放，忽略谱面的 `PreviewTime`。开关位于「设置 → 自定义」。
@@ -47,7 +34,7 @@
 
 ### 设置页「自定义」栏目
 
-设置侧栏最底部新增独立的「自定义」页（`EzCustomSection` → `EzCustomSettings`），收纳不属于任何上游分组的 Ez 开关，目前承载「使用皮肤光标」与「从头播放音频」。
+设置侧栏最底部新增独立的「自定义」页（`EzCustomSection` → `EzCustomSettings`），收纳不属于任何上游分组的 Ez 开关，目前承载「从头播放音频」。
 
 **涉及文件：**
 - `osu.Game/EzOsuGame/Overlays/EzCustomSection.cs`
@@ -74,13 +61,6 @@
 - `osu.Game/Overlays/Settings/Sections/Graphics/LayoutSettings.cs`
 - `osu.Game/EzOsuGame/Configuration/Ez2ConfigManager.cs`
 - `osu.Game/EzOsuGame/Localization/EzSettingsStrings.cs`
-
-### UI 缩放随模式
-
-`ScalingContainer` 增加按当前规则集缩放 UI 的模式：开启后 Mania 等列数多的模式整体缩小界面元素，其它模式维持默认尺寸，取代原先按 `OnlineID` 硬编码的四个分支。
-
-**涉及文件：**
-- `osu.Game/Graphics/Containers/ScalingContainer.cs`
 
 ---
 
@@ -127,17 +107,6 @@ Mania 成绩以 Session 重算后写回 Realm；非 Mania 或无 replay 时回�
 - `osu.Game/EzOsuGame/Screens/EzEditorSectionResultsSidebar.cs`
 - `osu.Game/EzOsuGame/Layout/EzLayoutFiles.cs`
 
-### 回放维护
-
-维护设置页新增回放维护面板：按玩家名统计本地成绩 / 回放数量（A–Z 排序），确认后批量清理。
-
-**涉及文件：**
-- `osu.Game/EzOsuGame/Maintenance/EzReplayMaintenanceSettings.cs`
-- `osu.Game/EzOsuGame/Maintenance/EzReplayMaintenanceDialog.cs`
-- `osu.Game/EzOsuGame/Maintenance/EzReplayMaintenanceService.cs`
-- `osu.Game/EzOsuGame/Localization/EzReplayMaintenanceStrings.cs`
-- `osu.Game/Overlays/Settings/Sections/MaintenanceSection.cs`
-
 ---
 
 ## 三、Mania 机制
@@ -151,33 +120,8 @@ Mania 成绩以 Session 重算后写回 Realm；非 Mania 或无 replay 时回�
 
 **涉及文件：**
 - `osu.Game.Rulesets.Mania/UI/ManiaPlayfieldAdjustmentContainer.cs`
-- `osu.Game.Rulesets.Mania/UI/TiltBufferContainer.cs`
 - `osu.Game/EzOsuGame/Edit/Settings/Sections/EzSkinEditorStageSettingsSection.cs`
 - `osu.Game/EzOsuGame/Screens/EzColumnTab.cs`
-
-### Tilted Track（Mod 级）
-
-`ManiaModTiltedTrack` 用 Mod 的形式做同一件事：自带透视容器，把游玩区投影成后退的轨道，判定、输入、皮肤解析全部不动，只扭曲渲染。
-
-- 与皮肤级伪 3D **互斥**：皮肤级角度大于 0 时本 Mod 不生效（避免两层透视叠加）
-
-**涉及文件：**
-- `osu.Game.Rulesets.Mania/EzMania/Mods/LAsMods/ManiaModTiltedTrack.cs`
-- `osu.Game.Rulesets.Mania/ManiaRuleset.cs`
-
-### 速度补偿滚动
-
-`EzSpeedCompensationScrollAlgorithm` 在既有滚动算法上叠一层匀变速下落：速度随时间线性变化、面积守恒，走完容器的总时长不变，只改变运动在屏幕上的分布。
-
-- 令 r = 到判定线速度 / 常规速度，位置律为 `u' = 1 − [(2 − r)·w + (r − 1)·w²]`（`w = 1 − u`）
-- 端点导数分别为 r 与 2 − r，容器外按端点速度线性延伸，避免反演折叠；r = 1 时与原算法完全等价
-- 长条（hold）长度按两端实时重算，尾标跟随补偿曲线
-
-**涉及文件：**
-- `osu.Game.Rulesets.Mania/EzMania/Scrolling/EzSpeedCompensationScrollAlgorithm.cs`
-- `osu.Game/Rulesets/UI/Scrolling/Algorithms/IScrollAlgorithm.cs`
-- `osu.Game/Rulesets/UI/Scrolling/ScrollingHitObjectContainer.cs`
-- `osu.Game.Tests/ScrollAlgorithms/PositionDependentScrollTest.cs`
 
 ### 斜轨下的 note / hold 外观
 
@@ -221,7 +165,6 @@ Mod 选择界面新增 **NeriMod** 分类列（橙色标识）。
 | **ManiaModNeriDance** | Dance — 谱面舞蹈式左右摆动 |
 | **ManiaModOjamaEarthquake** | Ojama Earthquake — 游玩区沿固定折线路径平移，幅度随 Hi-Speed 增大，纯视觉不参与判定 |
 | **ManiaModSpinNotes** | Spin Notes — 音符下落全程绕自身中心自转，长条拆成普通音符 |
-| **ManiaModTiltedTrack** | Tilted Track — 透视斜轨（见「三、Mania 机制」） |
 
 #### Osu
 
@@ -258,26 +201,21 @@ Mod 选择界面新增 **NeriMod** 分类列（橙色标识）。
 - `osu.Game.Rulesets.Osu/UI/OsuPlayfield.cs`
 - `osu.Game.Rulesets.Osu.Tests/PolytoneGeometryTest.cs`
 
-### Mod 选择界面去斜切
+### Mod 选择界面默认竖直与卡片尺寸微调
 
-取消 Mod 卡片与预设列原本的斜切（Shear）样式，并相应调整卡片高度与内外间距，使 Mod 选择界面与其它界面观感一致。
+保留上游动态列倾斜滑块（`EzModLayoutShearControl`），仅将新安装默认倾斜角设为 `0`（竖直），同时微调 Mod 卡片高度、开关宽度与内外间距。
 
 **涉及文件：**
-- `osu.Game/Overlays/Mods/ModColumn.cs`、`ModSelectColumn.cs`、`ModSelectPanel.cs`
-- `osu.Game/Overlays/Mods/ModPresetColumn.cs`、`ModPresetPanel.cs`、`AddPresetButton.cs`
+- `osu.Game/EzOsuGame/Mods/EzModLayout.cs`、`osu.Game/EzOsuGame/Overlays/EzModLayoutShearControl.cs`
+- `osu.Game/Overlays/Mods/ModColumn.cs`、`ModPanel.cs`、`ModSelectColumn.cs`、`ModSelectPanel.cs`、`ModPresetPanel.cs`、`AddPresetButton.cs`
 
 ---
 
 ## 五、容器与皮肤
 
-### Background / MusicPlayer 皮肤容器
+### Background 皮肤容器
 
-`GlobalSkinnableContainers` 新增两个容器，使游玩背景与音乐播放器都能被皮肤定制：
-
-| 容器 | 说明 | 布局文件 |
-|---|---|---|
-| **Background** | 游玩背景图层，渲染在游戏内容之下 | `Background.json` |
-| **MusicPlayer** | 音乐播放器界面 | `MusicPlayer.json` |
+`GlobalSkinnableContainers` 新增游玩背景皮肤容器（`Background`，布局文件 `Background.json`），使游玩背景图层也能被皮肤定制，渲染在游戏内容之下：
 
 - 背景层挂在 `DrawableRuleset` 的 `BackgroundLayer` 上，位于 `FrameStabilityContainer` 之外，不影响帧稳定性管线
 - 全局层与规则集专属层**各用一个宿主**：`SkinnableContainer` 每次 reload 会清空自己的 `ExternalTarget`，两个代理共用一个宿主会互相擦掉对方的组件；两者叠加显示，规则集层在上
@@ -357,22 +295,6 @@ BMS 的 BGM / 自动轨事件没有携带它们的 hit object，皮肤管线管�
 - `osu.Game/Rulesets/Configuration/RulesetConfigManager.cs`
 - `osu.Game.Tests/NonVisual/RulesetConfigManagerRawBindableTest.cs`
 
-### 独立音乐播放器
-
-脱离选歌流程的独立音乐播放页：封面、曲目信息、播放控制、播放列表；整页是可布局的 Ez 场景（`MusicPlayer.json`），主菜单入口由 Visualizer 改为音乐播放器。
-
-**涉及文件：**
-- `osu.Game/EzOsuGame/Screens/MusicPlayer/`（`EzMusicPlayerScreen` / `Cover` / `Info` / `Controls` / `PlaylistPanel` / `LayoutDefaults`）
-- `osu.Game/EzOsuGame/HUD/MusicPlayer/EzVisualizerPlaylist.cs`
-- `osu.Game/Screens/Menu/MainMenu.cs`
-
-### 播放列表收藏夹过滤
-
-音乐播放器的播放列表面板支持限定到某个收藏夹，只列出该收藏夹内的谱面。
-
-**涉及文件：**
-- `osu.Game/Overlays/Music/PlaylistOverlay.cs`
-
 ### 主菜单 Logo 配色
 
 `OsuLogo` 三角形斑纹的渐变由上游粉红（`#ff66ab → #b6346f`）改为深蓝（`#1A2B6B → #3A6BB8`）。
@@ -417,7 +339,6 @@ dotnet build osu.Desktop/osu.Desktop.csproj -c Release
 | [docs/EZ-UPSTREAM-MERGE.md](docs/EZ-UPSTREAM-MERGE.md) | 上游合并流程 |
 | [docs/EzSkinSystemNotes.md](docs/EzSkinSystemNotes.md) | 皮肤系统笔记 |
 | [docs/ScriptedSkin-Security.md](docs/ScriptedSkin-Security.md) | 脚本皮肤的信任边界 |
-| `参考文档——模组.txt` | 模组设计笔记（仓库根） |
 
 相对上游，本分支删除了 `docs/Ez2ScriptedSkin/`、`docs/EzProScriptedSkin/`、`docs/TestScriptedSkin/` 下的示例 `.csx` 与 `skin.ini`；`docs/Pets/` 保留但与代码无关（见「八、已移除」）。
 

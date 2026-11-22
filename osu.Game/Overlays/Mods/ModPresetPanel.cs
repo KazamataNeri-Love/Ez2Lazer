@@ -59,6 +59,7 @@ namespace osu.Game.Overlays.Mods
                 {
                     Anchor = Anchor.Centre,
                     Origin = Anchor.Centre,
+                    Shear = -OsuGame.SHEAR,
                     Text = Index.Value.ToString(),
                     Font = OsuFont.Default.With(size: 22, weight: FontWeight.SemiBold),
                     Alpha = 0,

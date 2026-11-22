@@ -745,17 +745,6 @@ namespace osu.Game.EzOsuGame.Localization
             "When enabled, selecting a beatmap card in song select will play the preview audio"
             + "\nfrom the beginning of the track instead of the beatmap's specified preview time.");
 
-        public static readonly LocalisableString USE_SKIN_CURSOR = new EzLocalizationManager.EzLocalisableString(
-            "使用皮肤光标",
-            "Use skin cursor");
-
-        public static readonly LocalisableString USE_SKIN_CURSOR_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
-            "开启后，主菜单、选歌等界面的光标会换成皮肤自带的 cursor / cursormiddle 贴图（与 osu! 规则集预览窗口里看到的一致），"
-            + "\n而不是默认的 lazer 菜单光标。皮肤没有提供 cursor 贴图时仍会显示默认光标。",
-            "When enabled, the cursor in menus and song select is replaced by the skin's own cursor art"
-            + "\n(cursor / cursormiddle, the same art shown by the osu! ruleset preview), instead of the default lazer menu cursor."
-            + "\nSkins which do not provide a cursor texture will keep using the default cursor.");
-
         public static readonly LocalisableString EDITOR_SECTION_HEADER = new EzLocalizationManager.EzLocalisableString("编辑器", "Editor");
 
         public static readonly LocalisableString GAMEPLAY_DIVISOR_NOTE_COLOURING = new EzLocalizationManager.EzLocalisableString(

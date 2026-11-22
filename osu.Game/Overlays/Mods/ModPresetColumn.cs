@@ -15,6 +15,7 @@ using osu.Game.Graphics;
 using osu.Game.Localisation;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
+using osuTK;
 using osuTK.Input;
 using Realms;
 
@@ -110,7 +111,8 @@ namespace osu.Game.Overlays.Mods
 
                 panels.Add(new ModPresetPanel(preset.ToLive(realm))
                 {
-                    Index = i < 10 ? (i + 1) % 10 : null
+                    Index = i < 10 ? (i + 1) % 10 : null,
+                    Shear = Vector2.Zero
                 });
             }
 

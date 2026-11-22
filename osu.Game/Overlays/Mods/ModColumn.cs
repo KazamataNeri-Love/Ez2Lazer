@@ -105,7 +105,8 @@ namespace osu.Game.Overlays.Mods
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
                     Scale = new Vector2(0.8f),
-                    RelativeSizeAxes = Axes.X
+                    RelativeSizeAxes = Axes.X,
+                    Shear = -OsuGame.SHEAR
                 });
                 ItemsFlow.Padding = new MarginPadding
                 {
@@ -151,7 +152,7 @@ namespace osu.Game.Overlays.Mods
         {
             cancellationTokenSource?.Cancel();
 
-            var panels = availableMods.Select(mod => CreateModPanel(mod)).ToArray();
+            var panels = availableMods.Select(mod => CreateModPanel(mod).With(panel => panel.Shear = Vector2.Zero)).ToArray();
             latestLoadedPanels = panels;
 
             latestLoadTask = LoadComponentsAsync(panels, loaded =>

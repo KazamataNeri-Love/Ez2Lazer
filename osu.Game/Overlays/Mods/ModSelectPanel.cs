@@ -87,6 +87,8 @@ namespace osu.Game.Overlays.Mods
             Content.CornerRadius = CORNER_RADIUS;
             Content.BorderThickness = 2;
 
+            Shear = OsuGame.SHEAR;
+
             Children = new Drawable[]
             {
                 Background = new Box
@@ -126,12 +128,18 @@ namespace osu.Game.Overlays.Mods
                                     {
                                         Font = OsuFont.TorusAlternate.With(size: 17, weight: FontWeight.SemiBold),
                                         RelativeSizeAxes = Axes.X,
+                                        Shear = -OsuGame.SHEAR,
+                                        Margin = new MarginPadding
+                                        {
+                                            Left = -18 * OsuGame.SHEAR.X
+                                        },
                                         ShowTooltip = false, // Tooltip is handled by `IncompatibilityDisplayingModPanel`.
                                     },
                                     descriptionText = new TruncatingSpriteText
                                     {
                                         Font = OsuFont.Default.With(size: 12),
                                         RelativeSizeAxes = Axes.X,
+                                        Shear = -OsuGame.SHEAR,
                                         ShowTooltip = false, // Tooltip is handled by `IncompatibilityDisplayingModPanel`.
                                     }
                                 }

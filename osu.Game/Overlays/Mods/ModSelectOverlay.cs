@@ -16,6 +16,7 @@ using osu.Framework.Input;
 using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
+using osu.Framework.Threading;
 using osu.Framework.Utils;
 using osu.Game.Audio;
 using osu.Game.Beatmaps;
@@ -369,10 +370,13 @@ namespace osu.Game.Overlays.Mods
         {
             foreach (var column in ContentView.Columns.OfType<ModColumn>())
                 column.AvailableMods = AvailableMods.Value.GetValueOrDefault(column.ModType, Array.Empty<ModState>());
-
         }
 
-        private protected void ReplaceModColumns(IEnumerable<ModColumn> columns) => ContentView.ReplaceModColumns(columns);
+        private protected void ReplaceModColumns(IEnumerable<ModColumn> columns)
+        {
+            cancelPopInSamples();
+            ContentView.ReplaceModColumns(columns);
+        }
 
         protected void SetColumnFlowBottomPadding(float bottom)
         {
@@ -381,6 +385,7 @@ namespace osu.Game.Overlays.Mods
 
         private protected void ReplaceContentView(ModSelectContent view)
         {
+            cancelPopInSamples();
             ContentView.FlushPendingSelections();
             contentArea.Remove(ContentView, true);
             contentArea.Add(ContentView = view);
@@ -501,11 +506,22 @@ namespace osu.Game.Overlays.Mods
 
         private const float distance = 700;
 
+        private readonly List<ScheduledDelegate> popInSampleDelegates = new List<ScheduledDelegate>();
+
+        private void cancelPopInSamples()
+        {
+            foreach (var scheduled in popInSampleDelegates)
+                scheduled.Cancel();
+
+            popInSampleDelegates.Clear();
+        }
+
         protected override void PopIn()
         {
             const double fade_in_duration = 400;
 
             base.PopIn();
+            cancelPopInSamples();
 
             AboveColumnsContent
                 .FadeIn(fade_in_duration, Easing.OutQuint)
@@ -533,8 +549,11 @@ namespace osu.Game.Overlays.Mods
                     continue;
 
                 int columnNumber = nonFilteredColumnCount;
-                Scheduler.AddDelayed(() =>
+                popInSampleDelegates.Add(Scheduler.AddDelayed(() =>
                 {
+                    if (!column.IsAlive || column.Parent is not { } parent || RelativeToAbsoluteFactor.X <= 0)
+                        return;
+
                     var channel = columnAppearSample?.GetChannel();
                     if (channel == null) return;
 
@@ -542,7 +561,7 @@ namespace osu.Game.Overlays.Mods
                     if (columnNumber > 5 && !column.Active.Value) return;
 
                     // use X position of the column on screen as a basis for panning the sample
-                    float balance = column.Parent!.BoundingBox.Centre.X / RelativeToAbsoluteFactor.X;
+                    float balance = parent.BoundingBox.Centre.X / RelativeToAbsoluteFactor.X;
 
                     // dip frequency and ramp volume of sample over the first 5 displayed columns
                     float progress = Math.Min(1, columnNumber / 5f);
@@ -551,7 +570,7 @@ namespace osu.Game.Overlays.Mods
                     channel.Volume.Value = Math.Max(progress, 0.2);
                     channel.Balance.Value = -1 + balance * 2;
                     channel.Play();
-                }, delay);
+                }, delay));
 
                 nonFilteredColumnCount += 1;
             }
@@ -564,6 +583,7 @@ namespace osu.Game.Overlays.Mods
             const double fade_out_duration = 500;
 
             base.PopOut();
+            cancelPopInSamples();
 
             AboveColumnsContent
                 .FadeOut(fade_out_duration / 2, Easing.OutQuint)
@@ -747,6 +767,8 @@ namespace osu.Game.Overlays.Mods
 
                 foreach (var column in Child)
                 {
+                    // DrawWidth/DrawPosition do not include shear effects, and we want to know the full extents of the columns post-shear,
+                    // so we have to manually compensate.
                     var topLeft = column.ToSpaceOfOtherDrawable(Vector2.Zero, ScrollContent);
                     float columnFlowShearX = Child.Shear.X;
                     var bottomRight = column.ToSpaceOfOtherDrawable(new Vector2(column.DrawWidth - column.DrawHeight * columnFlowShearX, 0), ScrollContent);
@@ -773,6 +795,7 @@ namespace osu.Game.Overlays.Mods
                 base.Add(dimContainer);
 
                 Debug.Assert(dimContainer != null);
+                dimContainer.Column.Shear = Vector2.Zero;
             }
         }
 
