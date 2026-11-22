@@ -62,13 +62,6 @@
 - `osu.Game/EzOsuGame/Configuration/Ez2ConfigManager.cs`
 - `osu.Game/EzOsuGame/Localization/EzSettingsStrings.cs`
 
-### UI 缩放随模式
-
-`ScalingContainer` 增加按当前规则集缩放 UI 的模式：开启后 Mania 等列数多的模式整体缩小界面元素，其它模式维持默认尺寸，取代原先按 `OnlineID` 硬编码的四个分支。
-
-**涉及文件：**
-- `osu.Game/Graphics/Containers/ScalingContainer.cs`
-
 ---
 
 ## 二、身份与成绩
@@ -114,17 +107,6 @@ Mania 成绩以 Session 重算后写回 Realm；非 Mania 或无 replay 时回�
 - `osu.Game/EzOsuGame/Screens/EzEditorSectionResultsSidebar.cs`
 - `osu.Game/EzOsuGame/Layout/EzLayoutFiles.cs`
 
-### 回放维护
-
-维护设置页新增回放维护面板：按玩家名统计本地成绩 / 回放数量（A–Z 排序），确认后批量清理。
-
-**涉及文件：**
-- `osu.Game/EzOsuGame/Maintenance/EzReplayMaintenanceSettings.cs`
-- `osu.Game/EzOsuGame/Maintenance/EzReplayMaintenanceDialog.cs`
-- `osu.Game/EzOsuGame/Maintenance/EzReplayMaintenanceService.cs`
-- `osu.Game/EzOsuGame/Localization/EzReplayMaintenanceStrings.cs`
-- `osu.Game/Overlays/Settings/Sections/MaintenanceSection.cs`
-
 ---
 
 ## 三、Mania 机制
@@ -138,19 +120,8 @@ Mania 成绩以 Session 重算后写回 Realm；非 Mania 或无 replay 时回�
 
 **涉及文件：**
 - `osu.Game.Rulesets.Mania/UI/ManiaPlayfieldAdjustmentContainer.cs`
-- `osu.Game.Rulesets.Mania/UI/TiltBufferContainer.cs`
 - `osu.Game/EzOsuGame/Edit/Settings/Sections/EzSkinEditorStageSettingsSection.cs`
 - `osu.Game/EzOsuGame/Screens/EzColumnTab.cs`
-
-### Tilted Track（Mod 级）
-
-`ManiaModTiltedTrack` 用 Mod 的形式做同一件事：自带透视容器，把游玩区投影成后退的轨道，判定、输入、皮肤解析全部不动，只扭曲渲染。
-
-- 与皮肤级伪 3D **互斥**：皮肤级角度大于 0 时本 Mod 不生效（避免两层透视叠加）
-
-**涉及文件：**
-- `osu.Game.Rulesets.Mania/EzMania/Mods/LAsMods/ManiaModTiltedTrack.cs`
-- `osu.Game.Rulesets.Mania/ManiaRuleset.cs`
 
 ### 斜轨下的 note / hold 外观
 
@@ -194,7 +165,6 @@ Mod 选择界面新增 **NeriMod** 分类列（橙色标识）。
 | **ManiaModNeriDance** | Dance — 谱面舞蹈式左右摆动 |
 | **ManiaModOjamaEarthquake** | Ojama Earthquake — 游玩区沿固定折线路径平移，幅度随 Hi-Speed 增大，纯视觉不参与判定 |
 | **ManiaModSpinNotes** | Spin Notes — 音符下落全程绕自身中心自转，长条拆成普通音符 |
-| **ManiaModTiltedTrack** | Tilted Track — 透视斜轨（见「三、Mania 机制」） |
 
 #### Osu
 
@@ -369,7 +339,6 @@ dotnet build osu.Desktop/osu.Desktop.csproj -c Release
 | [docs/EZ-UPSTREAM-MERGE.md](docs/EZ-UPSTREAM-MERGE.md) | 上游合并流程 |
 | [docs/EzSkinSystemNotes.md](docs/EzSkinSystemNotes.md) | 皮肤系统笔记 |
 | [docs/ScriptedSkin-Security.md](docs/ScriptedSkin-Security.md) | 脚本皮肤的信任边界 |
-| `参考文档——模组.txt` | 模组设计笔记（仓库根） |
 
 相对上游，本分支删除了 `docs/Ez2ScriptedSkin/`、`docs/EzProScriptedSkin/`、`docs/TestScriptedSkin/` 下的示例 `.csx` 与 `skin.ini`；`docs/Pets/` 保留但与代码无关（见「八、已移除」）。
 
