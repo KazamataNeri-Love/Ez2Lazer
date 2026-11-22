@@ -38,7 +38,6 @@ namespace osu.Game.Rulesets.Mania.EzMania.Mods.LAsMods
         {
             typeof(ManiaModNeriBarrelRoll),
             typeof(ManiaModNeriDance),
-            typeof(ManiaModTiltedTrack),
         };
 
         /// <summary>横向振幅（像素）。纵向固定为其 1/1.5。</summary>

@@ -68,11 +68,6 @@ namespace osu.Game.EzOsuGame.Configuration
         Mania,
 
         Catch,
-
-        /// <summary>
-        /// BMS is a custom ruleset with its own <c>OnlineID</c>, so it needs its own entry here.
-        /// </summary>
-        Bms,
     }
 
     public enum EzLogoVisualisationStyle
