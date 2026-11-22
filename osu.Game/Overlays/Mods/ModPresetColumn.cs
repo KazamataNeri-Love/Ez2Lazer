@@ -30,6 +30,9 @@ namespace osu.Game.Overlays.Mods
 
         private const float contracted_width = WIDTH - 120;
 
+        private IBindable<RulesetInfo>? rulesetBinding;
+        private bool initialPresetsReceived;
+
         private readonly Key[] toggleKeys = { Key.Number1, Key.Number2, Key.Number3, Key.Number4, Key.Number5, Key.Number6, Key.Number7, Key.Number8, Key.Number9, Key.Number0 };
 
         [BackgroundDependencyLoader]
@@ -47,9 +50,10 @@ namespace osu.Game.Overlays.Mods
         {
             base.LoadComplete();
 
-            ruleset.BindValueChanged(_ => rulesetChanged(), true);
+            rulesetBinding = ruleset.GetBoundCopy();
+            rulesetBinding.BindValueChanged(_ => rulesetChanged(), true);
 
-            Width = contracted_width;
+            RefreshEzLayoutShear();
         }
 
         private IDisposable? presetSubscription;
@@ -68,6 +72,12 @@ namespace osu.Game.Overlays.Mods
 
         private Task? latestLoadTask;
         internal bool ItemsLoaded => latestLoadTask?.IsCompleted == true;
+        internal bool HasMatchingPresets => ItemsFlow.OfType<ModPresetPanel>().Any(panel => panel.MatchingFilter);
+
+        public ModPresetColumn(bool wrapItems = false)
+            : base(wrapItems)
+        {
+        }
 
         private void asyncLoadPanels(IRealmCollection<ModPreset> presets, ChangeSet? changes)
         {
@@ -75,7 +85,16 @@ namespace osu.Game.Overlays.Mods
 
             bool hasPresets = presets.Any();
 
-            this.ResizeWidthTo(hasPresets ? WIDTH : contracted_width, 200, Easing.OutQuint);
+            if (!WrapItems)
+            {
+                float width = hasPresets ? WIDTH : contracted_width;
+                if (initialPresetsReceived)
+                    this.ResizeWidthTo(width, 200, Easing.OutQuint);
+                else
+                    Width = width;
+            }
+
+            initialPresetsReceived = true;
 
             if (!hasPresets)
             {
@@ -99,6 +118,8 @@ namespace osu.Game.Overlays.Mods
             {
                 removeAndDisposePresetPanels();
                 ItemsFlow.AddRange(loaded);
+                ItemsFlow.FilterImmediately();
+                RefreshEzLayoutShear();
             }, (cancellationTokenSource = new CancellationTokenSource()).Token);
 
             void removeAndDisposePresetPanels()
@@ -131,6 +152,8 @@ namespace osu.Game.Overlays.Mods
             base.Dispose(isDisposing);
 
             presetSubscription?.Dispose();
+            cancellationTokenSource?.Cancel();
+            rulesetBinding?.UnbindAll();
         }
     }
 }

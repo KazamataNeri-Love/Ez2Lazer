@@ -90,6 +90,7 @@ namespace osu.Game.Screens.Select
 
         private IBindable<EzAnalysisResult>? ezAnalysisBindable;
         private CancellationTokenSource? ezAnalysisCancellationSource;
+        private Bindable<string>? analysisSystemSelection;
 
         private double lastDrainLengthMs;
         private double lastBaselineLengthMs;
@@ -223,7 +224,8 @@ namespace osu.Game.Screens.Select
             onlineLookupResult.BindValueChanged(_ => updateDisplay());
 
             // The pills read the selected analysis system; switching it re-resolves from the same cached pass.
-            ezConfig.GetBindable<string>(Ez2Setting.AnalysisSystemSelection).BindValueChanged(_ => Scheduler.AddOnce(refreshAnalysisForSystem), true);
+            analysisSystemSelection = ezConfig.GetBindable<string>(Ez2Setting.AnalysisSystemSelection);
+            analysisSystemSelection.BindValueChanged(_ => Scheduler.AddOnce(refreshAnalysisForSystem), true);
 
             mods.BindValueChanged(m =>
             {
@@ -477,6 +479,7 @@ namespace osu.Game.Screens.Select
         protected override void Dispose(bool isDisposing)
         {
             clearEzAnalysisBinding();
+            analysisSystemSelection?.UnbindAll();
             lengthBpmCancellationSource?.Cancel();
             lengthBpmCancellationSource?.Dispose();
             lengthBpmCancellationSource = null;
