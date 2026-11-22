@@ -45,8 +45,6 @@ using osu.Game.Screens.Edit;
 using osu.Game.Screens.OnlinePlay.DailyChallenge;
 using osu.Game.Screens.OnlinePlay.Multiplayer;
 using osu.Game.Screens.OnlinePlay.Playlists;
-using osu.Game.EzOsuGame.Screens.MusicPlayer;
-using osu.Game.EzOsuGame.Startup;
 using osu.Game.Screens.Select;
 using osu.Game.Seasonal;
 using osuTK;
@@ -349,7 +347,7 @@ namespace osu.Game.Screens.Menu
                     return false;
             }
 
-            this.Push(new EzMusicPlayerScreen());
+            this.Push(new EzVisualizerScreen());
             return true;
         }
 

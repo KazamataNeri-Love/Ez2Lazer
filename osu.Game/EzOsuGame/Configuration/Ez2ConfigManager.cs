@@ -118,7 +118,6 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.MenuLogoPath, @"Menu/logo");
             SetDefault(Ez2Setting.MenuLogoText, "(´・ω・｀),120");
             SetDefault(Ez2Setting.MenuLogoVisualisationStyle, EzLogoVisualisationStyle.RadialBars);
-            SetDefault(Ez2Setting.UseSkinCursor, false);
             SetDefault(Ez2Setting.MenuLogoBackdropStyle, EzLogoBackdropStyle.Acrylic);
             SetDefault(Ez2Setting.MenuLogoBackdropColour, Colour4.FromHex("ff66ab"));
             SetDefault(Ez2Setting.MenuLogoBackdropBlur, 10.0, 0.0, 40.0, 1.0);
@@ -360,7 +359,6 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.ManiaBarLinesBool, true);
 
             SetDefault(Ez2Setting.ManiaPseudo3DRotation, 0.0, 0.0, 75.0, 1.0);
-            SetDefault(Ez2Setting.ManiaSpeedCompensation, 1.0, 0.2, 1.8, 0.01);
             SetDefault(Ez2Setting.ManiaHoldTailAlpha, 1.0, 0.0, 1.0, 0.01);
             // UI 0-8，除 32 得到节拍；0 关闭投皮额外负担，默认 4 = 4/32 = 2/16。旧存档 >8 的像素值钳回默认 4。
             SetDefault(Ez2Setting.ManiaHoldTailMaskGradientHeight, 0.0, 0.0, 8.0, 1.0);
@@ -1192,11 +1190,6 @@ namespace osu.Game.EzOsuGame.Configuration
         MenuLogoVisualisationStyle,
 
         /// <summary>
-        /// 开启后全局（主菜单、选歌等）使用皮肤自带的 cursor/cursormiddle 光标，而不是默认的 lazer 菜单光标。
-        /// </summary>
-        UseSkinCursor,
-
-        /// <summary>
         /// 主界面大 logo 圆圈底色：单色、亚克力、联动背景或透明。
         /// </summary>
         MenuLogoBackdropStyle,
@@ -1554,13 +1547,6 @@ namespace osu.Game.EzOsuGame.Configuration
 
         ManiaBarLinesBool,
         ManiaPseudo3DRotation,
-
-        /// <summary>
-        /// 速度补偿：判定线处的瞬时速度相对常规下落速度的倍率。1 = 不补偿（匀速），
-        /// &lt;1 远端运动加快、落线变慢，&gt;1 反之。只改变运动在屏幕上的分布，判定时刻不变。
-        /// </summary>
-        ManiaSpeedCompensation,
-
         ManiaHoldTailAlpha,
 
         /// <summary>
