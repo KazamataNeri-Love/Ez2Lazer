@@ -82,6 +82,7 @@
 
 **涉及文件：**
 - `osu.Game/EzOsuGame/Identity/EzLocalIdentity.cs`
+- `osu.Game/EzOsuGame/Identity/EzLocalIdentitySection.cs`
 - `osu.Game/EzOsuGame/Identity/EzLocalAccountNameDialog.cs`
 - `osu.Game/Overlays/Login/LoginPanel.cs`
 
