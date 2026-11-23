@@ -26,6 +26,7 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
 
         protected override LocalisableString Header => UserInterfaceStrings.MainMenuHeader;
 
+        private Bindable<EzLogoBackdropStyle> logoBackdropStyle = null!;
         private Bindable<EzLogoParticlesStyle> logoParticlesStyle = null!;
 
         [BackgroundDependencyLoader]
@@ -35,7 +36,7 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
         {
             var backgroundSource = config.GetBindable<BackgroundSource>(OsuSetting.MenuBackgroundSource);
             var menuLogoPath = ezConfig.GetBindable<string>(Ez2Setting.MenuLogoPath);
-            var logoBackdropStyle = ezConfig.GetBindable<EzLogoBackdropStyle>(Ez2Setting.MenuLogoBackdropStyle);
+            logoBackdropStyle = ezConfig.GetBindable<EzLogoBackdropStyle>(Ez2Setting.MenuLogoBackdropStyle);
             logoParticlesStyle = ezConfig.GetBindable<EzLogoParticlesStyle>(Ez2Setting.MenuLogoParticlesStyle);
 
             var logoBackdropColour = new SettingsItemV2(new EzFormColour
@@ -49,6 +50,16 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
                 Current = ezConfig.GetBindable<double>(Ez2Setting.MenuLogoBackdropBlur),
                 KeyboardStep = 1,
             });
+            var logoBackdropColourTop = new SettingsItemV2(new EzFormColour
+            {
+                Caption = EzSettingsStrings.LOGO_BACKDROP_COLOUR_TOP,
+                Current = ezConfig.GetBindable<Colour4>(Ez2Setting.MenuLogoBackdropColourTop),
+            });
+            var logoBackdropColourBottom = new SettingsItemV2(new EzFormColour
+            {
+                Caption = EzSettingsStrings.LOGO_BACKDROP_COLOUR_BOTTOM,
+                Current = ezConfig.GetBindable<Colour4>(Ez2Setting.MenuLogoBackdropColourBottom),
+            });
             var logoBackdropOpacity = new SettingsItemV2(new FormSliderBar<double>
             {
                 Caption = EzSettingsStrings.LOGO_BACKDROP_OPACITY,
@@ -60,6 +71,8 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
             logoBackdropStyle.BindValueChanged(style =>
             {
                 logoBackdropColour.CanBeShown.Value = style.NewValue == EzLogoBackdropStyle.Solid;
+                logoBackdropColourTop.CanBeShown.Value = style.NewValue == EzLogoBackdropStyle.Gradient;
+                logoBackdropColourBottom.CanBeShown.Value = style.NewValue == EzLogoBackdropStyle.Gradient;
                 logoBackdropBlur.CanBeShown.Value = style.NewValue == EzLogoBackdropStyle.Acrylic;
                 // logoBackdropOpacity.CanBeShown.Value = style.NewValue == EzLogoBackdropStyle.Linked;
             }, true);
@@ -159,6 +172,8 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
                     Current = logoBackdropStyle,
                 }),
                 logoBackdropColour,
+                logoBackdropColourTop,
+                logoBackdropColourBottom,
                 logoBackdropBlur,
                 logoBackdropOpacity,
                 logoParticlesStyleItem,

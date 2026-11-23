@@ -96,6 +96,12 @@ namespace osu.Game.EzOsuGame.Localization
         public static readonly EzLocalizationManager.EzLocalisableString LOGO_BACKDROP_COLOUR =
             new EzLocalizationManager.EzLocalisableString("颜色", "Colour");
 
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_BACKDROP_COLOUR_TOP =
+            new EzLocalizationManager.EzLocalisableString("顶部颜色", "Top colour");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_BACKDROP_COLOUR_BOTTOM =
+            new EzLocalizationManager.EzLocalisableString("底部颜色", "Bottom colour");
+
         public static readonly EzLocalizationManager.EzLocalisableString LOGO_BACKDROP_BLUR =
             new EzLocalizationManager.EzLocalisableString("虚化程度", "Blur");
 

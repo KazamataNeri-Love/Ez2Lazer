@@ -156,6 +156,9 @@ namespace osu.Game.EzOsuGame.Configuration
 
         [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.LOGO_BACKDROP_CLEAR))]
         Clear = 2,
+
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.LOGO_BACKDROP_GRADIENT))]
+        Gradient = 3,
     }
 
     /// <summary>

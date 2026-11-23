@@ -16,10 +16,22 @@ namespace osu.Game.Tests.NonVisual
     [TestFixture]
     public class EzMenuLogoParticlesConfigTest
     {
+        [Test]
+        public void TestBackdropStyleValuesRemainStable()
+        {
+            Assert.That((int)EzLogoBackdropStyle.Solid, Is.EqualTo(0));
+            Assert.That((int)EzLogoBackdropStyle.Acrylic, Is.EqualTo(1));
+            Assert.That((int)EzLogoBackdropStyle.Clear, Is.EqualTo(2));
+            Assert.That((int)EzLogoBackdropStyle.Gradient, Is.EqualTo(3));
+        }
+
         [TestCase("MenuLogoParticlesStyle", "Gradient", "Off")]
         [TestCase("MenuLogoParticlesColour", "3A6BB8", "FF804080")]
         [TestCase("MenuLogoParticlesColourTop", "1A2B6B", "AA33CC")]
         [TestCase("MenuLogoParticlesColourBottom", "3A6BB8", "2255DD")]
+        [TestCase("MenuLogoBackdropStyle", "Acrylic", "Gradient")]
+        [TestCase("MenuLogoBackdropColourTop", "ff66ab", "AA33CC")]
+        [TestCase("MenuLogoBackdropColourBottom", "b6346f", "2255DD")]
         public void TestDefaultAndIniRoundTrip(string key, string defaultValue, string customValue)
         {
             using var storage = new TemporaryNativeStorage("ez-menu-logo-particles");
@@ -29,8 +41,8 @@ namespace osu.Game.Tests.NonVisual
             var bindable = config.GetRawBindable(setting);
             Assert.That(bindable, Is.Not.Null);
 
-            object expectedDefault = bindable is Bindable<Colour4> ? Colour4.FromHex(defaultValue) : Enum.Parse<EzLogoParticlesStyle>(defaultValue);
-            object expectedCustom = bindable is Bindable<Colour4> ? Colour4.FromHex(customValue) : Enum.Parse<EzLogoParticlesStyle>(customValue);
+            object expectedDefault = parseExpected(bindable!, defaultValue);
+            object expectedCustom = parseExpected(bindable!, customValue);
 
             Assert.That(readValue(bindable!), Is.EqualTo(expectedDefault));
             ((IParseable)bindable!).Parse(customValue, CultureInfo.InvariantCulture);
@@ -50,6 +62,15 @@ namespace osu.Game.Tests.NonVisual
         {
             Bindable<Colour4> colour => colour.Value,
             Bindable<EzLogoParticlesStyle> style => style.Value,
+            Bindable<EzLogoBackdropStyle> style => style.Value,
+            _ => throw new InvalidOperationException($"Unexpected bindable type: {bindable.GetType()}"),
+        };
+
+        private static object parseExpected(IBindable bindable, string value) => bindable switch
+        {
+            Bindable<Colour4> => Colour4.FromHex(value),
+            Bindable<EzLogoParticlesStyle> => Enum.Parse<EzLogoParticlesStyle>(value),
+            Bindable<EzLogoBackdropStyle> => Enum.Parse<EzLogoBackdropStyle>(value),
             _ => throw new InvalidOperationException($"Unexpected bindable type: {bindable.GetType()}"),
         };
     }

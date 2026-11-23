@@ -137,6 +137,7 @@ namespace osu.Game.EzOsuGame.Localization
 
         // public static readonly LocalisableString LOGO_BACKDROP_LINKED = new EzLocalizationManager.EzLocalisableString("联动背景", "Linked");
         public static readonly LocalisableString LOGO_BACKDROP_CLEAR = new EzLocalizationManager.EzLocalisableString("透明", "Clear");
+        public static readonly LocalisableString LOGO_BACKDROP_GRADIENT = new EzLocalizationManager.EzLocalisableString("双色渐变", "Two-colour gradient");
 
         public static readonly LocalisableString LOGO_PARTICLES_OFF = new EzLocalizationManager.EzLocalisableString("关闭", "Off");
         public static readonly LocalisableString LOGO_PARTICLES_SOLID = new EzLocalizationManager.EzLocalisableString("单色", "Solid");
