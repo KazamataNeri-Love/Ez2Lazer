@@ -44,22 +44,29 @@
 
 ### 背景缩放 / 位置
 
-图形设置的布局选项新增三个滑块，独立调节游戏背景画面（背景图 / 故事板 / 视频）的缩放与位移：
+图形设置的布局选项新增「背景缩放」总开关及可折叠的三项滑块，独立调节游玩背景画面（背景图 / 故事板 / 视频）的缩放与位移：
 
-| 设置项 | 范围 | 说明 |
+| 设置项 | 默认 / 范围 | 说明 |
 |---|---|---|
-| 背景缩放 (Background scale) | 0.10 ~ 1.00 | 以屏幕中心为基准缩放 |
+| 背景缩放 (Background scale) | 默认关闭 | 总开关；关闭时走零开销原生路径，开启后（含 1.00 满屏）统一走独立缩放容器路径 |
+| 缩放值 (Scale) | 0.10 ~ 1.00 | 以屏幕中心为基准缩放 |
 | 水平位置 (Horizontal position) | 0% ~ 100% | 缩放后的水平偏移百分比 |
 | 垂直位置 (Vertical position) | 0% ~ 100% | 缩放后的垂直偏移百分比 |
 
-- 背景层与 `DimmableStoryboard` 共用一个缩放包装层，两者同步缩放、同步暗化，故事板缺失时背景图仍吃同一套变换
-- 位移量随缩放比例自动适配，缩放越小可移动范围越大；背景按 Fit 完整显示而不是裁切
+- 独立响应式组件 `EzScaledBackgroundContainer` 托管黑底、背景层与 `DimmableStoryboard` 共享缩放包装层；暂停打开设置页切换开关或拖动滑块实时生效
+- 同步响应官方背景暗化、背景模糊（`BlurLevel`）、休息段提亮、故事板替代背景及极速模式停绘；`BackgroundScaleEnabled` 纳入布局设置预设
+- 同步移除上游重复的「故事板视频自适应填满」（`StoryboardAutoVideoSize`）设置项与视频层每帧更新逻辑
 
 **涉及文件：**
+- `osu.Game/EzOsuGame/Background/EzScaledBackgroundContainer.cs`
+- `osu.Game/EzOsuGame/Overlays/EzBackgroundScalingPreview.cs`
 - `osu.Game/Screens/Play/Player.cs`
 - `osu.Game/Screens/Play/DimmableStoryboard.cs`
+- `osu.Game/Storyboards/Drawables/DrawableStoryboard.cs`
+- `osu.Game/Storyboards/StoryboardVideoLayer.cs`
 - `osu.Game/Overlays/Settings/Sections/Graphics/LayoutSettings.cs`
 - `osu.Game/EzOsuGame/Configuration/Ez2ConfigManager.cs`
+- `osu.Game/EzOsuGame/Presets/EzSettingsPresetCatalog.cs`
 - `osu.Game/EzOsuGame/Localization/EzSettingsStrings.cs`
 
 ---
@@ -75,6 +82,7 @@
 
 **涉及文件：**
 - `osu.Game/EzOsuGame/Identity/EzLocalIdentity.cs`
+- `osu.Game/EzOsuGame/Identity/EzLocalIdentitySection.cs`
 - `osu.Game/EzOsuGame/Identity/EzLocalAccountNameDialog.cs`
 - `osu.Game/Overlays/Login/LoginPanel.cs`
 
@@ -240,6 +248,17 @@ Mod 选择界面新增 **NeriMod** 分类列（橙色标识）。
 - `osu.Game/EzOsuGame/Layout/EzLayoutLayer.cs`
 - `osu.Game/EzOsuGame/Edit/Components/EzEditorLayerButton.cs`
 
+### NeriHUDSpritePlus
+
+在保持与上游 `EzHUDSpritePlus` 完全同源的资源目录、混合模式与 BPM 推进原设（`UseBeatmapBPM` / `BeatDivision`）前提下，新增独立 HUD 组件 `NeriHUDSpritePlus`：
+
+- 游玩期在首条红线（`TimingPoints[0].Time`）之前停在第 0 帧静止不动，到达红线后按歌曲时钟推进；暂停时同步暂停，重开回到红线前自动归位第 0 帧；皮肤编辑器与非游玩场景正常预览
+- 内部自带与选择器规则一致的序列帧模板解析，兼容 `{0}` / `{00}` / `{000}`、无连接符与 1 起始序列帧
+
+**涉及文件：**
+- `osu.Game/EzOsuGame/HUD/NeriHUDSpritePlus.cs`
+- `osu.Game.Tests/EzOsuGame/HUD/NeriHUDSpritePlusTest.cs`
+
 ---
 
 ## 六、选歌与 BMS
@@ -297,10 +316,18 @@ BMS 的 BGM / 自动轨事件没有携带它们的 hit object，皮肤管线管�
 
 ### 主菜单 Logo 配色
 
-`OsuLogo` 三角形斑纹的渐变由上游粉红（`#ff66ab → #b6346f`）改为深蓝（`#1A2B6B → #3A6BB8`）。
+主菜单 Logo 圆形背景支持单色、亚克力、透明与双色垂直渐变，默认渐变为 `#ff66ab → #b6346f`；内部三角形粒子支持关闭、单色与双色渐变，默认渐变为 `#1A2B6B → #3A6BB8`。两者颜色都可独立调整并即时保存。
 
 **涉及文件：**
+- `osu.Game/EzOsuGame/Screens/Menu/EzMenuLogoParticles.cs`
+- `osu.Game/EzOsuGame/Screens/Menu/EzMenuLogoBackdrop.cs`
+- `osu.Game/EzOsuGame/Configuration/EzEnumDisplay.cs`
+- `osu.Game/EzOsuGame/Configuration/Ez2ConfigManager.cs`
+- `osu.Game/EzOsuGame/Localization/EzEnumStrings.cs`
+- `osu.Game/EzOsuGame/Localization/EzSettingsStrings.cs`
+- `osu.Game/Overlays/Settings/Sections/UserInterface/MainMenuSettings.cs`
 - `osu.Game/Screens/Menu/OsuLogo.cs`
+- `osu.Game.Tests/NonVisual/EzMenuLogoParticlesConfigTest.cs`
 
 ---
 

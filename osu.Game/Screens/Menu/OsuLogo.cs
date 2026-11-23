@@ -12,7 +12,6 @@ using osu.Framework.Audio.Track;
 using osu.Framework.Bindables;
 using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Graphics;
-using osu.Framework.Graphics.Colour;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
@@ -25,7 +24,6 @@ using osu.Game.Beatmaps.ControlPoints;
 using osu.Game.Configuration;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Screens.Menu;
-using osu.Game.Graphics.Backgrounds;
 using osu.Game.Graphics.Containers;
 using osu.Game.Overlays;
 using osuTK;
@@ -71,8 +69,7 @@ namespace osu.Game.Screens.Menu
         protected Sample SampleDownbeat;
 
         private readonly Container colourAndTriangles;
-        private readonly EzMenuLogoBackdrop logoBackdrop;
-        private readonly TrianglesV2 triangles;
+        private readonly EzMenuLogoParticles triangles;
 
         /// <summary>
         /// Return value decides whether the logo should play its own sample for the click action.
@@ -208,17 +205,8 @@ namespace osu.Game.Screens.Menu
                                                                     Origin = Anchor.Centre,
                                                                     Children = new Drawable[]
                                                                     {
-                                                                        logoBackdrop = new EzMenuLogoBackdrop(),
-                                                                        triangles = new TrianglesV2
-                                                                        {
-                                                                            Anchor = Anchor.Centre,
-                                                                            Origin = Anchor.Centre,
-                                                                            Thickness = 0.009f,
-                                                                            ScaleAdjust = 3,
-                                                                            SpawnRatio = 1.4f,
-                                                                            Colour = ColourInfo.GradientVertical(Color4Extensions.FromHex(@"1A2B6B"), Color4Extensions.FromHex(@"3A6BB8")),
-                                                                            RelativeSizeAxes = Axes.Both,
-                                                                        },
+                                                                        new EzMenuLogoBackdrop(),
+                                                                        triangles = new EzMenuLogoParticles(),
                                                                     }
                                                                 },
                                                             },
@@ -295,7 +283,6 @@ namespace osu.Game.Screens.Menu
             SampleDownbeat = audio.Samples.Get(@"Menu/osu-logo-downbeat");
 
             holdActivationDelay = config.GetBindable<double>(OsuSetting.UIHoldActivationDelay);
-            logoBackdrop.ShowDecorations.BindValueChanged(v => triangles.Alpha = v.NewValue ? 1 : 0, true);
 
             if (ezConfig != null)
             {

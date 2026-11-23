@@ -22,15 +22,6 @@ namespace osu.Game.EzOsuGame.Overlays
             {
                 new SettingsItemV2(new FormCheckBox
                 {
-                    Caption = EzSettingsStrings.STORYBOARD_VIDEO_AUTO_SIZE,
-                    HintText = EzSettingsStrings.STORYBOARD_VIDEO_AUTO_SIZE_TOOLTIP,
-                    Current = ezConfig.GetBindable<bool>(Ez2Setting.StoryboardAutoVideoSize),
-                })
-                {
-                    Keywords = new[] { "storyboard", "video", "size", "auto", "autosize", "ui" }
-                },
-                new SettingsItemV2(new FormCheckBox
-                {
                     Caption = EzSettingsStrings.SKIP_WITH_GAMEPLAY_KEYS,
                     HintText = EzSettingsStrings.SKIP_WITH_GAMEPLAY_KEYS_TOOLTIP,
                     Current = ezConfig.GetBindable<bool>(Ez2Setting.SkipWithGameplayKeys),
