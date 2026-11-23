@@ -20,6 +20,7 @@ using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Localization;
+using osu.Game.EzOsuGame.Overlays;
 using osu.Game.Localisation;
 using osuTK;
 using osuTK.Graphics;
@@ -32,6 +33,7 @@ namespace osu.Game.Overlays.Settings.Sections.Graphics
         protected override LocalisableString Header => GraphicsSettingsStrings.LayoutHeader;
 
         private FillFlowContainer<SettingsItemV2> scalingSettings = null!;
+        private FillFlowContainer<SettingsItemV2> backgroundScalingSettings = null!;
 
         private readonly Bindable<Display> currentDisplay = new Bindable<Display>();
 
@@ -75,6 +77,11 @@ namespace osu.Game.Overlays.Settings.Sections.Graphics
 
         private Bindable<float> scalingBackgroundDim = null!;
 
+        private Bindable<bool> backgroundScaleEnabled = null!;
+        private Bindable<float> backgroundScale = null!;
+        private Bindable<float> backgroundPosX = null!;
+        private Bindable<float> backgroundPosY = null!;
+
         private const int transition_duration = 400;
 
         [BackgroundDependencyLoader]
@@ -92,6 +99,11 @@ namespace osu.Game.Overlays.Settings.Sections.Graphics
             scalingPositionX = osuConfig.GetBindable<float>(OsuSetting.ScalingPositionX);
             scalingPositionY = osuConfig.GetBindable<float>(OsuSetting.ScalingPositionY);
             scalingBackgroundDim = osuConfig.GetBindable<float>(OsuSetting.ScalingBackgroundDim);
+
+            backgroundScaleEnabled = ezConfig.GetBindable<bool>(Ez2Setting.BackgroundScaleEnabled);
+            backgroundScale = ezConfig.GetBindable<float>(Ez2Setting.BackgroundScale);
+            backgroundPosX = ezConfig.GetBindable<float>(Ez2Setting.BackgroundPosX);
+            backgroundPosY = ezConfig.GetBindable<float>(Ez2Setting.BackgroundPosY);
 
             windowedResolution.Value = sizeWindowed.Value;
 
@@ -173,35 +185,54 @@ namespace osu.Game.Overlays.Settings.Sections.Graphics
                 {
                     Keywords = new[] { "scale", "letterbox" },
                 },
-                new SettingsItemV2(new FormSliderBar<float>
+                new SettingsItemV2(new FormCheckBox
                 {
                     Caption = EzSettingsStrings.BACKGROUND_SCALE,
                     HintText = EzSettingsStrings.BACKGROUND_SCALE_TOOLTIP,
-                    Current = ezConfig.GetBindable<float>(Ez2Setting.BackgroundScale),
-                    KeyboardStep = 0.01f,
-                }.With(bindBackgroundPreviewEvent))
+                    Current = backgroundScaleEnabled,
+                })
                 {
                     Keywords = new[] { "background", "scale", "zoom", "storyboard", "video", "ui" }
                 },
-                new SettingsItemV2(new FormSliderBar<float>
+                backgroundScalingSettings = new FillFlowContainer<SettingsItemV2>
                 {
-                    Caption = EzSettingsStrings.BACKGROUND_POSITION_X,
-                    Current = ezConfig.GetBindable<float>(Ez2Setting.BackgroundPosX),
-                    KeyboardStep = 0.01f,
-                    DisplayAsPercentage = true,
-                }.With(bindBackgroundPreviewEvent))
-                {
-                    Keywords = new[] { "background", "position", "horizontal", "x", "ui" }
-                },
-                new SettingsItemV2(new FormSliderBar<float>
-                {
-                    Caption = EzSettingsStrings.BACKGROUND_POSITION_Y,
-                    Current = ezConfig.GetBindable<float>(Ez2Setting.BackgroundPosY),
-                    KeyboardStep = 0.01f,
-                    DisplayAsPercentage = true,
-                }.With(bindBackgroundPreviewEvent))
-                {
-                    Keywords = new[] { "background", "position", "vertical", "y", "ui" }
+                    Direction = FillDirection.Vertical,
+                    RelativeSizeAxes = Axes.X,
+                    AutoSizeAxes = Axes.Y,
+                    Masking = true,
+                    Spacing = new Vector2(0, SettingsSection.ITEM_SPACING_V2),
+                    Children = new[]
+                    {
+                        new SettingsItemV2(new FormSliderBar<float>
+                        {
+                            Caption = EzSettingsStrings.BACKGROUND_SCALE_VALUE,
+                            Current = backgroundScale,
+                            KeyboardStep = 0.01f,
+                        }.With(bindBackgroundPreviewEvent))
+                        {
+                            Keywords = new[] { "background", "scale", "zoom", "storyboard", "video", "ui" }
+                        },
+                        new SettingsItemV2(new FormSliderBar<float>
+                        {
+                            Caption = EzSettingsStrings.BACKGROUND_POSITION_X,
+                            Current = backgroundPosX,
+                            KeyboardStep = 0.01f,
+                            DisplayAsPercentage = true,
+                        }.With(bindBackgroundPreviewEvent))
+                        {
+                            Keywords = new[] { "background", "position", "horizontal", "x", "ui" }
+                        },
+                        new SettingsItemV2(new FormSliderBar<float>
+                        {
+                            Caption = EzSettingsStrings.BACKGROUND_POSITION_Y,
+                            Current = backgroundPosY,
+                            KeyboardStep = 0.01f,
+                            DisplayAsPercentage = true,
+                        }.With(bindBackgroundPreviewEvent))
+                        {
+                            Keywords = new[] { "background", "position", "vertical", "y", "ui" }
+                        },
+                    }
                 },
                 new SettingsItemV2(new FormEnumDropdown<ScalingMode>
                 {
@@ -369,6 +400,29 @@ namespace osu.Game.Overlays.Settings.Sections.Graphics
             });
             updateScalingModeVisibility();
 
+            backgroundScaleEnabled.BindValueChanged(_ =>
+            {
+                backgroundScalingSettings.ClearTransforms();
+                backgroundScalingSettings.AutoSizeDuration = transition_duration;
+                backgroundScalingSettings.AutoSizeEasing = Easing.OutQuint;
+
+                updateBackgroundScalingVisibility();
+            });
+            updateBackgroundScalingVisibility();
+
+            void updateBackgroundScalingVisibility()
+            {
+                bool enabled = backgroundScaleEnabled.Value;
+
+                if (!enabled)
+                    backgroundScalingSettings.ResizeHeightTo(0, transition_duration, Easing.OutQuint);
+
+                backgroundScalingSettings.AutoSizeAxes = enabled ? Axes.Y : Axes.None;
+
+                foreach (SettingsItemV2 item in backgroundScalingSettings)
+                    item.CanBeShown.Value = enabled;
+            }
+
             void updateScalingModeVisibility()
             {
                 if (scalingMode.Value == ScalingMode.Off)
@@ -499,7 +553,7 @@ namespace osu.Game.Overlays.Settings.Sections.Graphics
             }
         }
 
-        private Drawable? backgroundPreview;
+        private EzBackgroundScalingPreview? backgroundPreview;
 
         private void bindBackgroundPreviewEvent(FormSliderBar<float> slider)
         {
@@ -508,66 +562,16 @@ namespace osu.Game.Overlays.Settings.Sections.Graphics
 
         private void showBackgroundPreview()
         {
-            float scale = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundScale);
-            float posX = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundPosX);
-            float posY = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundPosY);
+            if (!backgroundScaleEnabled.Value)
+                return;
 
-            if (backgroundPreview?.IsAlive == true && backgroundPreview is BackgroundScalingPreview existing)
-            {
-                // Update existing preview live as the slider moves.
-                existing.Scale = new Vector2(scale);
-                float maxPan = Math.Max(0, (1 - scale) / 2);
-                existing.Position = new Vector2(
-                    (posX - 0.5f) * 2 * maxPan,
-                    (posY - 0.5f) * 2 * maxPan
-                );
-            }
+            if (backgroundPreview?.IsAlive == true)
+                backgroundPreview.UpdateTransform(backgroundScale.Value, backgroundPosX.Value, backgroundPosY.Value);
             else
-            {
-                game.Add(backgroundPreview = new BackgroundScalingPreview());
-            }
+                game.Add(backgroundPreview = new EzBackgroundScalingPreview(backgroundScale.Value, backgroundPosX.Value, backgroundPosY.Value));
 
             backgroundPreview.FadeOutFromOne(1500);
             backgroundPreview.Expire();
-        }
-
-        private partial class BackgroundScalingPreview : Container
-        {
-            public BackgroundScalingPreview()
-            {
-                RelativeSizeAxes = Axes.Both;
-                RelativePositionAxes = Axes.Both;
-                Anchor = Anchor.Centre;
-                Origin = Anchor.Centre;
-
-                const float corner_radius = 10;
-
-                float scale = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundScale);
-                float posX = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundPosX);
-                float posY = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundPosY);
-
-                this.Scale = new Vector2(scale);
-                float maxPan = Math.Max(0, (1 - scale) / 2);
-                this.Position = new Vector2(
-                    (posX - 0.5f) * 2 * maxPan,
-                    (posY - 0.5f) * 2 * maxPan
-                );
-
-                Child = new Container
-                {
-                    Anchor = Anchor.Centre,
-                    Origin = Anchor.Centre,
-                    RelativeSizeAxes = Axes.Both,
-                    Masking = true,
-                    CornerRadius = corner_radius,
-                    Child = new Box
-                    {
-                        Colour = Color4.White,
-                        RelativeSizeAxes = Axes.Both,
-                        Alpha = 0.5f,
-                    },
-                };
-            }
         }
 
         private partial class DisplayDropdown : FormDropdown<Display>

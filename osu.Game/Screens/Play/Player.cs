@@ -16,10 +16,7 @@ using osu.Framework.Bindables;
 using osu.Framework.Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
-using osu.Framework.Graphics.Shapes;
-using osu.Framework.Graphics.Textures;
 using osu.Framework.Input.Bindings;
-using osuTK;
 using osu.Framework.Logging;
 using osu.Framework.Screens;
 using osu.Framework.Threading;
@@ -29,9 +26,8 @@ using osu.Game.Configuration;
 using osu.Game.Database;
 using osu.Game.Extensions;
 using osu.Game.EzOsuGame.Analysis;
-using osu.Game.Graphics;
-using osu.Game.Graphics.Backgrounds;
 using osu.Game.EzOsuGame.Audio;
+using osu.Game.EzOsuGame.Background;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Identity;
 using osu.Game.EzOsuGame.LocalProfile;
@@ -51,7 +47,6 @@ using osu.Game.Rulesets.Scoring;
 using osu.Game.Rulesets.UI;
 using osu.Game.Rulesets.UI.Scrolling;
 using osu.Game.Scoring;
-using osu.Game.Screens.Backgrounds;
 using osu.Game.Screens.Ranking;
 using osu.Game.Skinning;
 using osu.Game.Users;
@@ -208,9 +203,6 @@ namespace osu.Game.Screens.Play
         [Resolved]
         private OsuGameBase game { get; set; }
 
-        [Resolved]
-        private LargeTextureStore largeTextureStore { get; set; }
-
         [Resolved(canBeNull: true)]
         private INotificationOverlay notificationOverlay { get; set; }
 
@@ -251,6 +243,8 @@ namespace osu.Game.Screens.Play
         protected InputAudioLatencyTracker LatencyTracker { get; private set; }
 
         public DimmableStoryboard DimmableStoryboard { get; private set; }
+
+        private EzScaledBackgroundContainer scaledBackgroundContainer;
 
         /// <summary>
         /// Whether failing should be allowed.
@@ -545,79 +539,12 @@ namespace osu.Game.Screens.Play
 
         private Drawable createUnderlayComponents(WorkingBeatmap working)
         {
-            // Shared scale/position applied to a common wrapper holding both
-            // background layer and DimmableStoryboard.
-            float bgScale = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundScale);
-            float bgPosX = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundPosX);
-            float bgPosY = GlobalConfigStore.EzConfig.Get<float>(Ez2Setting.BackgroundPosY);
-
-            float s = bgScale;
-            float maxPan = Math.Max(0, (1 - s) / 2);
-            Vector2 pos = new Vector2(
-                (bgPosX - 0.5f) * 2 * maxPan,
-                (bgPosY - 0.5f) * 2 * maxPan
-            );
-
             DimmableStoryboard = new DimmableStoryboard(GameplayState.Storyboard, GameplayState.Mods)
             {
-                RelativeSizeAxes = Axes.Both,
-                RelativePositionAxes = Axes.Both,
-                Anchor = Anchor.Centre,
-                Origin = Anchor.Centre,
+                RelativeSizeAxes = Axes.Both
             };
 
-            // Background overlay layer — always visible at full opacity. When the storyboard
-            // is displayed (DimmableStoryboard has content), it naturally renders on top of
-            // this layer. When the storyboard is disabled or absent, this layer shows through
-            // so the background image still receives the same scale/position transform.
-            //
-            // Dim is applied directly to this container via FadeColour(Gray(1 - dim)),
-            // matching the exact same transition used by UserDimContainer (800ms, OutQuint).
-            // This ensures both layers dim in perfect sync.
-            // Contain: show the full background image (Fit) instead of cropping it (Fill/cover).
-            var background = new BeatmapBackground(working);
-            background.OnLoadComplete += _ => background.Sprite.FillMode = FillMode.Fit;
-
-            var backgroundLayer = new Container
-            {
-                RelativeSizeAxes = Axes.Both,
-                AlwaysPresent = true,
-                Children = new Drawable[]
-                {
-                    background,
-                },
-            };
-
-            // Bind dim to DimmableStoryboard's own dim level bindable so both layers
-            // stay in perfect sync with the user's "Background Dim" slider.
-            // Deferred to LoadComplete because DimmableStoryboard is not yet loaded
-            // at construction time — UserDimLevel becomes available only after DI.
-            backgroundLayer.OnLoadComplete += _ =>
-            {
-                DimmableStoryboard.DimLevelSource.ValueChanged += val =>
-                {
-                    float dim = Math.Max(0, (float)val.NewValue);
-                    backgroundLayer.Colour = OsuColour.Gray(1f - dim);
-                };
-                backgroundLayer.Colour = OsuColour.Gray(1f - Math.Max(0, (float)DimmableStoryboard.DimLevelSource.Value));
-            };
-
-            // Common wrapper: both background and storyboard share the same Scale/Position.
-            var backgroundWrapper = new Container
-            {
-                RelativeSizeAxes = Axes.Both,
-                RelativePositionAxes = Axes.Both,
-                Anchor = Anchor.Centre,
-                Origin = Anchor.Centre,
-                Children = new Drawable[]
-                {
-                    backgroundLayer,
-                    DimmableStoryboard,
-                },
-            };
-
-            backgroundWrapper.Scale = new Vector2(s);
-            backgroundWrapper.Position = pos;
+            scaledBackgroundContainer = new EzScaledBackgroundContainer(working, DimmableStoryboard);
 
             letterboxOverlay = new LetterboxOverlay
             {
@@ -625,18 +552,7 @@ namespace osu.Game.Screens.Play
                 Alpha = working.Beatmap.LetterboxInBreaks ? 1 : 0,
             };
 
-            // Black underlay fills the area revealed when the wrapper is scaled down
-            // or when the letterboxed (contain) content does not cover the screen.
-            var children = new List<Drawable>
-            {
-                new Box
-                {
-                    RelativeSizeAxes = Axes.Both,
-                    Colour = Color4.Black,
-                },
-                backgroundWrapper,
-                letterboxOverlay,
-            };
+            var children = new List<Drawable> { scaledBackgroundContainer, letterboxOverlay };
 
             // [Ez] 喷泉没有对应的用户设置，只能在极速模式下直接不构造。
             if (!EzTurboMode.Active)
@@ -1349,12 +1265,6 @@ namespace osu.Game.Screens.Play
 
         private FailAnimationContainer failAnimationContainer;
 
-        /// <summary>
-        /// The screen-stack background currently hidden while gameplay draws its own copy under the black underlay.
-        /// Restored on suspend/exit so returning screens keep their background.
-        /// </summary>
-        private BackgroundScreenBeatmap? hiddenBackgroundScreen;
-
         private bool onFail()
         {
             // Failing after the quit sequence has started may cause weird side effects with the fail animation / effects.
@@ -1542,16 +1452,15 @@ namespace osu.Game.Screens.Play
 
                 failAnimationContainer.Background = b;
 
-                // The underlay we built is fully opaque and already covers this background, so its full-screen
-                // draw (and any user blur pass on it) is wasted while gameplay is current.
-                hiddenBackgroundScreen = b;
-                b.Hide();
+                scaledBackgroundContainer.AttachBackgroundScreen(b, BackdropSource);
             });
 
             HUDOverlay.IsPlaying.BindTo(localUserPlaying);
             ShowingOverlayComponents.BindTo(HUDOverlay.ShowHud);
 
             DimmableStoryboard.IsBreakTime.BindTo(breakTracker.IsBreakTime);
+            scaledBackgroundContainer.IsBreakTime.BindTo(breakTracker.IsBreakTime);
+            scaledBackgroundContainer.StoryboardReplacesBackground.BindTo(StoryboardReplacesBackground);
 
             StoryboardReplacesBackground.Value = GameplayState.Storyboard.ReplacesBackground && GameplayState.Storyboard.HasDrawable;
 
@@ -1601,7 +1510,7 @@ namespace osu.Game.Screens.Play
             exitOverlay?.RemoveAndDisposeImmediately();
 
             fadeOut();
-            restoreBackgroundScreen();
+            scaledBackgroundContainer.DetachBackgroundScreen();
             base.OnSuspending(e);
         }
 
@@ -1641,7 +1550,7 @@ namespace osu.Game.Screens.Play
             musicController.ResetTrackAdjustments();
 
             fadeOut();
-            restoreBackgroundScreen();
+            scaledBackgroundContainer?.DetachBackgroundScreen();
 
             return base.OnExiting(e);
         }
@@ -1650,17 +1559,7 @@ namespace osu.Game.Screens.Play
         {
             base.OnResuming(e);
 
-            ApplyToBackground(b =>
-            {
-                hiddenBackgroundScreen = b;
-                b.Hide();
-            });
-        }
-
-        private void restoreBackgroundScreen()
-        {
-            hiddenBackgroundScreen?.Show();
-            hiddenBackgroundScreen = null;
+            ApplyToBackground(b => scaledBackgroundContainer.AttachBackgroundScreen(b, BackdropSource));
         }
 
         /// <summary>

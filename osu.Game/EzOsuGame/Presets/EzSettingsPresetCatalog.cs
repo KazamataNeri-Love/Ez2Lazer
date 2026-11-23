@@ -60,6 +60,7 @@ namespace osu.Game.EzOsuGame.Presets
         /// </summary>
         public static IReadOnlyList<Ez2Setting> LayoutEzSettings { get; } = new[]
         {
+            Ez2Setting.BackgroundScaleEnabled,
             Ez2Setting.BackgroundScale,
             Ez2Setting.BackgroundPosX,
             Ez2Setting.BackgroundPosY,
