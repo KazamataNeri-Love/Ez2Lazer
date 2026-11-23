@@ -240,6 +240,17 @@ Mod 选择界面新增 **NeriMod** 分类列（橙色标识）。
 - `osu.Game/EzOsuGame/Layout/EzLayoutLayer.cs`
 - `osu.Game/EzOsuGame/Edit/Components/EzEditorLayerButton.cs`
 
+### NeriHUDSpritePlus
+
+在保持与上游 `EzHUDSpritePlus` 完全同源的资源目录、混合模式与 BPM 推进原设（`UseBeatmapBPM` / `BeatDivision`）前提下，新增独立 HUD 组件 `NeriHUDSpritePlus`：
+
+- 游玩期在首条红线（`TimingPoints[0].Time`）之前停在第 0 帧静止不动，到达红线后按歌曲时钟推进；暂停时同步暂停，重开回到红线前自动归位第 0 帧；皮肤编辑器与非游玩场景正常预览
+- 内部自带与选择器规则一致的序列帧模板解析，兼容 `{0}` / `{00}` / `{000}`、无连接符与 1 起始序列帧
+
+**涉及文件：**
+- `osu.Game/EzOsuGame/HUD/NeriHUDSpritePlus.cs`
+- `osu.Game.Tests/EzOsuGame/HUD/NeriHUDSpritePlusTest.cs`
+
 ---
 
 ## 六、选歌与 BMS
