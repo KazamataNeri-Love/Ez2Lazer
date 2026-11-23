@@ -72,6 +72,7 @@ namespace osu.Game.Skinning
 
         private FileSystemWatcher legacyFolderWatcher;
         private int legacyWatchPause;
+        private long legacyWatchSuppressUntilTick;
         private int legacyRefreshScheduled;
 
         private readonly GameHost host;
@@ -644,7 +645,7 @@ namespace osu.Game.Skinning
             {
                 if (EzLegacySkinFolders.TryGetDirectory(info, out string legacyDirectory))
                 {
-                    bool written = skinImporter.Save(skin);
+                    bool written = saveLegacySkinWithoutSelfReload(skin);
 
                     if (written)
                     {
@@ -691,19 +692,28 @@ namespace osu.Game.Skinning
 
         public void ReloadCurrentLegacyFolderSkinIfActive()
         {
+            bool changedReference = false;
+            bool isLegacyFolder = false;
+
             CurrentSkinInfo.Value.PerformRead(skinInfo =>
             {
                 if (!EzLegacySkinFolders.TryGetDirectory(skinInfo, out _))
                     return;
 
-                Skin previous = CurrentSkin.Value;
-                CurrentSkin.Value = GetSkin(skinInfo);
+                isLegacyFolder = true;
 
-                if (!ReferenceEquals(previous, CurrentSkin.Value))
-                    previous?.Dispose();
+                // 不在此处同步 Dispose 旧皮肤：多线程渲染下 Draw 线程的 SpriteDrawNode 可能仍持有旧纹理的
+                // D3D11ResourceSet，提前销毁会触发 activateResourceSet 空引用；对齐官方 CurrentSkinInfo.ValueChanged
+                // 策略，由 GC 在渲染引用全部脱离后经 ~Skin() 回收。
+                Skin previous = CurrentSkin.Value;
+                Skin next = GetSkin(skinInfo);
+                CurrentSkin.Value = next;
+                changedReference = !ReferenceEquals(previous, next);
             });
 
-            SourceChanged.Invoke();
+            // CurrentSkin.Value 发生引用变更时 ValueChanged 已广播一次 SourceChanged，避免重复重载。
+            if (isLegacyFolder && !changedReference)
+                SourceChanged?.Invoke();
         }
 
         public void RefreshLegacySkinCatalog()
@@ -727,12 +737,7 @@ namespace osu.Game.Skinning
             else
                 RetroSkinInfo = global::osu.Game.Skinning.RetroSkin.CreateInfo().ToLiveUnmanaged();
 
-            var previous = RetroSkin;
             RetroSkin = GetSkin(RetroSkinInfo.Value);
-
-            if (previous != null && !ReferenceEquals(previous, RetroSkin)
-                && previous != trianglesSkin && previous != argonSkin && previous != DefaultClassicSkin)
-                previous.Dispose();
         }
 
         public void IntroduceLegacySkinStorage(IDialogOverlay dialogs)
@@ -870,9 +875,28 @@ namespace osu.Game.Skinning
             }
         }
 
+        private bool saveLegacySkinWithoutSelfReload(Skin skin)
+        {
+            Interlocked.Increment(ref legacyWatchPause);
+
+            try
+            {
+                return skinImporter.Save(skin);
+            }
+            finally
+            {
+                // FileSystemWatcher 事件由操作系统异步投递，落盘后保留 1 秒抑制窗口，避免自身 Ctrl+S 触发整肤重加载。
+                Interlocked.Exchange(ref legacyWatchSuppressUntilTick, Environment.TickCount64 + 1000);
+                Interlocked.Decrement(ref legacyWatchPause);
+            }
+        }
+
+        private bool isLegacyWatchSuppressed()
+            => Volatile.Read(ref legacyWatchPause) > 0 || Environment.TickCount64 < Volatile.Read(ref legacyWatchSuppressUntilTick);
+
         private void queueLegacyFolderRefresh()
         {
-            if (Volatile.Read(ref legacyWatchPause) > 0)
+            if (isLegacyWatchSuppressed())
                 return;
 
             if (Interlocked.Exchange(ref legacyRefreshScheduled, 1) == 1)
@@ -882,7 +906,7 @@ namespace osu.Game.Skinning
             {
                 Interlocked.Exchange(ref legacyRefreshScheduled, 0);
 
-                if (Volatile.Read(ref legacyWatchPause) > 0)
+                if (isLegacyWatchSuppressed())
                     return;
 
                 try
