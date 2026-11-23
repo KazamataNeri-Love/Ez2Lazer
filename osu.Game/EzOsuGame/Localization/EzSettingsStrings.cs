@@ -74,6 +74,18 @@ namespace osu.Game.EzOsuGame.Localization
             "主菜单与选歌界面 logo 外圈的音频抖动样式。",
             "Audio visualiser style around the logo on the main menu and song select.");
 
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_PARTICLES_STYLE =
+            new EzLocalizationManager.EzLocalisableString("Logo 粒子样式", "Logo particle style");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_PARTICLES_COLOUR =
+            new EzLocalizationManager.EzLocalisableString("颜色", "Colour");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_PARTICLES_COLOUR_TOP =
+            new EzLocalizationManager.EzLocalisableString("顶部颜色", "Top colour");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_PARTICLES_COLOUR_BOTTOM =
+            new EzLocalizationManager.EzLocalisableString("底部颜色", "Bottom colour");
+
         public static readonly EzLocalizationManager.EzLocalisableString LOGO_BACKDROP =
             new EzLocalizationManager.EzLocalisableString("Logo 背景", "Logo background");
 
@@ -83,6 +95,12 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly EzLocalizationManager.EzLocalisableString LOGO_BACKDROP_COLOUR =
             new EzLocalizationManager.EzLocalisableString("颜色", "Colour");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_BACKDROP_COLOUR_TOP =
+            new EzLocalizationManager.EzLocalisableString("顶部颜色", "Top colour");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_BACKDROP_COLOUR_BOTTOM =
+            new EzLocalizationManager.EzLocalisableString("底部颜色", "Bottom colour");
 
         public static readonly EzLocalizationManager.EzLocalisableString LOGO_BACKDROP_BLUR =
             new EzLocalizationManager.EzLocalisableString("虚化程度", "Blur");
@@ -317,14 +335,6 @@ namespace osu.Game.EzOsuGame.Localization
             new EzLocalizationManager.EzLocalisableString("截图已复制到剪贴板！", "Screenshot copied to clipboard!");
 
         public static LocalisableString ScreenshotSaved(string filename) => new EzLocalizationManager.EzLocalisableString($"截图已保存！点此处查看：\n{filename}", $"Screenshot saved! Click to view.\n{filename}");
-
-        public static readonly EzLocalizationManager.EzLocalisableString STORYBOARD_VIDEO_AUTO_SIZE =
-            new EzLocalizationManager.EzLocalisableString("故事板视频自适应填满", "Storyboard video auto-size to fill");
-
-        public static readonly EzLocalizationManager.EzLocalisableString STORYBOARD_VIDEO_AUTO_SIZE_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
-            "开启后故事板视频将自动调整大小以填满整个故事板区域，可能会裁剪部分画面但能更好地适应不同分辨率和屏幕比例。",
-            "When enabled, storyboard videos will automatically adjust their size to fill the entire storyboard area, "
-            + "which may crop some of the video but will better adapt to different resolutions and screen ratios.");
 
         public static readonly EzLocalizationManager.EzLocalisableString BACKGROUND_SCALE =
             new EzLocalizationManager.EzLocalisableString("背景缩放", "Background scale");

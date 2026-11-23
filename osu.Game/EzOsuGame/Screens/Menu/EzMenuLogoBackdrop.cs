@@ -20,10 +20,12 @@ namespace osu.Game.EzOsuGame.Screens.Menu
         private readonly Box fill;
         private readonly EzMaterialContainer material;
 
-        private Bindable<EzLogoBackdropStyle> style = null!;
-        private Bindable<Colour4> solidColour = null!;
-        private Bindable<double> blur = null!;
-        private Bindable<double> opacity = null!;
+        private Bindable<EzLogoBackdropStyle>? style;
+        private Bindable<Colour4>? solidColour;
+        private Bindable<Colour4>? gradientTopColour;
+        private Bindable<Colour4>? gradientBottomColour;
+        private Bindable<double>? blur;
+        private Bindable<double>? opacity;
         private Bindable<EzMaterialUiMode>? globalMaterialMode;
 
         // private Colour4 appliedLinked = EzLogoBackdropSampler.DefaultColour;
@@ -54,6 +56,8 @@ namespace osu.Game.EzOsuGame.Screens.Menu
 
             style = ezConfig.GetBindable<EzLogoBackdropStyle>(Ez2Setting.MenuLogoBackdropStyle);
             solidColour = ezConfig.GetBindable<Colour4>(Ez2Setting.MenuLogoBackdropColour);
+            gradientTopColour = ezConfig.GetBindable<Colour4>(Ez2Setting.MenuLogoBackdropColourTop);
+            gradientBottomColour = ezConfig.GetBindable<Colour4>(Ez2Setting.MenuLogoBackdropColourBottom);
             blur = ezConfig.GetBindable<double>(Ez2Setting.MenuLogoBackdropBlur);
             opacity = ezConfig.GetBindable<double>(Ez2Setting.MenuLogoBackdropOpacity);
             globalMaterialMode = ezConfig.GetBindable<EzMaterialUiMode>(Ez2Setting.MaterialUiMode);
@@ -63,8 +67,13 @@ namespace osu.Game.EzOsuGame.Screens.Menu
         {
             base.LoadComplete();
 
+            if (style == null || solidColour == null || gradientTopColour == null || gradientBottomColour == null || blur == null || opacity == null)
+                return;
+
             style.BindValueChanged(_ => apply(), true);
             solidColour.BindValueChanged(_ => apply());
+            gradientTopColour.BindValueChanged(_ => apply());
+            gradientBottomColour.BindValueChanged(_ => apply());
             blur.BindValueChanged(_ => apply());
             opacity.BindValueChanged(_ => apply());
             globalMaterialMode?.BindValueChanged(_ => apply());
@@ -93,18 +102,27 @@ namespace osu.Game.EzOsuGame.Screens.Menu
 
         private void apply()
         {
+            if (style == null || solidColour == null || gradientTopColour == null || gradientBottomColour == null || blur == null)
+                return;
+
             // 亚克力风格是 logo 自己的设置。全局材质为默认（不干预）时据此保持亚克力，
-            // 全局为亚克力/液态玻璃时由全局覆盖。单色与透明风格不涉及材质。
+            // 全局为亚克力/液态玻璃时由全局覆盖。其他底色样式不申请离屏捕获。
             material.OwnMode = EzMaterialUiMode.Acrylic;
             material.BlurSigma = new Vector2((float)blur.Value);
 
             bool solidLook = style.Value == EzLogoBackdropStyle.Solid;
-            ShowDecorations.Value = solidLook;
+            bool gradientLook = style.Value == EzLogoBackdropStyle.Gradient;
+            ShowDecorations.Value = solidLook || gradientLook;
 
             if (solidLook)
             {
                 var colour = solidColour.Value;
                 fill.Colour = ColourInfo.GradientVertical(colour, colour.Darken(0.2f));
+                fill.Alpha = 1;
+            }
+            else if (gradientLook)
+            {
+                fill.Colour = ColourInfo.GradientVertical(gradientTopColour.Value, gradientBottomColour.Value);
                 fill.Alpha = 1;
             }
             else
