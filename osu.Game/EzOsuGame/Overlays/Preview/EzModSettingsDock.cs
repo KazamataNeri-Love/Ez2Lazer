@@ -82,7 +82,7 @@ namespace osu.Game.EzOsuGame.Overlays.Preview
                     mods.ValueChanged += onModsChanged;
 
                 if (IsLoaded)
-                    rebuild();
+                    Scheduler.AddOnce(rebuild);
             }
         }
 
@@ -302,10 +302,13 @@ namespace osu.Game.EzOsuGame.Overlays.Preview
             handleVisual.FadeTo(revealed ? 1 : 0, revealed ? 120 : 200, Easing.OutQuint);
         }
 
-        private void onModsChanged(ValueChangedEvent<IReadOnlyList<Mod>> _) => rebuild();
+        private void onModsChanged(ValueChangedEvent<IReadOnlyList<Mod>> _) => Scheduler.AddOnce(rebuild);
 
         private void rebuild()
         {
+            if (!IsLoaded)
+                return;
+
             sectionsFlow.Clear();
 
             int sectionCount = 0;
@@ -326,6 +329,14 @@ namespace osu.Game.EzOsuGame.Overlays.Preview
 
             emptyText.Alpha = sectionCount == 0 ? 1 : 0;
             scroll.Alpha = sectionCount == 0 ? 0 : 1;
+        }
+
+        protected override void Dispose(bool isDisposing)
+        {
+            if (mods != null)
+                mods.ValueChanged -= onModsChanged;
+
+            base.Dispose(isDisposing);
         }
 
         public override bool ReceivePositionalInputAt(Vector2 screenSpacePos)
