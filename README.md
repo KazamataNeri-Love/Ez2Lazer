@@ -2,7 +2,7 @@
 
 基于 [SK-la/Ez2Lazer](https://github.com/SK-la/Ez2Lazer) 的 `Edge` 分支。上游功能（HUD 体系、Mod、皮肤、Ez Pro、BMS 等）全部保留；本页只记录**本分支相对上游 `skla/master` 的差异**，上游共有的功能请查 [上游 Wiki](https://github.com/SK-la/Ez2Lazer/wiki)。
 
-> 对账基线：2026-11-20 的 `skla/master`（`a312a7feea`），差异共 250 个文件（`+13781 / −8499`）。上游继续前进后，以 `git diff skla/master Edge` 的实际结果为准。
+> 对账基线：2026-11-24 的 `skla/master`（`488471914a`）。上游继续前进后，以 `git diff skla/master Edge` 的实际结果为准。
 
 ---
 
@@ -380,7 +380,7 @@ dotnet build osu.Desktop/osu.Desktop.csproj -c Release
 # Ez2Lazer 介绍
 
 <p align="center">
-  <img width="640" alt="osu! logo" src="assets/Ez2Lazer-previewr.png">
+  <img width="1280" alt="ez2lazer logo" src="assets/Ez2Lazer-previewr.png">
 </p>
 
 <div align="center">
@@ -415,10 +415,10 @@ Game resources are covered by a separate licence in [ppy/osu-resources](https://
 
 - Latest releases: [SK-la/Ez2Lazer Releases](https://github.com/SK-la/Ez2Lazer/releases)
 - Resource pack: [EzResources (OneDrive)](https://1drv.ms/f/c/f3cc2de32b3b7226/IgBk_21pXWxGS68n3ucCBC5lAappj0tXAeQAUBnNG1eWki0?e=nTkpPz)
-- Runtime: [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)
+- Runtime: [.NET 11 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/11.0)
 
 **Auto-update (recommended)**  
-- Windows: use `ez2lazer-win-Setup.exe` from Releases (requires [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)); in-game updates download deltas afterward.  
+- Windows: use `ez2lazer-win-Setup.exe` from Releases (requires [.NET 11 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/11.0)); in-game updates download deltas afterward.  
 - For manual installs use `Ez2Lazer_release_*.zip`; zip installs cannot receive delta updates until you switch to Setup once.
 
 > Without EzResources, Ez Pro Skin and Ez HUD widgets will miss textures.
