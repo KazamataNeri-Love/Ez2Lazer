@@ -316,10 +316,17 @@ BMS 的 BGM / 自动轨事件没有携带它们的 hit object，皮肤管线管�
 
 ### 主菜单 Logo 配色
 
-`OsuLogo` 三角形斑纹的渐变由上游粉红（`#ff66ab → #b6346f`）改为深蓝（`#1A2B6B → #3A6BB8`）。
+主菜单 Logo 内部三角形粒子支持关闭、单色与双色渐变，可独立调整颜色并即时保存设置；默认保留深蓝渐变（`#1A2B6B → #3A6BB8`）。
 
 **涉及文件：**
+- `osu.Game/EzOsuGame/Screens/Menu/EzMenuLogoParticles.cs`
+- `osu.Game/EzOsuGame/Configuration/EzEnumDisplay.cs`
+- `osu.Game/EzOsuGame/Configuration/Ez2ConfigManager.cs`
+- `osu.Game/EzOsuGame/Localization/EzEnumStrings.cs`
+- `osu.Game/EzOsuGame/Localization/EzSettingsStrings.cs`
+- `osu.Game/Overlays/Settings/Sections/UserInterface/MainMenuSettings.cs`
 - `osu.Game/Screens/Menu/OsuLogo.cs`
+- `osu.Game.Tests/NonVisual/EzMenuLogoParticlesConfigTest.cs`
 
 ---
 

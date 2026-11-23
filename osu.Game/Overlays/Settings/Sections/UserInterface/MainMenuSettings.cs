@@ -2,8 +2,8 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System.Collections.Generic;
-using osu.Framework.Bindables;
 using osu.Framework.Allocation;
+using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Localisation;
 using osu.Game.Configuration;
@@ -26,6 +26,8 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
 
         protected override LocalisableString Header => UserInterfaceStrings.MainMenuHeader;
 
+        private Bindable<EzLogoParticlesStyle> logoParticlesStyle = null!;
+
         [BackgroundDependencyLoader]
         private void load(OsuConfigManager config, Ez2ConfigManager ezConfig,
                           PixivBackgroundCoordinator pixivBackgroundCoordinator,
@@ -34,6 +36,7 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
             var backgroundSource = config.GetBindable<BackgroundSource>(OsuSetting.MenuBackgroundSource);
             var menuLogoPath = ezConfig.GetBindable<string>(Ez2Setting.MenuLogoPath);
             var logoBackdropStyle = ezConfig.GetBindable<EzLogoBackdropStyle>(Ez2Setting.MenuLogoBackdropStyle);
+            logoParticlesStyle = ezConfig.GetBindable<EzLogoParticlesStyle>(Ez2Setting.MenuLogoParticlesStyle);
 
             var logoBackdropColour = new SettingsItemV2(new EzFormColour
             {
@@ -59,6 +62,34 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
                 logoBackdropColour.CanBeShown.Value = style.NewValue == EzLogoBackdropStyle.Solid;
                 logoBackdropBlur.CanBeShown.Value = style.NewValue == EzLogoBackdropStyle.Acrylic;
                 // logoBackdropOpacity.CanBeShown.Value = style.NewValue == EzLogoBackdropStyle.Linked;
+            }, true);
+
+            var logoParticlesStyleItem = new SettingsItemV2(new FormEnumDropdown<EzLogoParticlesStyle>
+            {
+                Caption = EzSettingsStrings.LOGO_PARTICLES_STYLE,
+                Current = logoParticlesStyle,
+            });
+            var logoParticlesColour = new SettingsItemV2(new EzFormColour
+            {
+                Caption = EzSettingsStrings.LOGO_PARTICLES_COLOUR,
+                Current = ezConfig.GetBindable<Colour4>(Ez2Setting.MenuLogoParticlesColour),
+            });
+            var logoParticlesColourTop = new SettingsItemV2(new EzFormColour
+            {
+                Caption = EzSettingsStrings.LOGO_PARTICLES_COLOUR_TOP,
+                Current = ezConfig.GetBindable<Colour4>(Ez2Setting.MenuLogoParticlesColourTop),
+            });
+            var logoParticlesColourBottom = new SettingsItemV2(new EzFormColour
+            {
+                Caption = EzSettingsStrings.LOGO_PARTICLES_COLOUR_BOTTOM,
+                Current = ezConfig.GetBindable<Colour4>(Ez2Setting.MenuLogoParticlesColourBottom),
+            });
+
+            logoParticlesStyle.BindValueChanged(style =>
+            {
+                logoParticlesColour.CanBeShown.Value = style.NewValue == EzLogoParticlesStyle.Solid;
+                logoParticlesColourTop.CanBeShown.Value = style.NewValue == EzLogoParticlesStyle.Gradient;
+                logoParticlesColourBottom.CanBeShown.Value = style.NewValue == EzLogoParticlesStyle.Gradient;
             }, true);
 
             ensureItemAvailable(menuLogoPath, menu_logo_items);
@@ -130,6 +161,10 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
                 logoBackdropColour,
                 logoBackdropBlur,
                 logoBackdropOpacity,
+                logoParticlesStyleItem,
+                logoParticlesColour,
+                logoParticlesColourTop,
+                logoParticlesColourBottom,
                 new EzPixivBackgroundSettings(ezConfig, pixivBackgroundCoordinator, notifications, backgroundSource),
                 new SettingsItemV2(new FormEnumDropdown<SeasonalBackgroundMode>
                 {

@@ -130,6 +130,18 @@ namespace osu.Game.EzOsuGame.Configuration
         Neon,
     }
 
+    public enum EzLogoParticlesStyle
+    {
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.LOGO_PARTICLES_OFF))]
+        Off = 0,
+
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.LOGO_PARTICLES_SOLID))]
+        Solid = 1,
+
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.LOGO_PARTICLES_GRADIENT))]
+        Gradient = 2,
+    }
+
     public enum EzLogoBackdropStyle
     {
         [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.UI_MODE_DEFAULT))]
