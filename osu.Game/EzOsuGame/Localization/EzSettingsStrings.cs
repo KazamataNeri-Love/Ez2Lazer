@@ -74,6 +74,18 @@ namespace osu.Game.EzOsuGame.Localization
             "主菜单与选歌界面 logo 外圈的音频抖动样式。",
             "Audio visualiser style around the logo on the main menu and song select.");
 
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_PARTICLES_STYLE =
+            new EzLocalizationManager.EzLocalisableString("Logo 粒子样式", "Logo particle style");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_PARTICLES_COLOUR =
+            new EzLocalizationManager.EzLocalisableString("颜色", "Colour");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_PARTICLES_COLOUR_TOP =
+            new EzLocalizationManager.EzLocalisableString("顶部颜色", "Top colour");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_PARTICLES_COLOUR_BOTTOM =
+            new EzLocalizationManager.EzLocalisableString("底部颜色", "Bottom colour");
+
         public static readonly EzLocalizationManager.EzLocalisableString LOGO_BACKDROP =
             new EzLocalizationManager.EzLocalisableString("Logo 背景", "Logo background");
 
@@ -83,6 +95,12 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly EzLocalizationManager.EzLocalisableString LOGO_BACKDROP_COLOUR =
             new EzLocalizationManager.EzLocalisableString("颜色", "Colour");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_BACKDROP_COLOUR_TOP =
+            new EzLocalizationManager.EzLocalisableString("顶部颜色", "Top colour");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_BACKDROP_COLOUR_BOTTOM =
+            new EzLocalizationManager.EzLocalisableString("底部颜色", "Bottom colour");
 
         public static readonly EzLocalizationManager.EzLocalisableString LOGO_BACKDROP_BLUR =
             new EzLocalizationManager.EzLocalisableString("虚化程度", "Blur");
