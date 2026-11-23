@@ -17,7 +17,6 @@ using osu.Framework.Platform;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.ExternalLibraries;
 using osu.Game.Database;
-using osu.Game.EzOsuGame.Configuration;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Screens.Play;
 using osuTK;
@@ -41,7 +40,7 @@ namespace osu.Game.Storyboards.Drawables
 
         protected override Container<DrawableStoryboardLayer> Content { get; }
 
-        protected override Vector2 DrawScale => autoVideSize ? Vector2.One : new Vector2((Parent?.DrawHeight ?? 0) / 480);
+        protected override Vector2 DrawScale => new Vector2((Parent?.DrawHeight ?? 0) / 480);
 
         public override bool RemoveCompletedTransforms => false;
 
@@ -61,8 +60,6 @@ namespace osu.Game.Storyboards.Drawables
         private BindableNumber<double> health = null!;
         private readonly BindableBool passing = new BindableBool(true);
 
-        protected readonly bool autoVideSize;
-
         protected override IReadOnlyDependencyContainer CreateChildDependencies(IReadOnlyDependencyContainer parent) =>
             dependencies = new DependencyContainer(base.CreateChildDependencies(parent));
 
@@ -73,19 +70,8 @@ namespace osu.Game.Storyboards.Drawables
 
             bool onlyHasVideoElements = Storyboard.Layers.SelectMany(l => l.Elements).All(e => e is StoryboardVideo);
 
-            var autoVideSizeEnable = GlobalConfigStore.EzConfig.GetBindable<bool>(Ez2Setting.StoryboardAutoVideoSize);
-            autoVideSize = onlyHasVideoElements && autoVideSizeEnable.Value;
-
-            if (autoVideSize)
-            {
-                RelativeSizeAxes = Axes.Both;
-                Size = Vector2.One;
-            }
-            else
-            {
-                Size = new Vector2(640, 480);
-                Width = Height * (storyboard.Beatmap.WidescreenStoryboard || onlyHasVideoElements ? 16 / 9f : 4 / 3f);
-            }
+            Size = new Vector2(640, 480);
+            Width = Height * (storyboard.Beatmap.WidescreenStoryboard || onlyHasVideoElements ? 16 / 9f : 4 / 3f);
 
             Anchor = Anchor.Centre;
             Origin = Anchor.Centre;

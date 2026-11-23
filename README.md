@@ -44,22 +44,29 @@
 
 ### 背景缩放 / 位置
 
-图形设置的布局选项新增三个滑块，独立调节游戏背景画面（背景图 / 故事板 / 视频）的缩放与位移：
+图形设置的布局选项新增「背景缩放」总开关及可折叠的三项滑块，独立调节游玩背景画面（背景图 / 故事板 / 视频）的缩放与位移：
 
-| 设置项 | 范围 | 说明 |
+| 设置项 | 默认 / 范围 | 说明 |
 |---|---|---|
-| 背景缩放 (Background scale) | 0.10 ~ 1.00 | 以屏幕中心为基准缩放 |
+| 背景缩放 (Background scale) | 默认关闭 | 总开关；关闭时走零开销原生路径，开启后（含 1.00 满屏）统一走独立缩放容器路径 |
+| 缩放值 (Scale) | 0.10 ~ 1.00 | 以屏幕中心为基准缩放 |
 | 水平位置 (Horizontal position) | 0% ~ 100% | 缩放后的水平偏移百分比 |
 | 垂直位置 (Vertical position) | 0% ~ 100% | 缩放后的垂直偏移百分比 |
 
-- 背景层与 `DimmableStoryboard` 共用一个缩放包装层，两者同步缩放、同步暗化，故事板缺失时背景图仍吃同一套变换
-- 位移量随缩放比例自动适配，缩放越小可移动范围越大；背景按 Fit 完整显示而不是裁切
+- 独立响应式组件 `EzScaledBackgroundContainer` 托管黑底、背景层与 `DimmableStoryboard` 共享缩放包装层；暂停打开设置页切换开关或拖动滑块实时生效
+- 同步响应官方背景暗化、背景模糊（`BlurLevel`）、休息段提亮、故事板替代背景及极速模式停绘；`BackgroundScaleEnabled` 纳入布局设置预设
+- 同步移除上游重复的「故事板视频自适应填满」（`StoryboardAutoVideoSize`）设置项与视频层每帧更新逻辑
 
 **涉及文件：**
+- `osu.Game/EzOsuGame/Background/EzScaledBackgroundContainer.cs`
+- `osu.Game/EzOsuGame/Overlays/EzBackgroundScalingPreview.cs`
 - `osu.Game/Screens/Play/Player.cs`
 - `osu.Game/Screens/Play/DimmableStoryboard.cs`
+- `osu.Game/Storyboards/Drawables/DrawableStoryboard.cs`
+- `osu.Game/Storyboards/StoryboardVideoLayer.cs`
 - `osu.Game/Overlays/Settings/Sections/Graphics/LayoutSettings.cs`
 - `osu.Game/EzOsuGame/Configuration/Ez2ConfigManager.cs`
+- `osu.Game/EzOsuGame/Presets/EzSettingsPresetCatalog.cs`
 - `osu.Game/EzOsuGame/Localization/EzSettingsStrings.cs`
 
 ---

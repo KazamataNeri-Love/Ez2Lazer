@@ -26,10 +26,9 @@ namespace osu.Game.Screens.Play
         public Container OverlayLayerContainer { get; private set; }
 
         /// <summary>
-        /// Exposes the dim level bindable from <see cref="UserDimContainer"/> for external
-        /// layers (e.g. background overlay) to synchronise with.
+        /// 是否让游玩故事板画布按 Contain 模式完整适配父容器（开启背景缩放时置为 true；关闭时沿用基类按高度缩放）。
         /// </summary>
-        public Bindable<double> DimLevelSource => UserDimLevel;
+        public readonly BindableBool FitInsideParent = new BindableBool();
 
         private readonly Storyboard storyboard;
         private readonly IReadOnlyList<Mod> mods;
@@ -65,11 +64,6 @@ namespace osu.Game.Screens.Play
             this.mods = mods;
 
             storyboardMustAlwaysBePresent = new Lazy<bool>(() => storyboard.GetLayer(@"Overlay").Elements.Any() || storyboard.Layers.Any(l => l.Elements.OfType<StoryboardSampleInfo>().Any()));
-
-            // Scale from centre so the background shrinks/expands towards the screen centre.
-            Anchor = Anchor.Centre;
-            Origin = Anchor.Centre;
-            RelativePositionAxes = Axes.Both;
         }
 
         [BackgroundDependencyLoader]
@@ -111,7 +105,7 @@ namespace osu.Game.Screens.Play
             if (!ShowStoryboard.Value && !IgnoreUserSettings.Value)
                 return;
 
-            drawableStoryboard = new GameplayDrawableStoryboard(storyboard, mods);
+            drawableStoryboard = new GameplayDrawableStoryboard(storyboard, mods, FitInsideParent);
             HasStoryboardEnded.BindTo(drawableStoryboard.HasStoryboardEnded);
 
             if (async)
@@ -128,17 +122,16 @@ namespace osu.Game.Screens.Play
 
         private partial class GameplayDrawableStoryboard : DrawableStoryboard
         {
+            private readonly IBindable<bool> fitInsideParent = new BindableBool();
+
             public override bool RemoveCompletedTransforms => true;
 
-            // Gameplay-only: fit the whole storyboard canvas inside the parent (contain/letterbox)
-            // instead of scaling by height. Keeping this in the gameplay subclass leaves the base
-            // DrawableStoryboard (used by menu/select backgrounds) untouched.
             protected override Vector2 DrawScale
             {
                 get
                 {
-                    if (autoVideSize)
-                        return Vector2.One;
+                    if (!fitInsideParent.Value)
+                        return base.DrawScale;
 
                     Vector2 parentSize = Parent?.DrawSize ?? Vector2.Zero;
 
@@ -149,9 +142,16 @@ namespace osu.Game.Screens.Play
                 }
             }
 
-            public GameplayDrawableStoryboard(Storyboard storyboard, IReadOnlyList<Mod> mods)
+            public GameplayDrawableStoryboard(Storyboard storyboard, IReadOnlyList<Mod> mods, IBindable<bool> fitInsideParent)
                 : base(storyboard, mods)
             {
+                this.fitInsideParent.BindTo(fitInsideParent);
+            }
+
+            protected override void LoadComplete()
+            {
+                base.LoadComplete();
+                fitInsideParent.BindValueChanged(_ => Invalidate(Invalidation.MiscGeometry));
             }
         }
     }
