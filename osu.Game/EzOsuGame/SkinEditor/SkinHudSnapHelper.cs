@@ -83,7 +83,7 @@ namespace osu.Game.EzOsuGame.SkinEditor
             var currentBounds = getCombinedBounds(selection, usePixelBounds);
             var proposedBounds = currentBounds.Offset(rawParentDelta.X, rawParentDelta.Y);
             var others = getSnapTargets(container, selection, usePixelBounds);
-            var containerSize = container.DrawSize;
+            var containerSize = container.ExternalTarget?.DrawSize ?? container.DrawSize;
 
             maintainAxis(true, ref state.X, in state.Y, proposedBounds, snapDistance, containerSize, others);
             maintainAxis(false, ref state.Y, in state.X, proposedBounds, snapDistance, containerSize, others);

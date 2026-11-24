@@ -128,12 +128,29 @@ namespace osu.Game.EzOsuGame.Edit
             UsesEzLayoutStore = false,
         };
 
+        public static readonly EzSkinEditorLayerDefinition EZ_GLOBAL_BACKGROUND = new EzSkinEditorLayerDefinition
+        {
+            Layer = EzHUDLayer.EzGlobalBackground,
+            RulesetScoped = false,
+            Target = GlobalSkinnableContainers.GlobalBackground,
+            UsesEzLayoutStore = true,
+        };
+
+        public static readonly EzSkinEditorLayerDefinition SKIN_GLOBAL_BACKGROUND = new EzSkinEditorLayerDefinition
+        {
+            Layer = EzHUDLayer.SkinGlobalBackground,
+            RulesetScoped = false,
+            Target = GlobalSkinnableContainers.GlobalBackground,
+            UsesEzLayoutStore = false,
+        };
+
         private static readonly EzSkinEditorLayerDefinition[] gameplay_layers =
         {
             HUD_OFF, EZ_BACKGROUND, EZ_BACKGROUND_RULESET,
             EZ_HUD, EZ_HUD_RULESET, EZ_PLAYFIELD_RULESET,
             SKIN_BACKGROUND, SKIN_BACKGROUND_RULESET,
             SKIN_HUD, SKIN_HUD_RULESET, SKIN_PLAYFIELD_RULESET,
+            EZ_GLOBAL_BACKGROUND, SKIN_GLOBAL_BACKGROUND,
         };
 
         private static readonly EzSkinEditorLayerDefinition[] ez_only_layers =
@@ -160,11 +177,13 @@ namespace osu.Game.EzOsuGame.Edit
             EzHUDLayer.EzPlayfieldRuleset => EZ_PLAYFIELD_RULESET,
             EzHUDLayer.EzBackground => EZ_BACKGROUND,
             EzHUDLayer.EzBackgroundRuleset => EZ_BACKGROUND_RULESET,
+            EzHUDLayer.EzGlobalBackground => EZ_GLOBAL_BACKGROUND,
             EzHUDLayer.SkinHud => SKIN_HUD,
             EzHUDLayer.SkinHudRuleset => SKIN_HUD_RULESET,
             EzHUDLayer.SkinPlayfieldRuleset => SKIN_PLAYFIELD_RULESET,
             EzHUDLayer.SkinBackground => SKIN_BACKGROUND,
             EzHUDLayer.SkinBackgroundRuleset => SKIN_BACKGROUND_RULESET,
+            EzHUDLayer.SkinGlobalBackground => SKIN_GLOBAL_BACKGROUND,
             _ => HUD_OFF,
         };
 
@@ -242,6 +261,12 @@ namespace osu.Game.EzOsuGame.Edit
 
                 case EzHUDLayer.SkinBackgroundRuleset:
                     return LocalisableString.Format(EzEditorStrings.LAYER_SKIN_BACKGROUND_RULESET.ToString(), getRulesetName(ruleset));
+
+                case EzHUDLayer.EzGlobalBackground:
+                    return EzEditorStrings.LAYER_EZ_GLOBAL_BACKGROUND;
+
+                case EzHUDLayer.SkinGlobalBackground:
+                    return EzEditorStrings.LAYER_SKIN_GLOBAL_BACKGROUND;
 
                 default:
                     return EzEditorStrings.LAYER_HUD_OFF;
