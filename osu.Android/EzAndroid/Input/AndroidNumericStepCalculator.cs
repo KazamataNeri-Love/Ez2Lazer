@@ -54,6 +54,9 @@ namespace osu.Android.EzAndroid.Input
 
         internal static string Format<T>(T value, bool displayAsPercentage) where T : INumber<T>
         {
+            if (T.IsZero(value))
+                return "0";
+
             string text = value.ToString(null, CultureInfo.CurrentCulture);
             if (IsInteger<T>())
                 return text;
