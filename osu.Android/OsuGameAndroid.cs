@@ -7,12 +7,14 @@ using Android.App;
 using Android.Content.PM;
 using Microsoft.Maui.Devices;
 using osu.Android.EzAndroid.Input;
+using osu.Android.EzAndroid.SkinEditor;
 using osu.Framework.Allocation;
 using osu.Framework.Development;
 using osu.Framework.Extensions.ObjectExtensions;
 using osu.Framework.Platform;
 using osu.Game;
 using osu.Game.Graphics.UserInterface;
+using osu.Game.Overlays.SkinEditor;
 using osu.Game.Performance;
 using osu.Game.Screens;
 using osu.Game.Updater;
@@ -31,6 +33,9 @@ namespace osu.Android
 
         [Cached(typeof(IMobileNumericControlFactory))]
         private readonly AndroidMobileNumericControlFactory mobileNumericControlFactory = new AndroidMobileNumericControlFactory();
+
+        [Cached(typeof(ISkinSettingsToolboxExtension))]
+        private readonly AndroidSkinSettingsToolboxExtension skinSettingsToolboxExtension = new AndroidSkinSettingsToolboxExtension();
 
         private readonly PackageInfo packageInfo;
 

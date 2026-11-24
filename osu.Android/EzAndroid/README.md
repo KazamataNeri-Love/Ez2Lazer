@@ -20,5 +20,6 @@
 ## 已接入模块
 
 - `Input/`：通过 `IMobileNumericControlFactory` 接管表单与设置滑条，提供数字输入、加速步进，并保留各自的复位与提交行为（Issue #53）。
+- `SkinEditor/`：通过 `ISkinSettingsToolboxExtension` 为两种皮肤编辑器添加触屏锚点、原点九宫格和快捷动作栏（Issue #54）。
 
 其余触屏重构和 Android 专属 Ruleset 分别跟踪于 [Issue #39](https://github.com/KazamataNeri-Love/Ez2Lazer/issues/39) 与 [Issue #40](https://github.com/KazamataNeri-Love/Ez2Lazer/issues/40)。
