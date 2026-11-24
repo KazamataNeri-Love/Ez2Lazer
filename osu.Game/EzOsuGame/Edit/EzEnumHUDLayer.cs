@@ -44,5 +44,11 @@ namespace osu.Game.EzOsuGame.Edit
 
         /// <summary>Current skin layout, ruleset-specific background components.</summary>
         SkinBackgroundRuleset,
+
+        /// <summary>Ez layout layer, global (non-ruleset) full-screen background components.</summary>
+        EzGlobalBackground,
+
+        /// <summary>Current skin layout, global full-screen background components.</summary>
+        SkinGlobalBackground,
     }
 }

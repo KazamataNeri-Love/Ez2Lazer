@@ -12,7 +12,7 @@ namespace osu.Game.EzOsuGame.SkinEditor
         public static readonly float[] DISTANCE_PRESETS = { 10, 15, 20, 25, 50 };
 
         public static bool CanSnap(GlobalSkinnableContainerLookup? target) =>
-            target?.Lookup is GlobalSkinnableContainers.MainHUDComponents or GlobalSkinnableContainers.SongSelect;
+            target?.Lookup is GlobalSkinnableContainers.MainHUDComponents or GlobalSkinnableContainers.SongSelect or GlobalSkinnableContainers.GlobalBackground or GlobalSkinnableContainers.Background;
 
         public static float SnapToPreset(float value)
         {

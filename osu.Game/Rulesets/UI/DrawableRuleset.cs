@@ -19,6 +19,7 @@ using osu.Framework.Input;
 using osu.Framework.Input.Events;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
+using osu.Game.EzOsuGame.Configuration;
 using osu.Game.Graphics.Cursor;
 using osu.Game.Input.Handlers;
 using osu.Game.Overlays;
@@ -33,7 +34,6 @@ using osu.Game.Scoring;
 using osu.Game.Screens.Play;
 using osu.Game.Screens.Play.HUD;
 using osu.Game.Screens.Play.HUD.ClicksPerSecond;
-using osu.Game.Skinning;
 using osuTK;
 
 namespace osu.Game.Rulesets.UI
@@ -82,8 +82,6 @@ namespace osu.Game.Rulesets.UI
 
         public override Container FrameStableComponents { get; } = new Container { RelativeSizeAxes = Axes.Both };
 
-        public override Container BackgroundLayer { get; } = new Container { RelativeSizeAxes = Axes.Both, Depth = float.MaxValue };
-
         public override IFrameStableClock FrameStableClock => frameStabilityContainer;
 
         public override IEnumerable<HitObject> Objects => Beatmap.HitObjects;
@@ -101,6 +99,14 @@ namespace osu.Game.Rulesets.UI
         private OnScreenDisplay onScreenDisplay { get; set; }
 
         private readonly PlayfieldAdjustmentContainer playfieldAdjustmentContainer;
+
+        private Container gameplayObjectRenderLayer;
+        private Container unbufferedPlayfieldLayer;
+        private BufferedContainer antialiasedPlayfieldLayer;
+        private Bindable<bool> gameplayObjectAntialiasing;
+
+        [Resolved(CanBeNull = true)]
+        private Ez2ConfigManager ezConfig { get; set; }
 
         private IDisposable configTracker;
         private FrameStabilityContainer frameStabilityContainer;
@@ -190,7 +196,7 @@ namespace osu.Game.Rulesets.UI
                         KeyBindingInputManager
                             .WithChildren(new Drawable[]
                             {
-                                playfieldAdjustmentContainer.WithChild(Playfield),
+                                gameplayObjectRenderLayer = createGameplayObjectRenderLayer(),
                                 Overlays
                             }),
                     }),
@@ -201,46 +207,18 @@ namespace osu.Game.Rulesets.UI
                 }
             };
 
-            // Global and ruleset-scoped background components get separate hosts: a SkinnableContainer
-            // clears its ExternalTarget on every reload, so two proxies sharing one host would erase
-            // each other's components.
-            var globalBackgroundHost = new Container { RelativeSizeAxes = Axes.Both };
-            var rulesetBackgroundHost = new Container { RelativeSizeAxes = Axes.Both };
-
-            BackgroundLayer.Add(globalBackgroundHost);
-            BackgroundLayer.Add(rulesetBackgroundHost);
-            BackgroundLayer.Add(EzGlobalBackgroundHost);
-            BackgroundLayer.Add(EzRulesetBackgroundHost);
-
-            // BackgroundLayer is added outside FrameStabilityContainer to avoid interfering with its
-            // frame-stable pipeline timing.
-            AddInternal(BackgroundLayer);
-
-            // Register SkinnableContainer proxies for editor discovery. Alpha = 0 keeps them out of the
-            // draw traversal; ExternalTarget proxies add/remove/reload onto the matching host.
-            // Child order doubles as z-order, so the global host is added first to keep ruleset-scoped
-            // components above it (same layering as the HUD's global/ruleset pair).
-            AddInternal(new SkinnableContainer(
-                new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.Background))
-            {
-                ExternalTarget = globalBackgroundHost,
-                Alpha = 0,
-                AlwaysPresent = false,
-            });
-
-            AddInternal(new SkinnableContainer(
-                new GlobalSkinnableContainerLookup(GlobalSkinnableContainers.Background, Ruleset.RulesetInfo))
-            {
-                ExternalTarget = rulesetBackgroundHost,
-                Alpha = 0,
-                AlwaysPresent = false,
-            });
-
             if ((ResumeOverlay = CreateResumeOverlay()) != null)
             {
                 AddInternal(CreateInputManager()
                     .WithChild(CreatePlayfieldAdjustmentContainer()
                         .WithChild(ResumeOverlay)));
+            }
+
+            if (ezConfig != null)
+            {
+                gameplayObjectAntialiasing = ezConfig.GetBindable<bool>(Ez2Setting.GameplayObjectAntialiasing);
+                gameplayObjectAntialiasing.ValueChanged += onGameplayObjectAntialiasingChanged;
+                applyGameplayObjectAntialiasing(gameplayObjectAntialiasing.Value);
             }
 
             hitsoundVolume = config.GetBindable<double>(OsuSetting.HitsoundVolume);
@@ -254,6 +232,57 @@ namespace osu.Game.Rulesets.UI
         /// <summary>
         /// Creates and adds drawable representations of hit objects to the play field.
         /// </summary>
+        private Container createGameplayObjectRenderLayer()
+        {
+            unbufferedPlayfieldLayer = new Container
+            {
+                RelativeSizeAxes = Axes.Both,
+                Child = playfieldAdjustmentContainer.WithChild(Playfield),
+            };
+
+            antialiasedPlayfieldLayer = new BufferedContainer(pixelSnapping: false, cachedFrameBuffer: false)
+            {
+                RelativeSizeAxes = Axes.Both,
+                FrameBufferScale = new Vector2(2),
+                Alpha = 0,
+            };
+
+            return new Container
+            {
+                RelativeSizeAxes = Axes.Both,
+                Children = new Drawable[]
+                {
+                    unbufferedPlayfieldLayer,
+                    antialiasedPlayfieldLayer,
+                },
+            };
+        }
+
+        private void onGameplayObjectAntialiasingChanged(ValueChangedEvent<bool> change) =>
+            Schedule(() => applyGameplayObjectAntialiasing(change.NewValue));
+
+        private void applyGameplayObjectAntialiasing(bool enabled)
+        {
+            if (enabled)
+            {
+                if (playfieldAdjustmentContainer.Parent == antialiasedPlayfieldLayer)
+                    return;
+
+                unbufferedPlayfieldLayer.Remove(playfieldAdjustmentContainer, false);
+                antialiasedPlayfieldLayer.Child = playfieldAdjustmentContainer;
+                antialiasedPlayfieldLayer.Alpha = 1;
+            }
+            else
+            {
+                if (playfieldAdjustmentContainer.Parent != antialiasedPlayfieldLayer)
+                    return;
+
+                antialiasedPlayfieldLayer.Remove(playfieldAdjustmentContainer, false);
+                unbufferedPlayfieldLayer.Child = playfieldAdjustmentContainer;
+                antialiasedPlayfieldLayer.Alpha = 0;
+            }
+        }
+
         private void loadObjects(CancellationToken cancellationToken)
         {
             foreach (TObject h in Beatmap.HitObjects)
@@ -446,6 +475,9 @@ namespace osu.Game.Rulesets.UI
 
             configTracker?.Dispose();
 
+            if (gameplayObjectAntialiasing != null)
+                gameplayObjectAntialiasing.ValueChanged -= onGameplayObjectAntialiasingChanged;
+
             // Dispose the components created by this dependency container.
             dependencies?.Dispose();
         }
@@ -500,24 +532,6 @@ namespace osu.Game.Rulesets.UI
         /// Content to be placed above hitobjects. Will be affected by frame stability and adjustments applied to <see cref="Audio"/>.
         /// </summary>
         public abstract Container Overlays { get; }
-
-        /// <summary>
-        /// A layer anchored to the full screen, rendered below the playfield and every other gameplay element.
-        /// </summary>
-        /// <remarks>
-        /// Deliberately not abstract: test fixtures derive from this class and only supply the members they
-        /// actually exercise, so requiring all of them to implement an unused layer would break those tests.
-        /// </remarks>
-        public virtual Container BackgroundLayer { get; } = new Container { RelativeSizeAxes = Axes.Both, Depth = float.MaxValue };
-
-        /// <summary>
-        /// Hosts for Ez layout background components. Kept apart from the skin hosts because a skinnable
-        /// container clears its external target on every reload, so sharing one host would erase the other
-        /// provider's components.
-        /// </summary>
-        internal Container EzGlobalBackgroundHost { get; } = new Container { RelativeSizeAxes = Axes.Both };
-
-        internal Container EzRulesetBackgroundHost { get; } = new Container { RelativeSizeAxes = Axes.Both };
 
         /// <summary>
         /// Components to be run potentially multiple times in line with frame-stable gameplay.

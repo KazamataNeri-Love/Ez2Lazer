@@ -31,6 +31,7 @@
 | [EZ_ANALYSIS_STORAGE_REDESIGN.md](./EZ_ANALYSIS_STORAGE_REDESIGN.md) | 分析存储设计记录；开头列有当前源码基线，历史方案段落不等同于现状 |
 | [mania_scoring_formula_research_v1.md](./mania_scoring_formula_research_v1.md) | 计分 V1 研究稿；现行公式已演进，文首提供实现对照 |
 | [song-select-draw.md](./song-select-draw.md) | 2026-11-11 至 2026-11-12 的性能调查记录，不作为当前功能清单 |
+| [weather-api.md](./weather-api.md) | 天气数据 API、天气效果和 Mod 接入设计 |
 
 ## 用户与资源指南
 

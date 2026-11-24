@@ -92,6 +92,14 @@ namespace osu.Game.EzOsuGame
             }
         }
 
+        internal static string GetDisplayName(SkinInfo skin)
+        {
+            if (!TryGetDirectory(skin, out string directory))
+                return skin.ToString();
+
+            return $"{Path.GetFileName(directory)} / {skin}";
+        }
+
         public static bool AnyFolders()
         {
             try
@@ -740,7 +748,7 @@ namespace osu.Game.EzOsuGame
             if (isFree(desired, keep))
                 return desired;
 
-            for (int i = 2; ; i++)
+            for (int i = 2;; i++)
             {
                 string candidate = $"{desired} ({i})";
 
@@ -760,9 +768,15 @@ namespace osu.Game.EzOsuGame
             "LPT0", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
         };
 
+        private const string invalid_file_name_chars = "<>:\"/\\|?*";
+
         private static void tryWriteRelativeFile(string directory, string skinName, string relativeName, HashSet<string> used, List<(string from, string to)> renames, Action<string> write)
         {
             string normalized = normalizeRelative(relativeName);
+
+            if (string.Equals(normalized, "skin.ini", StringComparison.OrdinalIgnoreCase))
+                normalized = "skin.ini";
+
             string writable = writableRelative(normalized);
             string destination = Path.Combine(directory, writable.Replace('/', Path.DirectorySeparatorChar));
 
@@ -773,7 +787,7 @@ namespace osu.Game.EzOsuGame
                 string ext = Path.GetExtension(destination);
                 string relativeDir = writable.Contains('/') ? writable[..writable.LastIndexOf('/')] : string.Empty;
 
-                for (int i = 2; ; i++)
+                for (int i = 2;; i++)
                 {
                     string file = $"{stem}_{i}{ext}";
                     destination = string.IsNullOrEmpty(folder) ? file : Path.Combine(folder, file);
@@ -990,8 +1004,7 @@ namespace osu.Game.EzOsuGame
 
         private static string sanitize(string name)
         {
-            foreach (char invalid in Path.GetInvalidFileNameChars())
-                name = name.Replace(invalid, '_');
+            name = new string(name.Select(c => c < 32 || invalid_file_name_chars.Contains(c) ? '_' : c).ToArray());
 
             name = name.Trim().TrimEnd('.');
             return string.IsNullOrWhiteSpace(name) ? "skin" : name;
