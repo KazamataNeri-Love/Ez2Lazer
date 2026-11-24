@@ -2,7 +2,6 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
-using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
@@ -20,8 +19,11 @@ namespace osu.Game.EzOsuGame.Screens.Menu
         private const float top_end = 0.44f;
         private const float lower_height = 0.56f;
         private const int stripe_count = 6;
+        private const float min_gap_width = 0.008f;
+        private const float bridge_overlap = 0.0015f;
 
         private readonly Box[] bands = new Box[max_bands];
+        private readonly Box birthBridge;
         private Bindable<EzLogoSunStripesStyle>? style;
         private Bindable<EzLogoBackdropStyle>? backdropStyle;
         private Bindable<Colour4>? solidColour;
@@ -35,16 +37,15 @@ namespace osu.Game.EzOsuGame.Screens.Menu
         public EzMenuLogoSunStripes()
         {
             RelativeSizeAxes = Axes.Both;
-            InternalChildren = bands.Select(_ => new Box
-            {
-                RelativeSizeAxes = Axes.Both,
-                RelativePositionAxes = Axes.Y,
-                Width = 1,
-                Alpha = 0,
-            }).ToArray();
+            var children = new Drawable[max_bands + 1];
 
             for (int i = 0; i < max_bands; i++)
-                bands[i] = (Box)InternalChildren[i];
+                children[i] = bands[i] = createBand();
+
+            birthBridge = createBand();
+            birthBridge.Depth = 1;
+            children[max_bands] = birthBridge;
+            InternalChildren = children;
         }
 
         [BackgroundDependencyLoader(true)]
@@ -78,11 +79,35 @@ namespace osu.Game.EzOsuGame.Screens.Menu
         {
             base.Update();
 
-            if (style?.Value != EzLogoSunStripesStyle.Scrolling || !isEffectivelyVisible)
+            var currentStyle = style?.Value;
+            if (currentStyle is not (EzLogoSunStripesStyle.Scrolling or EzLogoSunStripesStyle.ScrollingUp) || !isEffectivelyVisible)
                 return;
 
-            scrollPhase = (scrollPhase + (float)(Time.Elapsed / 1000.0) * 0.25f) % 1f;
+            float delta = (float)(Time.Elapsed / 1000.0) * 0.25f;
+            scrollPhase = AdvancePhase(scrollPhase, delta, currentStyle.Value);
             refresh();
+        }
+
+        /// <summary>
+        /// Advances the stripe phase in the selected scrolling direction.
+        /// </summary>
+        public static float AdvancePhase(float phase, float delta, EzLogoSunStripesStyle style)
+        {
+            phase = (phase + (style == EzLogoSunStripesStyle.ScrollingUp ? -delta : delta)) % 1f;
+            if (phase < 0)
+                phase += 1f;
+
+            return phase;
+        }
+
+        /// <summary>
+        /// Returns the opacity of the bridge over the first scrolling gap.
+        /// </summary>
+        public static float ComputeBirthBridgeAlpha(float phase)
+        {
+            float t = Math.Clamp(phase, 0f, 1f);
+            float smoothT = t * t * (3f - 2f * t);
+            return 1f - smoothT;
         }
 
         /// <summary>
@@ -104,7 +129,7 @@ namespace osu.Game.EzOsuGame.Screens.Menu
             {
                 float u = (i + phase) / stripe_count;
                 float gapStart = top_end + lower_height * MathF.Pow(u, 1.45f);
-                float gapWidth = lower_height * 0.12f * MathF.Pow(u, 1.35f);
+                float gapWidth = min_gap_width + lower_height * 0.115f * MathF.Pow(u, 1.35f);
                 float gapEnd = Math.Min(1, gapStart + gapWidth);
 
                 if (gapEnd <= gapStart)
@@ -131,6 +156,7 @@ namespace osu.Game.EzOsuGame.Screens.Menu
             {
                 for (int i = 0; i < bands.Length; i++)
                     bands[i].Alpha = 0;
+                birthBridge.Alpha = 0;
                 appliedStyle = style.Value;
                 return;
             }
@@ -144,8 +170,9 @@ namespace osu.Game.EzOsuGame.Screens.Menu
                 && appliedBottom == bottom)
                 return;
 
+            bool scrolling = style.Value is EzLogoSunStripesStyle.Scrolling or EzLogoSunStripesStyle.ScrollingUp;
             Span<(float Start, float End)> geometry = stackalloc (float Start, float End)[max_bands];
-            int count = ComputeBands(style.Value == EzLogoSunStripesStyle.Scrolling ? scrollPhase : 0, geometry);
+            int count = ComputeBands(scrolling ? scrollPhase : 0, geometry);
             ColourInfo gradient = ColourInfo.GradientVertical(top, bottom);
 
             for (int i = 0; i < bands.Length; i++)
@@ -156,17 +183,39 @@ namespace osu.Game.EzOsuGame.Screens.Menu
                     continue;
                 }
 
-                float start = geometry[i].Start;
-                float end = geometry[i].End;
-                bands[i].Y = start;
-                bands[i].Height = end - start;
-                bands[i].Colour = ColourInfo.GradientVertical(gradient.Interpolate(new Vector2(0, start)), gradient.Interpolate(new Vector2(0, end)));
+                setBand(bands[i], geometry[i].Start, geometry[i].End, gradient);
                 bands[i].Alpha = 1;
             }
+
+            if (scrolling)
+            {
+                // Tuck the bridge under both solid bands so fractional edges cannot leave a seam.
+                float bridgeStart = Math.Max(0, geometry[0].End - bridge_overlap);
+                float bridgeEnd = Math.Min(1, geometry[1].Start + bridge_overlap);
+                setBand(birthBridge, bridgeStart, bridgeEnd, gradient);
+                birthBridge.Alpha = ComputeBirthBridgeAlpha(scrollPhase);
+            }
+            else
+                birthBridge.Alpha = 0;
 
             appliedStyle = style.Value;
             appliedTop = top;
             appliedBottom = bottom;
+        }
+
+        private static Box createBand() => new Box
+        {
+            RelativeSizeAxes = Axes.Both,
+            RelativePositionAxes = Axes.Y,
+            Width = 1,
+            Alpha = 0,
+        };
+
+        private static void setBand(Box band, float start, float end, ColourInfo gradient)
+        {
+            band.Y = start;
+            band.Height = end - start;
+            band.Colour = ColourInfo.GradientVertical(gradient.Interpolate(new Vector2(0, start)), gradient.Interpolate(new Vector2(0, end)));
         }
 
         private bool isEffectivelyVisible

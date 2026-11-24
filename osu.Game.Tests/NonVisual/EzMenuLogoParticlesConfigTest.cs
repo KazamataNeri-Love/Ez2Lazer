@@ -26,9 +26,19 @@ namespace osu.Game.Tests.NonVisual
             Assert.That((int)EzLogoBackdropStyle.Gradient, Is.EqualTo(3));
         }
 
+        [Test]
+        public void TestSunStripeStyleValuesRemainStable()
+        {
+            Assert.That((int)EzLogoSunStripesStyle.Off, Is.EqualTo(0));
+            Assert.That((int)EzLogoSunStripesStyle.Static, Is.EqualTo(1));
+            Assert.That((int)EzLogoSunStripesStyle.Scrolling, Is.EqualTo(2));
+            Assert.That((int)EzLogoSunStripesStyle.ScrollingUp, Is.EqualTo(3));
+        }
+
         [TestCase("MenuLogoHideBorder", "False", "True")]
         [TestCase("MenuLogoDisableBeatPulse", "False", "True")]
         [TestCase("MenuLogoSunStripesStyle", "Off", "Scrolling")]
+        [TestCase("MenuLogoSunStripesStyle", "Off", "ScrollingUp")]
         [TestCase("MenuLogoGlowEnabled", "False", "True")]
         [TestCase("MenuLogoGlowColour", "FF2E88", "FFC966")]
         [TestCase("MenuLogoGlowRadius", "120", "175")]
@@ -116,24 +126,72 @@ namespace osu.Game.Tests.NonVisual
             for (int i = 1; i < count; i++)
             {
                 float gapWidth = bands[i].Start - bands[i - 1].End;
+                Assert.That(gapWidth, Is.GreaterThanOrEqualTo(0.008f - 0.000001f), $"Complete gap {i} must remain above the subpixel range at phase {phase}.");
                 Assert.That(gapWidth, Is.GreaterThan(previousGapWidth), $"Gap {i} must be wider than the preceding gap at phase {phase}.");
                 previousGapWidth = gapWidth;
             }
         }
 
         [Test]
-        public void TestSunStripePhaseWrapIsContinuous()
+        public void TestSunStripeClippedGapShrinksToBottomEdge()
         {
-            var start = new (float Start, float End)[10];
-            var beforeWrap = new (float Start, float End)[10];
-            int count = EzMenuLogoSunStripes.ComputeBands(0, start);
-            int beforeWrapCount = EzMenuLogoSunStripes.ComputeBands(0.999999f, beforeWrap);
-
-            Assert.That(beforeWrapCount, Is.EqualTo(count));
-            for (int i = 0; i < count; i++)
+            Span<(float Start, float End)> bands = stackalloc (float, float)[10];
+            float previous = 0.008f;
+            foreach (float phase in new[] { 0.97f, 0.98f, 0.99f, 0.9999f, 0.999999f })
             {
-                Assert.That(beforeWrap[i].Start, Is.EqualTo(start[i].Start).Within(0.00001f));
-                Assert.That(beforeWrap[i].End, Is.EqualTo(start[i].End).Within(0.00001f));
+                int count = EzMenuLogoSunStripes.ComputeBands(phase, bands);
+                float clippedWidth = 1 - bands[count - 1].End;
+                Assert.That(clippedWidth, Is.GreaterThan(0).And.LessThan(previous), $"Clipped gap at phase {phase}");
+                previous = clippedWidth;
+            }
+
+            Assert.That(previous, Is.LessThan(0.00001f));
+        }
+
+        [Test]
+        public void TestSunStripeBirthBridgeFadesAcrossCycle()
+        {
+            Assert.That(EzMenuLogoSunStripes.ComputeBirthBridgeAlpha(0), Is.EqualTo(1));
+            Assert.That(EzMenuLogoSunStripes.ComputeBirthBridgeAlpha(0.5f), Is.EqualTo(0.5f));
+            Assert.That(EzMenuLogoSunStripes.ComputeBirthBridgeAlpha(1), Is.EqualTo(0));
+
+            float previous = 1;
+            for (int i = 1; i <= 100; i++)
+            {
+                float alpha = EzMenuLogoSunStripes.ComputeBirthBridgeAlpha(i / 100f);
+                Assert.That(alpha, Is.InRange(0, previous));
+                previous = alpha;
+            }
+        }
+
+        [TestCase(EzLogoSunStripesStyle.Scrolling)]
+        [TestCase(EzLogoSunStripesStyle.ScrollingUp)]
+        public void TestSunStripeSlotsRemainContinuousAcrossCycle(EzLogoSunStripesStyle style)
+        {
+            bool upwards = style == EzLogoSunStripesStyle.ScrollingUp;
+            float from = upwards ? 0f : 0.999999f;
+            float to = EzMenuLogoSunStripes.AdvancePhase(from, 0.000001f, style);
+            Assert.That(to, Is.EqualTo(upwards ? 0.999999f : 0f).Within(0.0000001f));
+
+            float beforeWrapPhase = upwards ? to : from;
+            float atWrapPhase = upwards ? from : to;
+
+            Span<(float Start, float End)> start = stackalloc (float, float)[10];
+            Span<(float Start, float End)> beforeWrap = stackalloc (float, float)[10];
+            int startCount = EzMenuLogoSunStripes.ComputeBands(atWrapPhase, start);
+            int beforeWrapCount = EzMenuLogoSunStripes.ComputeBands(beforeWrapPhase, beforeWrap);
+
+            Assert.That(EzMenuLogoSunStripes.ComputeBirthBridgeAlpha(atWrapPhase), Is.EqualTo(1));
+            Assert.That(EzMenuLogoSunStripes.ComputeBirthBridgeAlpha(beforeWrapPhase), Is.LessThan(0.00001f));
+            Assert.That(startCount, Is.EqualTo(beforeWrapCount + 1));
+            // At phase zero the opaque bridge joins the first two bands into one.
+            Assert.That(beforeWrap[0].Start, Is.EqualTo(start[0].Start).Within(0.00001f));
+            for (int i = 1; i < startCount; i++)
+            {
+                if (i > 1)
+                    Assert.That(beforeWrap[i - 1].Start, Is.EqualTo(start[i].Start).Within(0.00001f));
+
+                Assert.That(beforeWrap[i - 1].End, Is.EqualTo(start[i].End).Within(0.00001f));
             }
         }
 

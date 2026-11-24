@@ -145,7 +145,8 @@ namespace osu.Game.EzOsuGame.Localization
 
         public static readonly LocalisableString LOGO_SUN_STRIPES_OFF = new EzLocalizationManager.EzLocalisableString("关闭", "Off");
         public static readonly LocalisableString LOGO_SUN_STRIPES_STATIC = new EzLocalizationManager.EzLocalisableString("静止", "Static");
-        public static readonly LocalisableString LOGO_SUN_STRIPES_SCROLLING = new EzLocalizationManager.EzLocalisableString("缓慢流动", "Scrolling");
+        public static readonly LocalisableString LOGO_SUN_STRIPES_SCROLLING = new EzLocalizationManager.EzLocalisableString("从上而下", "Top to bottom");
+        public static readonly LocalisableString LOGO_SUN_STRIPES_SCROLLING_UP = new EzLocalizationManager.EzLocalisableString("从下而上", "Bottom to top");
 
         public static readonly LocalisableString UI_MODE_DEFAULT = new EzLocalizationManager.EzLocalisableString("默认", "Default");
         public static readonly LocalisableString UI_MODE_ACRYLIC = new EzLocalizationManager.EzLocalisableString("亚克力", "Acrylic");
