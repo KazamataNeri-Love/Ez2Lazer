@@ -92,7 +92,7 @@ namespace osu.Game.Tests.NonVisual
         [TestCase(0.125f)]
         [TestCase(0.5f)]
         [TestCase(0.995f)]
-        public void TestSunStripeBandsLeaveTransparentGaps(float phase)
+        public void TestSunStripeGapsWidenWithDepth(float phase)
         {
             Span<(float Start, float End)> bands = stackalloc (float, float)[10];
             int count = EzMenuLogoSunStripes.ComputeBands(phase, bands);
@@ -108,25 +108,30 @@ namespace osu.Game.Tests.NonVisual
                 Assert.That(end, Is.GreaterThan(start).And.LessThanOrEqualTo(1));
                 lastEnd = end;
             }
+
+            float previousGapWidth = 0;
+
+            for (int i = 1; i < count; i++)
+            {
+                float gapWidth = bands[i].Start - bands[i - 1].End;
+                Assert.That(gapWidth, Is.GreaterThan(previousGapWidth), $"Gap {i} must be wider than the preceding gap at phase {phase}.");
+                previousGapWidth = gapWidth;
+            }
         }
 
         [Test]
-        public void TestSunStripeGapsWidenAndMoveDownWithoutJumpingAtWrap()
+        public void TestSunStripePhaseWrapIsContinuous()
         {
             var start = new (float Start, float End)[10];
-            var later = new (float Start, float End)[10];
             var beforeWrap = new (float Start, float End)[10];
             int count = EzMenuLogoSunStripes.ComputeBands(0, start);
-            int laterCount = EzMenuLogoSunStripes.ComputeBands(0.01f, later);
-            EzMenuLogoSunStripes.ComputeBands(0.999f, beforeWrap);
+            int beforeWrapCount = EzMenuLogoSunStripes.ComputeBands(0.999999f, beforeWrap);
 
-            Assert.That(start[0].End, Is.EqualTo(0.44f));
-            Assert.That(start[count - 1].Start - start[count - 2].End, Is.GreaterThan(start[1].Start - start[0].End));
-            Assert.That(later.Take(laterCount).Any(band => Math.Abs(band.End - (start[1].End + 0.0056f)) < 0.001f), Is.True);
+            Assert.That(beforeWrapCount, Is.EqualTo(count));
             for (int i = 0; i < count; i++)
             {
-                Assert.That(beforeWrap[i].Start, Is.EqualTo(start[i].Start).Within(0.001f));
-                Assert.That(beforeWrap[i].End, Is.EqualTo(start[i].End).Within(0.001f));
+                Assert.That(beforeWrap[i].Start, Is.EqualTo(start[i].Start).Within(0.00001f));
+                Assert.That(beforeWrap[i].End, Is.EqualTo(start[i].End).Within(0.00001f));
             }
         }
 

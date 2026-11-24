@@ -97,53 +97,23 @@ namespace osu.Game.EzOsuGame.Screens.Menu
                 throw new ArgumentException("Output must hold ten stripe bands.", nameof(output));
 
             phase -= MathF.Floor(phase);
-            Span<(float Start, float End)> gaps = stackalloc (float Start, float End)[stripe_count + 1];
-            int gapCount = 0;
-
-            for (int i = 0; i < stripe_count; i++)
-            {
-                float u0 = (float)i / stripe_count;
-                float u1 = (float)(i + 1) / stripe_count;
-                float y0 = top_end + lower_height * MathF.Pow(u0, 1.45f);
-                float y1 = top_end + lower_height * MathF.Pow(u1, 1.45f);
-                float gapRatio = 0.06f + 0.52f * MathF.Pow((u0 + u1) * 0.5f, 1.35f);
-                float gapWidth = (y1 - y0) * gapRatio;
-                float gapStart = y1 - gapWidth * 0.5f;
-                gapStart = top_end + (gapStart - top_end + phase * lower_height) % lower_height;
-                float gapEnd = gapStart + gapWidth;
-
-                if (gapEnd <= 1)
-                    gaps[gapCount++] = (gapStart, gapEnd);
-                else
-                {
-                    gaps[gapCount++] = (gapStart, 1);
-                    gaps[gapCount++] = (top_end, top_end + gapEnd - 1);
-                }
-            }
-
-            for (int i = 1; i < gapCount; i++)
-            {
-                var gap = gaps[i];
-                int j = i - 1;
-
-                while (j >= 0 && gaps[j].Start > gap.Start)
-                {
-                    gaps[j + 1] = gaps[j];
-                    j--;
-                }
-
-                gaps[j + 1] = gap;
-            }
-
             int bandCount = 0;
             float cursor = 0;
 
-            for (int i = 0; i < gapCount; i++)
+            for (int i = 0; i < stripe_count; i++)
             {
-                if (gaps[i].Start > cursor)
-                    output[bandCount++] = (cursor, gaps[i].Start);
+                float u = (i + phase) / stripe_count;
+                float gapStart = top_end + lower_height * MathF.Pow(u, 1.45f);
+                float gapWidth = lower_height * 0.12f * MathF.Pow(u, 1.35f);
+                float gapEnd = Math.Min(1, gapStart + gapWidth);
 
-                cursor = Math.Max(cursor, gaps[i].End);
+                if (gapEnd <= gapStart)
+                    continue;
+
+                if (gapStart > cursor)
+                    output[bandCount++] = (cursor, gapStart);
+
+                cursor = Math.Max(cursor, gapEnd);
             }
 
             if (cursor < 1)
