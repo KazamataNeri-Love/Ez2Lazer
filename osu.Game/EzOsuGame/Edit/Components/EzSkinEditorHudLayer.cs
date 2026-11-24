@@ -389,6 +389,7 @@ namespace osu.Game.EzOsuGame.Edit.Components
                 return;
 
             ChangeHandler?.BeginChange();
+            selectedComponents.Remove(component);
             target.Remove(component, true);
             ChangeHandler?.EndChange();
             PersistLayoutToCurrentSkin();
@@ -410,7 +411,10 @@ namespace osu.Game.EzOsuGame.Edit.Components
             if (toFront)
             {
                 target.Remove(component, false);
-                selectedComponents.Add(component);
+
+                if (!selectedComponents.Contains(component))
+                    selectedComponents.Add(component);
+
                 target.Add(component);
             }
             else

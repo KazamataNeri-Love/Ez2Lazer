@@ -9,6 +9,7 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Testing;
+using osu.Game.Overlays;
 using osu.Game.Overlays.SkinEditor;
 using osu.Game.Skinning;
 using osuTK;
@@ -17,10 +18,13 @@ namespace osu.Game.Tests.Visual.Editing
 {
     public partial class TestSceneSkinSettingsToolboxExtension : OsuTestScene
     {
+        [Cached]
+        private readonly OverlayColourProvider colourProvider = new OverlayColourProvider(OverlayColourScheme.Blue);
+
         [Test]
         public void TestCoordinatePreservedWhenChangingAnchorAndOrigin()
         {
-            Vector2 expectedScreenPosition = Vector2.Zero;
+            Vector2 expectedScreenCentre = Vector2.Zero;
             var drawable = new Box
             {
                 Size = new Vector2(100),
@@ -31,16 +35,16 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddStep("add drawable", () => Child = drawable);
             AddUntilStep("wait for layout", () => drawable.IsPresent);
-            AddStep("record screen position", () => expectedScreenPosition = drawable.ToScreenSpace(drawable.OriginPosition));
+            AddStep("record screen centre", () => expectedScreenCentre = drawable.ScreenSpaceDrawQuad.Centre);
 
             AddStep("apply fixed anchor", () => SkinSelectionHandler.ApplyFixedAnchor(drawable, Anchor.BottomRight));
-            AddAssert("fixed anchor preserves screen origin", () => Vector2.Distance(drawable.ToScreenSpace(drawable.OriginPosition), expectedScreenPosition), () => Is.LessThan(0.1f));
+            AddAssert("fixed anchor preserves screen centre", () => Vector2.Distance(drawable.ScreenSpaceDrawQuad.Centre, expectedScreenCentre), () => Is.LessThan(0.1f));
 
             AddStep("apply local origin", () => SkinSelectionHandler.ApplyLocalSpaceOrigin(drawable, Anchor.Centre));
-            AddAssert("local origin preserves screen position", () => Vector2.Distance(drawable.ToScreenSpace(drawable.OriginPosition), expectedScreenPosition), () => Is.LessThan(0.1f));
+            AddAssert("local origin preserves screen centre", () => Vector2.Distance(drawable.ScreenSpaceDrawQuad.Centre, expectedScreenCentre), () => Is.LessThan(0.1f));
 
             AddStep("apply closest anchor", () => SkinSelectionHandler.ApplyClosestAnchor(drawable));
-            AddAssert("closest anchor preserves screen origin", () => Vector2.Distance(drawable.ToScreenSpace(drawable.OriginPosition), expectedScreenPosition), () => Is.LessThan(0.1f));
+            AddAssert("closest anchor preserves screen centre", () => Vector2.Distance(drawable.ScreenSpaceDrawQuad.Centre, expectedScreenCentre), () => Is.LessThan(0.1f));
         }
 
         [Test]
