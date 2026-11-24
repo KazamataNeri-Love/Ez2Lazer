@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 using System.Collections.Generic;
@@ -11,6 +11,7 @@ using osu.Game.EzOsuGame.Background.Pixiv;
 using osu.Game.EzOsuGame.Configuration;
 using osu.Game.EzOsuGame.Localization;
 using osu.Game.EzOsuGame.Overlays;
+using osu.Game.EzOsuGame.Screens.Menu;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Localisation;
 
@@ -28,6 +29,8 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
 
         private Bindable<EzLogoBackdropStyle> logoBackdropStyle = null!;
         private Bindable<EzLogoParticlesStyle> logoParticlesStyle = null!;
+        private Bindable<EzLogoSunStripesStyle> logoSunStripesStyle = null!;
+        private Bindable<bool> logoGlowEnabled = null!;
 
         [BackgroundDependencyLoader]
         private void load(OsuConfigManager config, Ez2ConfigManager ezConfig,
@@ -38,6 +41,8 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
             var menuLogoPath = ezConfig.GetBindable<string>(Ez2Setting.MenuLogoPath);
             logoBackdropStyle = ezConfig.GetBindable<EzLogoBackdropStyle>(Ez2Setting.MenuLogoBackdropStyle);
             logoParticlesStyle = ezConfig.GetBindable<EzLogoParticlesStyle>(Ez2Setting.MenuLogoParticlesStyle);
+            logoSunStripesStyle = ezConfig.GetBindable<EzLogoSunStripesStyle>(Ez2Setting.MenuLogoSunStripesStyle);
+            logoGlowEnabled = ezConfig.GetBindable<bool>(Ez2Setting.MenuLogoGlowEnabled);
 
             var logoBackdropColour = new SettingsItemV2(new EzFormColour
             {
@@ -103,6 +108,34 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
                 logoParticlesColour.CanBeShown.Value = style.NewValue == EzLogoParticlesStyle.Solid;
                 logoParticlesColourTop.CanBeShown.Value = style.NewValue == EzLogoParticlesStyle.Gradient;
                 logoParticlesColourBottom.CanBeShown.Value = style.NewValue == EzLogoParticlesStyle.Gradient;
+            }, true);
+
+            var logoSunStripesStyleItem = new SettingsItemV2(new FormEnumDropdown<EzLogoSunStripesStyle>
+            {
+                Caption = EzSettingsStrings.LOGO_SUN_STRIPES_STYLE,
+                HintText = EzSettingsStrings.LOGO_SUN_STRIPES_TOOLTIP,
+                Current = logoSunStripesStyle,
+            });
+            var logoGlowColour = new SettingsItemV2(new EzFormColour
+            {
+                Caption = EzSettingsStrings.LOGO_GLOW_COLOUR,
+                Current = ezConfig.GetBindable<Colour4>(Ez2Setting.MenuLogoGlowColour),
+            });
+            var logoGlowRadius = new SettingsItemV2(new FormSliderBar<double>
+            {
+                Caption = EzSettingsStrings.LOGO_GLOW_RADIUS,
+                Current = ezConfig.GetBindable<double>(Ez2Setting.MenuLogoGlowRadius),
+                KeyboardStep = 5,
+            });
+
+            logoBackdropStyle.BindValueChanged(style =>
+            {
+                logoSunStripesStyleItem.CanBeShown.Value = style.NewValue == EzLogoBackdropStyle.Solid || style.NewValue == EzLogoBackdropStyle.Gradient;
+            }, true);
+            logoGlowEnabled.BindValueChanged(enabled =>
+            {
+                logoGlowColour.CanBeShown.Value = enabled.NewValue;
+                logoGlowRadius.CanBeShown.Value = enabled.NewValue;
             }, true);
 
             ensureItemAvailable(menuLogoPath, menu_logo_items);
@@ -171,11 +204,31 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
                     HintText = EzSettingsStrings.LOGO_BACKDROP_TOOLTIP,
                     Current = logoBackdropStyle,
                 }),
+                new SettingsButtonV2
+                {
+                    Text = EzSettingsStrings.LOGO_SYNTHWAVE_PRESET,
+                    TooltipText = EzSettingsStrings.LOGO_SYNTHWAVE_PRESET_TOOLTIP,
+                    Action = () => EzMenuLogoThemePresets.ApplySynthwaveSunset(ezConfig),
+                },
+                new SettingsItemV2(new FormCheckBox
+                {
+                    Caption = EzSettingsStrings.LOGO_HIDE_BORDER,
+                    HintText = EzSettingsStrings.LOGO_HIDE_BORDER_TOOLTIP,
+                    Current = ezConfig.GetBindable<bool>(Ez2Setting.MenuLogoHideBorder),
+                }),
                 logoBackdropColour,
                 logoBackdropColourTop,
                 logoBackdropColourBottom,
                 logoBackdropBlur,
                 logoBackdropOpacity,
+                logoSunStripesStyleItem,
+                new SettingsItemV2(new FormCheckBox
+                {
+                    Caption = EzSettingsStrings.LOGO_GLOW_ENABLED,
+                    Current = logoGlowEnabled,
+                }),
+                logoGlowColour,
+                logoGlowRadius,
                 logoParticlesStyleItem,
                 logoParticlesColour,
                 logoParticlesColourTop,

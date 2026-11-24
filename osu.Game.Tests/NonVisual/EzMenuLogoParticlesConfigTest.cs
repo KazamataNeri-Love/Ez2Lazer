@@ -10,6 +10,7 @@ using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Testing;
 using osu.Game.EzOsuGame.Configuration;
+using osu.Game.EzOsuGame.Screens.Menu;
 
 namespace osu.Game.Tests.NonVisual
 {
@@ -25,6 +26,11 @@ namespace osu.Game.Tests.NonVisual
             Assert.That((int)EzLogoBackdropStyle.Gradient, Is.EqualTo(3));
         }
 
+        [TestCase("MenuLogoHideBorder", "False", "True")]
+        [TestCase("MenuLogoSunStripesStyle", "Off", "Scrolling")]
+        [TestCase("MenuLogoGlowEnabled", "False", "True")]
+        [TestCase("MenuLogoGlowColour", "FF2E88", "FFC966")]
+        [TestCase("MenuLogoGlowRadius", "120", "175")]
         [TestCase("MenuLogoParticlesStyle", "Gradient", "Off")]
         [TestCase("MenuLogoParticlesColour", "3A6BB8", "FF804080")]
         [TestCase("MenuLogoParticlesColourTop", "1A2B6B", "AA33CC")]
@@ -58,11 +64,80 @@ namespace osu.Game.Tests.NonVisual
             Assert.That(readValue(reloaded), Is.EqualTo(expectedCustom));
         }
 
+        [Test]
+        public void TestSynthwavePresetPreservesCustomTextAndTexture()
+        {
+            using var storage = new TemporaryNativeStorage("ez-menu-logo-preset");
+            using var config = new Ez2ConfigManager(storage);
+
+            config.SetValue(Ez2Setting.MenuLogoText, "Custom text,90");
+            config.SetValue(Ez2Setting.MenuLogoPath, "Menu/custom");
+            EzMenuLogoThemePresets.ApplySynthwaveSunset(config);
+
+            Assert.That(config.Get<string>(Ez2Setting.MenuLogoText), Is.EqualTo("Custom text,90"));
+            Assert.That(config.Get<string>(Ez2Setting.MenuLogoPath), Is.EqualTo("Menu/custom"));
+            Assert.That(config.Get<bool>(Ez2Setting.MenuLogoHideBorder), Is.True);
+            Assert.That(config.Get<EzLogoVisualisationStyle>(Ez2Setting.MenuLogoVisualisationStyle), Is.EqualTo(EzLogoVisualisationStyle.Off));
+            Assert.That(config.Get<EzLogoBackdropStyle>(Ez2Setting.MenuLogoBackdropStyle), Is.EqualTo(EzLogoBackdropStyle.Gradient));
+            Assert.That(config.Get<Colour4>(Ez2Setting.MenuLogoBackdropColourTop), Is.EqualTo(Colour4.FromHex("FFE066")));
+            Assert.That(config.Get<Colour4>(Ez2Setting.MenuLogoBackdropColourBottom), Is.EqualTo(Colour4.FromHex("FF2E88")));
+            Assert.That(config.Get<EzLogoParticlesStyle>(Ez2Setting.MenuLogoParticlesStyle), Is.EqualTo(EzLogoParticlesStyle.Off));
+            Assert.That(config.Get<EzLogoSunStripesStyle>(Ez2Setting.MenuLogoSunStripesStyle), Is.EqualTo(EzLogoSunStripesStyle.Scrolling));
+            Assert.That(config.Get<bool>(Ez2Setting.MenuLogoGlowEnabled), Is.True);
+            Assert.That(config.Get<Colour4>(Ez2Setting.MenuLogoGlowColour), Is.EqualTo(Colour4.FromHex("FF2E88")));
+            Assert.That(config.Get<double>(Ez2Setting.MenuLogoGlowRadius), Is.EqualTo(120));
+        }
+
+        [TestCase(0f)]
+        [TestCase(0.125f)]
+        [TestCase(0.5f)]
+        [TestCase(0.995f)]
+        public void TestSunStripeBandsLeaveTransparentGaps(float phase)
+        {
+            Span<(float Start, float End)> bands = stackalloc (float, float)[10];
+            int count = EzMenuLogoSunStripes.ComputeBands(phase, bands);
+
+            Assert.That(count, Is.GreaterThan(1));
+            Assert.That(bands[0].Start, Is.Zero);
+            Assert.That(bands[0].End, Is.GreaterThanOrEqualTo(0.44f));
+
+            float lastEnd = -1;
+            foreach (var (start, end) in bands[..count])
+            {
+                Assert.That(start, Is.GreaterThan(lastEnd));
+                Assert.That(end, Is.GreaterThan(start).And.LessThanOrEqualTo(1));
+                lastEnd = end;
+            }
+        }
+
+        [Test]
+        public void TestSunStripeGapsWidenAndMoveDownWithoutJumpingAtWrap()
+        {
+            var start = new (float Start, float End)[10];
+            var later = new (float Start, float End)[10];
+            var beforeWrap = new (float Start, float End)[10];
+            int count = EzMenuLogoSunStripes.ComputeBands(0, start);
+            int laterCount = EzMenuLogoSunStripes.ComputeBands(0.01f, later);
+            EzMenuLogoSunStripes.ComputeBands(0.999f, beforeWrap);
+
+            Assert.That(start[0].End, Is.EqualTo(0.44f));
+            Assert.That(start[count - 1].Start - start[count - 2].End, Is.GreaterThan(start[1].Start - start[0].End));
+            Assert.That(later.Take(laterCount).Any(band => Math.Abs(band.End - (start[1].End + 0.0056f)) < 0.001f), Is.True);
+            for (int i = 0; i < count; i++)
+            {
+                Assert.That(beforeWrap[i].Start, Is.EqualTo(start[i].Start).Within(0.001f));
+                Assert.That(beforeWrap[i].End, Is.EqualTo(start[i].End).Within(0.001f));
+            }
+        }
+
         private static object? readValue(IBindable bindable) => bindable switch
         {
             Bindable<Colour4> colour => colour.Value,
             Bindable<EzLogoParticlesStyle> style => style.Value,
             Bindable<EzLogoBackdropStyle> style => style.Value,
+            Bindable<EzLogoSunStripesStyle> style => style.Value,
+            Bindable<bool> flag => flag.Value,
+            Bindable<double> radius => radius.Value,
             _ => throw new InvalidOperationException($"Unexpected bindable type: {bindable.GetType()}"),
         };
 
@@ -71,6 +146,9 @@ namespace osu.Game.Tests.NonVisual
             Bindable<Colour4> => Colour4.FromHex(value),
             Bindable<EzLogoParticlesStyle> => Enum.Parse<EzLogoParticlesStyle>(value),
             Bindable<EzLogoBackdropStyle> => Enum.Parse<EzLogoBackdropStyle>(value),
+            Bindable<EzLogoSunStripesStyle> => Enum.Parse<EzLogoSunStripesStyle>(value),
+            Bindable<bool> => bool.Parse(value),
+            Bindable<double> => double.Parse(value, CultureInfo.InvariantCulture),
             _ => throw new InvalidOperationException($"Unexpected bindable type: {bindable.GetType()}"),
         };
     }

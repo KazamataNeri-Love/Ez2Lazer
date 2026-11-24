@@ -82,6 +82,36 @@ namespace osu.Game.EzOsuGame.Localization
             "主菜单与选歌界面 logo 外圈的音频抖动样式。",
             "Audio visualiser style around the logo on the main menu and song select.");
 
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_HIDE_BORDER =
+            new EzLocalizationManager.EzLocalisableString("隐藏 Logo 边框", "Hide logo border");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_HIDE_BORDER_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "隐藏 Logo 的外框贴图和节拍、点击产生的白圈，保留中心文字。",
+            "Hides the logo border image and the beat and click rings, while keeping the centre text.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_SUN_STRIPES_STYLE =
+            new EzLocalizationManager.EzLocalisableString("落日切纹样式", "Sunset stripe style");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_SUN_STRIPES_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "在单色或渐变底色上切出透明横纹，露出后方壁纸。",
+            "Cuts transparent horizontal gaps in the solid or gradient fill to reveal the wallpaper behind it.");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_GLOW_ENABLED =
+            new EzLocalizationManager.EzLocalisableString("Logo 外发光", "Logo outer glow");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_GLOW_COLOUR =
+            new EzLocalizationManager.EzLocalisableString("外发光颜色", "Glow colour");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_GLOW_RADIUS =
+            new EzLocalizationManager.EzLocalisableString("外发光范围", "Glow radius");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_SYNTHWAVE_PRESET =
+            new EzLocalizationManager.EzLocalisableString("一键套用 Synthwave 落日", "Apply Synthwave Sunset");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_SYNTHWAVE_PRESET_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "套用金黄到品红的渐变、流动切纹和外发光，保留中心文字和贴图选择。",
+            "Applies a gold-to-magenta gradient, scrolling stripes and a glow, while keeping your centre text and logo image selection.");
+
         public static readonly EzLocalizationManager.EzLocalisableString LOGO_PARTICLES_STYLE =
             new EzLocalizationManager.EzLocalisableString("Logo 粒子样式", "Logo particle style");
 

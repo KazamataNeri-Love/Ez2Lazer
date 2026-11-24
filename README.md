@@ -310,11 +310,14 @@ BMS 的 BGM / 自动轨事件没有携带它们的 hit object，皮肤管线管�
 
 ### 主菜单 Logo 配色
 
-主菜单 Logo 圆形背景支持单色、亚克力、透明与双色垂直渐变，默认渐变为 `#ff66ab → #b6346f`；内部三角形粒子支持关闭、单色与双色渐变，默认渐变为 `#1A2B6B → #3A6BB8`。两者颜色都可独立调整并即时保存。
+主菜单 Logo 圆形背景支持单色、亚克力、透明与双色垂直渐变，默认渐变为 `#ff66ab → #b6346f`；内部三角形粒子支持关闭、单色与双色渐变，默认渐变为 `#1A2B6B → #3A6BB8`。两者颜色都可独立调整并即时保存。另可隐藏边框、在单色或渐变圆盘上添加关闭/静止/流动的透明落日切纹，以及配置圆形外发光；Synthwave 预设可一键填写金黄到品红渐变、流动切纹与品红光晕，并保留中心文字和 Logo 贴图选择。以上新设置默认关闭，不改动现有默认值。
 
 **涉及文件：**
 - `osu.Game/EzOsuGame/Screens/Menu/EzMenuLogoParticles.cs`
 - `osu.Game/EzOsuGame/Screens/Menu/EzMenuLogoBackdrop.cs`
+- `osu.Game/EzOsuGame/Screens/Menu/EzMenuLogoSunStripes.cs`
+- `osu.Game/EzOsuGame/Screens/Menu/EzMenuLogoGlow.cs`
+- `osu.Game/EzOsuGame/Screens/Menu/EzMenuLogoThemePresets.cs`
 - `osu.Game/EzOsuGame/Configuration/EzEnumDisplay.cs`
 - `osu.Game/EzOsuGame/Configuration/Ez2ConfigManager.cs`
 - `osu.Game/EzOsuGame/Localization/EzEnumStrings.cs`
