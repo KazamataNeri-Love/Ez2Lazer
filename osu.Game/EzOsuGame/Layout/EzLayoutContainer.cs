@@ -89,7 +89,7 @@ namespace osu.Game.EzOsuGame.Layout
             {
                 drawable.Origin = Anchor.TopCentre;
                 drawable.Anchor = Anchor.TopCentre;
-                drawable.Y = DrawSize.Y / 2;
+                drawable.Y = (ExternalTarget?.DrawSize.Y ?? DrawSize.Y) / 2;
             }
 
             try
@@ -160,28 +160,32 @@ namespace osu.Game.EzOsuGame.Layout
             if (compensation.Origin != Origin)
                 compensation.Origin = Origin;
 
-            if (scaleSkinElements == null || Lookup.Lookup == GlobalSkinnableContainers.Playfield)
+            if (scaleSkinElements == null || Lookup.Lookup is GlobalSkinnableContainers.Playfield or GlobalSkinnableContainers.Background)
                 return;
 
-            float uiScale = 1;
-
-            for (Drawable? ancestor = Parent; ancestor != null; ancestor = ancestor.Parent)
-            {
-                if (ancestor is not ScalingContainer.ScalingDrawSizePreservingFillContainer scalingContainer || !scalingContainer.AppliesUIScale)
-                    continue;
-
-                uiScale = scalingContainer.CurrentScale;
-                break;
-            }
-
-            Vector2 containerSize = scaleSkinElements.Value ? Vector2.One : new Vector2(uiScale);
-            Vector2 containerScale = scaleSkinElements.Value ? Vector2.One : new Vector2(1 / uiScale);
+            var (containerSize, containerScale) = ComputeScaleCompensation(FindAncestorUiScale(this), scaleSkinElements.Value);
 
             if (compensation.Size != containerSize)
                 compensation.Size = containerSize;
 
             if (compensation.Scale != containerScale)
                 compensation.Scale = containerScale;
+        }
+
+        internal static float FindAncestorUiScale(Drawable drawable)
+        {
+            for (Drawable? ancestor = drawable.Parent; ancestor != null; ancestor = ancestor.Parent)
+                if (ancestor is ScalingContainer.ScalingDrawSizePreservingFillContainer scalingContainer && scalingContainer.AppliesUIScale)
+                    return float.IsFinite(scalingContainer.CurrentScale) && scalingContainer.CurrentScale > 0 ? scalingContainer.CurrentScale : 1;
+
+            return 1;
+        }
+
+        internal static (Vector2 Size, Vector2 Scale) ComputeScaleCompensation(float uiScale, bool scaleSkinElements)
+        {
+            return scaleSkinElements || !float.IsFinite(uiScale) || uiScale <= 0
+                ? (Vector2.One, Vector2.One)
+                : (new Vector2(uiScale), new Vector2(1 / uiScale));
         }
     }
 }

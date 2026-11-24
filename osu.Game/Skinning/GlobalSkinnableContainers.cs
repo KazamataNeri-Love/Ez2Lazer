@@ -27,5 +27,8 @@ namespace osu.Game.Skinning
 
         [Description("Music player")]
         MusicPlayer,
+
+        [Description("Global background")]
+        GlobalBackground,
     }
 }
