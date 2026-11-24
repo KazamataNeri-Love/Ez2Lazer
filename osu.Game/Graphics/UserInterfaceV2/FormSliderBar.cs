@@ -49,6 +49,7 @@ namespace osu.Game.Graphics.UserInterfaceV2
 
         private readonly BindableNumber<T> currentNumberInstantaneous = new BindableNumber<T>();
         private readonly InnerSlider slider;
+        private bool sliderReplaced;
 
         /// <summary>
         /// Whether changes to the value should instantaneously transfer to outside bindables.
@@ -143,6 +144,9 @@ namespace osu.Game.Graphics.UserInterfaceV2
         [Resolved]
         private OverlayColourProvider colourProvider { get; set; } = null!;
 
+        [Resolved(canBeNull: true)]
+        private IMobileNumericControlFactory? mobileNumericControlFactory { get; set; }
+
         private readonly Bindable<Language> currentLanguage = new Bindable<Language>();
 
         public bool TakeFocus() => GetContainingFocusManager()?.ChangeFocus(TextBox) == true;
@@ -210,6 +214,17 @@ namespace osu.Game.Graphics.UserInterfaceV2
             RelativeSizeAxes = Axes.X;
             AutoSizeAxes = Axes.Y;
 
+            Drawable? numericControl = mobileNumericControlFactory?.CreateFormNumericControl(new FormNumericControlContext<T>(
+                currentNumberInstantaneous,
+                () => slider.KeyboardStep,
+                DisplayAsPercentage,
+                TransferValueOnCommit,
+                PlaySamplesOnAdjust,
+                transferInstantaneousToCurrent,
+                slider.ResetToDefault!,
+                TooltipFormat));
+            sliderReplaced = numericControl != null;
+
             InternalChildren = new Drawable[]
             {
                 background = new FormControlBackground(),
@@ -270,7 +285,7 @@ namespace osu.Game.Graphics.UserInterfaceV2
                                 },
                             },
                         },
-                        slider.With(s =>
+                        (numericControl ?? slider).With(s =>
                         {
                             s.Anchor = Anchor.CentreRight;
                             s.Origin = Anchor.CentreRight;
@@ -286,6 +301,14 @@ namespace osu.Game.Graphics.UserInterfaceV2
         }
 
         internal virtual FormNumberBox.InnerNumberBox CreateTextBox() => new FormNumberBox.InnerNumberBox(true);
+
+        protected override void Dispose(bool isDisposing)
+        {
+            if (isDisposing && sliderReplaced)
+                slider.Dispose();
+
+            base.Dispose(isDisposing);
+        }
 
         protected override void LoadComplete()
         {
