@@ -69,6 +69,7 @@ namespace osu.Android.EzAndroid.SkinEditor
                 AutoSizeAxes = Axes.Y,
                 Direction = FillDirection.Vertical,
                 Spacing = new Vector2(0, 4),
+                Alpha = 0,
             });
 
             if (!isOrigin)
