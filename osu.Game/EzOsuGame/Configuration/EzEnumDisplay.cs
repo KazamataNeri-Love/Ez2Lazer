@@ -142,6 +142,18 @@ namespace osu.Game.EzOsuGame.Configuration
         Gradient = 2,
     }
 
+    public enum EzLogoSunStripesStyle
+    {
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.LOGO_SUN_STRIPES_OFF))]
+        Off = 0,
+
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.LOGO_SUN_STRIPES_STATIC))]
+        Static = 1,
+
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.LOGO_SUN_STRIPES_SCROLLING))]
+        Scrolling = 2,
+    }
+
     public enum EzLogoBackdropStyle
     {
         [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.UI_MODE_DEFAULT))]

@@ -382,6 +382,57 @@ namespace osu.Game.EzOsuGame.Edit.Components
                 persistTarget(target);
         }
 
+        public void DeleteComponent(ISerialisableDrawable component)
+        {
+            var target = EnumerateTargets().FirstOrDefault(t => t.Components.Contains(component));
+            if (target == null)
+                return;
+
+            ChangeHandler?.BeginChange();
+            selectedComponents.Remove(component);
+            target.Remove(component, true);
+            ChangeHandler?.EndChange();
+            PersistLayoutToCurrentSkin();
+        }
+
+        public void BringComponentToFront(ISerialisableDrawable component) => moveComponent(component, true);
+
+        public void SendComponentToBack(ISerialisableDrawable component) => moveComponent(component, false);
+
+        private void moveComponent(ISerialisableDrawable component, bool toFront)
+        {
+            var target = EnumerateTargets().FirstOrDefault(t => t.Components.Contains(component));
+            if (target == null)
+                return;
+
+            ChangeHandler?.BeginChange();
+            var components = target.Components.ToArray();
+
+            if (toFront)
+            {
+                target.Remove(component, false);
+
+                if (!selectedComponents.Contains(component))
+                    selectedComponents.Add(component);
+
+                target.Add(component);
+            }
+            else
+            {
+                foreach (var item in components)
+                {
+                    if (ReferenceEquals(item, component))
+                        continue;
+
+                    target.Remove(item, false);
+                    target.Add(item);
+                }
+            }
+
+            ChangeHandler?.EndChange();
+            PersistLayoutToCurrentSkin();
+        }
+
         /// <summary>
         /// Whether there is anything in the Ez clipboard to paste.
         /// </summary>

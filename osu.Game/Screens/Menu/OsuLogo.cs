@@ -1,4 +1,4 @@
-﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
 #nullable disable
@@ -60,6 +60,8 @@ namespace osu.Game.Screens.Menu
 
         [Resolved(canBeNull: true)]
         private Ez2ConfigManager ezConfig { get; set; }
+        private Bindable<bool> hideBorder;
+        private Bindable<bool> disableBeatPulse;
 
         protected virtual MenuLogoVisualisation CreateMenuLogoVisualisation() => new EzMenuLogoVisualisation();
 
@@ -189,6 +191,10 @@ namespace osu.Game.Screens.Menu
                                                     AutoSizeAxes = Axes.Both,
                                                     Children = new Drawable[]
                                                     {
+                                                        new EzMenuLogoGlow
+                                                        {
+                                                            Depth = 1,
+                                                        },
                                                         logoContainer = new CircularContainer
                                                         {
                                                             Anchor = Anchor.Centre,
@@ -286,6 +292,10 @@ namespace osu.Game.Screens.Menu
 
             if (ezConfig != null)
             {
+                hideBorder = ezConfig.GetBindable<bool>(Ez2Setting.MenuLogoHideBorder);
+                hideBorder.BindValueChanged(_ => applyBorderVisibility(), true);
+                disableBeatPulse = ezConfig.GetBindable<bool>(Ez2Setting.MenuLogoDisableBeatPulse);
+                disableBeatPulse.BindValueChanged(_ => applyBeatPulse(), true);
                 var menuLogoPath = ezConfig.GetBindable<string>(Ez2Setting.MenuLogoPath);
                 menuLogoPath.BindValueChanged(v => applyMenuLogoTexture(textures, v.NewValue), true);
                 LogoElements.Add(new EzMenuLogoCentreText());
@@ -294,6 +304,31 @@ namespace osu.Game.Screens.Menu
             {
                 applyMenuLogoTexture(textures, @"Menu/logo");
             }
+        }
+
+        private void applyBorderVisibility()
+        {
+            bool hidden = hideBorder?.Value == true;
+            logo.AlwaysPresent = true;
+            logo.Alpha = hidden ? 0 : 1;
+
+            if (!hidden)
+                return;
+
+            ripple.ClearTransforms();
+            ripple.Alpha = 0;
+            impactContainer.ClearTransforms();
+            impactContainer.Alpha = 0;
+        }
+
+        private void applyBeatPulse()
+        {
+            if (disableBeatPulse?.Value != true)
+                return;
+
+            logoBeatContainer.ClearTransforms();
+            logoBeatContainer.Scale = Vector2.One;
+            logoAmplitudeContainer.Scale = Vector2.One;
         }
 
         private void applyMenuLogoTexture(TextureStore textures, string logoPath)
@@ -350,15 +385,21 @@ namespace osu.Game.Screens.Menu
                 });
             }
 
-            logoBeatContainer
-                .ScaleTo(1 - 0.02f * amplitudeAdjust, early_activation, Easing.Out).Then()
-                .ScaleTo(1, beatLength * 2, Easing.OutQuint);
+            if (disableBeatPulse?.Value != true)
+            {
+                logoBeatContainer
+                    .ScaleTo(1 - 0.02f * amplitudeAdjust, early_activation, Easing.Out).Then()
+                    .ScaleTo(1, beatLength * 2, Easing.OutQuint);
+            }
 
-            ripple.ClearTransforms();
-            ripple
+            if (hideBorder?.Value != true)
+            {
+                ripple.ClearTransforms();
+                ripple
                 .ScaleTo(logoAmplitudeContainer.Scale)
                 .ScaleTo(logoAmplitudeContainer.Scale * (1 + 0.04f * amplitudeAdjust), beatLength, Easing.OutQuint)
                 .FadeTo(0.15f * amplitudeAdjust).FadeOut(beatLength, Easing.OutQuint);
+            }
 
             if (effectPoint.KiaiMode)
             {
@@ -394,7 +435,11 @@ namespace osu.Game.Screens.Menu
 
             const float scale_adjust_cutoff = 0.4f;
 
-            if (musicController.CurrentTrack.IsRunning)
+            if (disableBeatPulse?.Value == true)
+            {
+                logoAmplitudeContainer.Scale = Vector2.One;
+            }
+            else if (musicController.CurrentTrack.IsRunning)
             {
                 float maxAmplitude = lastBeatIndex >= 0 ? musicController.CurrentTrack.CurrentAmplitudes.Maximum : 0;
                 logoAmplitudeContainer.Scale = new Vector2((float)Interpolation.Damp(logoAmplitudeContainer.Scale.X, 1 - Math.Max(0, maxAmplitude - scale_adjust_cutoff) * 0.04f, 0.9f, Time.Elapsed));
@@ -550,6 +595,9 @@ namespace osu.Game.Screens.Menu
 
         public void Impact()
         {
+            if (hideBorder?.Value == true)
+                return;
+
             impactContainer.FadeOutFromOne(250, Easing.In);
             impactContainer.ScaleTo(SCALE_ADJUST);
             impactContainer.ScaleTo(1.12f, 250);
