@@ -60,6 +60,9 @@ namespace osu.Game.EzOsuGame.Screens
             nameOfGameTheme = ezSkinConfig.GetBindable<string>(Ez2Setting.GameThemeName);
             nameOfJudgementLine = ezSkinConfig.GetBindable<string>(Ez2Setting.JudgementLineName);
 
+            ensureDropdownContainsCurrent(availableNoteSets, nameOfNote.Value);
+            ensureDropdownContainsCurrent(availableStageSets, nameOfStage.Value);
+
             availableJudgementLines.AddRange(new[] { string.Empty });
             availableJudgementLines.AddRange(EzResourceDiscovery.ListJudgementLineCandidates(storage));
 
@@ -223,8 +226,8 @@ namespace osu.Game.EzOsuGame.Screens
         {
             base.LoadComplete();
 
-            nameOfNote.BindValueChanged(e => ezSkinConfig.SetValue(Ez2Setting.NoteSetName, e.NewValue));
-            nameOfStage.BindValueChanged(e => ezSkinConfig.SetValue(Ez2Setting.StageName, e.NewValue));
+            nameOfNote.BindValueChanged(e => ezSkinConfig.SetValue(Ez2Setting.NoteSetName, e.NewValue ?? string.Empty));
+            nameOfStage.BindValueChanged(e => ezSkinConfig.SetValue(Ez2Setting.StageName, e.NewValue ?? string.Empty));
             nameOfJudgementLine.BindValueChanged(e => ezSkinConfig.SetValue(Ez2Setting.JudgementLineName, e.NewValue));
             nameOfGameTheme.BindValueChanged(e =>
             {
@@ -248,6 +251,15 @@ namespace osu.Game.EzOsuGame.Screens
             availableGameThemes.AddRange(EzGameThemeCandidates.CreateDropdownItems(nameOfGameTheme));
 
             gameThemeDropdown?.Items = availableGameThemes;
+        }
+
+        private static void ensureDropdownContainsCurrent(List<string> items, string? current)
+        {
+            if (!string.IsNullOrEmpty(current) && !items.Contains(current))
+                items.Add(current);
+
+            if (items.Count == 0)
+                items.Add(string.Empty);
         }
 
         private void loadFolderSets(string type)

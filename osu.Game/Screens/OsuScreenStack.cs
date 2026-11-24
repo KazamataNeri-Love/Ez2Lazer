@@ -3,10 +3,8 @@
 
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
-using osu.Framework.Graphics.Containers;
 using osu.Framework.Screens;
 using osu.Game.Graphics.Containers;
-using osuTK;
 
 namespace osu.Game.Screens
 {
@@ -22,12 +20,6 @@ namespace osu.Game.Screens
         /// reparents the screen tree and needs to refresh nested background blur buffers.
         /// </summary>
         public Drawable BackgroundContent => parallaxContainer;
-
-        /// <summary>
-        /// Host for content drawn above the background stack but below every screen.
-        /// Screens are added as children at push time, so anything added here beforehand stays underneath them.
-        /// </summary>
-        public Container UnderlayContent { get; }
 
         protected float ParallaxAmount => parallaxContainer.ParallaxAmount;
 
@@ -46,17 +38,10 @@ namespace osu.Game.Screens
                     RelativeSizeAxes = Axes.Both,
                     Child = backgroundScreenStack = new BackgroundScreenStack { RelativeSizeAxes = Axes.Both },
                 },
-                UnderlayContent = new UnderlayLayer { RelativeSizeAxes = Axes.Both },
             };
 
             ScreenPushed += screenPushed;
             ScreenExited += ScreenChanged;
-        }
-
-        private partial class UnderlayLayer : Container
-        {
-            // Purely decorative: never consume input intended for the screens above.
-            public override bool ReceivePositionalInputAt(Vector2 screenSpacePos) => false;
         }
 
         public void PushSynchronously(OsuScreen screen)
