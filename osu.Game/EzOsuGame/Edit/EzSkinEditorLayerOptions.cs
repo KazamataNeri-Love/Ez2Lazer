@@ -146,11 +146,11 @@ namespace osu.Game.EzOsuGame.Edit
 
         private static readonly EzSkinEditorLayerDefinition[] gameplay_layers =
         {
-            HUD_OFF, EZ_BACKGROUND, EZ_BACKGROUND_RULESET,
+            HUD_OFF,
+            EZ_GLOBAL_BACKGROUND, EZ_BACKGROUND, EZ_BACKGROUND_RULESET,
             EZ_HUD, EZ_HUD_RULESET, EZ_PLAYFIELD_RULESET,
-            SKIN_BACKGROUND, SKIN_BACKGROUND_RULESET,
+            SKIN_GLOBAL_BACKGROUND, SKIN_BACKGROUND, SKIN_BACKGROUND_RULESET,
             SKIN_HUD, SKIN_HUD_RULESET, SKIN_PLAYFIELD_RULESET,
-            EZ_GLOBAL_BACKGROUND, SKIN_GLOBAL_BACKGROUND,
         };
 
         private static readonly EzSkinEditorLayerDefinition[] ez_only_layers =
