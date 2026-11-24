@@ -18,6 +18,10 @@ Android 端以 16 KB 页对齐要求构建原生依赖，避免 Android 16 设�
 
 为修复 OpenGL ES 3.20（如 Adreno 650）下 `CursorTrail/Texture` 着色器因缺少 `v_UseVertexMask` / `v_MaskingRect` / `v_MaskParameters` 输出导致的链接失败与启动卡加载页问题，`Ez2Lazer.Dependencies.props` 当前将 `ez2lazer.Game.Resources` 升级为本地自建版本 `2026.1124.0-neri.1`（随 `ez-local` 提供；待上游资源包包含该修复并合入 `master` 后可恢复统一版本）。
 
+### 触屏数值输入
+
+设置页、Mod 和皮肤编辑器的数值滑条改为数字输入与 `−` / `+` 步进按钮。点按微调，长按加速连发，数值仍可恢复默认。
+
 ### Ruleset 保留
 
 Android 项目当前继续引用 osu! 官方四个 Ruleset：Catch、Mania、Osu、Taiko。Android 衍生线的规划不代表移除或替换其中任何一个。
@@ -33,7 +37,7 @@ Android 专属扩展与触屏策略统一规划在 `osu.Android/EzAndroid/`，�
 - [触屏界面比例、布局与输入逻辑规划（Issue #39）](https://github.com/KazamataNeri-Love/Ez2Lazer/issues/39)
 - [Android 专属 Ruleset 规划（Issue #40）](https://github.com/KazamataNeri-Love/Ez2Lazer/issues/40)
 
-以上均为规划项，尚不代表相关功能已实现。Android 分支只接收来自 `master` 的同步；通用修复先进入上游轨道，再随同步进入 Android，不反向合流到 `master` 或 `Edge`。
+其余规划尚未实现。Android 分支只接收来自 `master` 的同步；通用修复先进入上游轨道，再随同步进入 Android，不反向合流到 `master` 或 `Edge`。
 
 ## 构建与验证
 

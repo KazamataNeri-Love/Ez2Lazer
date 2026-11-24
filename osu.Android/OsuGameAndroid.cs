@@ -6,11 +6,13 @@ using System.Linq;
 using Android.App;
 using Android.Content.PM;
 using Microsoft.Maui.Devices;
+using osu.Android.EzAndroid.Input;
 using osu.Framework.Allocation;
 using osu.Framework.Development;
 using osu.Framework.Extensions.ObjectExtensions;
 using osu.Framework.Platform;
 using osu.Game;
+using osu.Game.Graphics.UserInterface;
 using osu.Game.Performance;
 using osu.Game.Screens;
 using osu.Game.Updater;
@@ -26,6 +28,9 @@ namespace osu.Android
 
         [Cached(typeof(IHighPerformanceSessionManager))]
         private readonly HighPerformanceSessionManager highPerformanceSessionManager = new HighPerformanceSessionManager();
+
+        [Cached(typeof(IMobileNumericControlFactory))]
+        private readonly AndroidMobileNumericControlFactory mobileNumericControlFactory = new AndroidMobileNumericControlFactory();
 
         private readonly PackageInfo packageInfo;
 
