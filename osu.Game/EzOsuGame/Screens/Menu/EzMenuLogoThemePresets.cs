@@ -11,6 +11,7 @@ namespace osu.Game.EzOsuGame.Screens.Menu
         public static void ApplySynthwaveSunset(Ez2ConfigManager ezConfig)
         {
             ezConfig.SetValue(Ez2Setting.MenuLogoHideBorder, true);
+            ezConfig.SetValue(Ez2Setting.MenuLogoDisableBeatPulse, true);
             ezConfig.SetValue(Ez2Setting.MenuLogoVisualisationStyle, EzLogoVisualisationStyle.Off);
             ezConfig.SetValue(Ez2Setting.MenuLogoBackdropStyle, EzLogoBackdropStyle.Gradient);
             ezConfig.SetValue(Ez2Setting.MenuLogoBackdropColourTop, Colour4.FromHex("FFE066"));

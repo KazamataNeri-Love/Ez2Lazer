@@ -131,6 +131,7 @@ namespace osu.Game.EzOsuGame.Configuration
             SetDefault(Ez2Setting.MenuLogoParticlesColourTop, Colour4.FromHex("1A2B6B"));
             SetDefault(Ez2Setting.MenuLogoParticlesColourBottom, Colour4.FromHex("3A6BB8"));
             SetDefault(Ez2Setting.MenuLogoHideBorder, false);
+            SetDefault(Ez2Setting.MenuLogoDisableBeatPulse, false);
             SetDefault(Ez2Setting.MenuLogoSunStripesStyle, EzLogoSunStripesStyle.Off);
             SetDefault(Ez2Setting.MenuLogoGlowEnabled, false);
             SetDefault(Ez2Setting.MenuLogoGlowColour, Colour4.FromHex("FF2E88"));
@@ -1711,6 +1712,7 @@ namespace osu.Game.EzOsuGame.Configuration
         MenuLogoGlowEnabled,
         MenuLogoGlowColour,
         MenuLogoGlowRadius,
+        MenuLogoDisableBeatPulse,
     }
 
     public enum EzColumnType : byte

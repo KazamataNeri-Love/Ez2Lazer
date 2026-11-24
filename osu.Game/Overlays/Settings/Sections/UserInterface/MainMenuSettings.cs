@@ -31,6 +31,7 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
         private Bindable<EzLogoParticlesStyle> logoParticlesStyle = null!;
         private Bindable<EzLogoSunStripesStyle> logoSunStripesStyle = null!;
         private Bindable<bool> logoGlowEnabled = null!;
+        private Bindable<bool> logoDisableBeatPulse = null!;
 
         [BackgroundDependencyLoader]
         private void load(OsuConfigManager config, Ez2ConfigManager ezConfig,
@@ -43,6 +44,7 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
             logoParticlesStyle = ezConfig.GetBindable<EzLogoParticlesStyle>(Ez2Setting.MenuLogoParticlesStyle);
             logoSunStripesStyle = ezConfig.GetBindable<EzLogoSunStripesStyle>(Ez2Setting.MenuLogoSunStripesStyle);
             logoGlowEnabled = ezConfig.GetBindable<bool>(Ez2Setting.MenuLogoGlowEnabled);
+            logoDisableBeatPulse = ezConfig.GetBindable<bool>(Ez2Setting.MenuLogoDisableBeatPulse);
 
             var logoBackdropColour = new SettingsItemV2(new EzFormColour
             {
@@ -215,6 +217,12 @@ namespace osu.Game.Overlays.Settings.Sections.UserInterface
                     Caption = EzSettingsStrings.LOGO_HIDE_BORDER,
                     HintText = EzSettingsStrings.LOGO_HIDE_BORDER_TOOLTIP,
                     Current = ezConfig.GetBindable<bool>(Ez2Setting.MenuLogoHideBorder),
+                }),
+                new SettingsItemV2(new FormCheckBox
+                {
+                    Caption = EzSettingsStrings.LOGO_DISABLE_BEAT_PULSE,
+                    HintText = EzSettingsStrings.LOGO_DISABLE_BEAT_PULSE_TOOLTIP,
+                    Current = logoDisableBeatPulse,
                 }),
                 logoBackdropColour,
                 logoBackdropColourTop,

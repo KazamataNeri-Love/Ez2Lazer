@@ -27,6 +27,7 @@ namespace osu.Game.Tests.NonVisual
         }
 
         [TestCase("MenuLogoHideBorder", "False", "True")]
+        [TestCase("MenuLogoDisableBeatPulse", "False", "True")]
         [TestCase("MenuLogoSunStripesStyle", "Off", "Scrolling")]
         [TestCase("MenuLogoGlowEnabled", "False", "True")]
         [TestCase("MenuLogoGlowColour", "FF2E88", "FFC966")]
@@ -77,6 +78,7 @@ namespace osu.Game.Tests.NonVisual
             Assert.That(config.Get<string>(Ez2Setting.MenuLogoText), Is.EqualTo("Custom text,90"));
             Assert.That(config.Get<string>(Ez2Setting.MenuLogoPath), Is.EqualTo("Menu/custom"));
             Assert.That(config.Get<bool>(Ez2Setting.MenuLogoHideBorder), Is.True);
+            Assert.That(config.Get<bool>(Ez2Setting.MenuLogoDisableBeatPulse), Is.True);
             Assert.That(config.Get<EzLogoVisualisationStyle>(Ez2Setting.MenuLogoVisualisationStyle), Is.EqualTo(EzLogoVisualisationStyle.Off));
             Assert.That(config.Get<EzLogoBackdropStyle>(Ez2Setting.MenuLogoBackdropStyle), Is.EqualTo(EzLogoBackdropStyle.Gradient));
             Assert.That(config.Get<Colour4>(Ez2Setting.MenuLogoBackdropColourTop), Is.EqualTo(Colour4.FromHex("FFE066")));

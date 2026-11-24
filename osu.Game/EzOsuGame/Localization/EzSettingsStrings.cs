@@ -89,6 +89,13 @@ namespace osu.Game.EzOsuGame.Localization
             "隐藏 Logo 的外框贴图和节拍、点击产生的白圈，保留中心文字。",
             "Hides the logo border image and the beat and click rings, while keeping the centre text.");
 
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_DISABLE_BEAT_PULSE =
+            new EzLocalizationManager.EzLocalisableString("关闭 Logo 音乐抖动", "Disable logo music pulse");
+
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_DISABLE_BEAT_PULSE_TOOLTIP = new EzLocalizationManager.EzLocalisableString(
+            "关闭 Logo 随节拍和音乐音量缩放，保留悬停放大与按压回弹。",
+            "Stops the logo scaling to beats and music volume while keeping hover and press animations.");
+
         public static readonly EzLocalizationManager.EzLocalisableString LOGO_SUN_STRIPES_STYLE =
             new EzLocalizationManager.EzLocalisableString("落日切纹样式", "Sunset stripe style");
 
