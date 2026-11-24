@@ -2,9 +2,11 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System.Numerics;
+using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterface;
+using Vector2 = osuTK.Vector2;
 
 namespace osu.Game.Overlays.Settings
 {
@@ -17,6 +19,9 @@ namespace osu.Game.Overlays.Settings
         where TValue : struct, INumber<TValue>, IMinMaxValue<TValue>
         where TSlider : RoundedSliderBar<TValue>, new()
     {
+        [Resolved(canBeNull: true)]
+        private IMobileNumericControlFactory? mobileNumericControlFactory { get; set; }
+
         protected override Drawable CreateControl() => new TSlider
         {
             RelativeSizeAxes = Axes.X
@@ -48,6 +53,25 @@ namespace osu.Game.Overlays.Settings
         {
             get => ((TSlider)Control).DisplayAsPercentage;
             set => ((TSlider)Control).DisplayAsPercentage = value;
+        }
+
+        [BackgroundDependencyLoader]
+        private void load()
+        {
+            Drawable? numericControl = mobileNumericControlFactory?.CreateSettingsNumericControl(new SettingsNumericControlContext<TValue>(
+                Current,
+                () => KeyboardStep,
+                () => DisplayAsPercentage,
+                () => TransferValueOnCommit));
+
+            if (numericControl == null)
+                return;
+
+            Control.Hide();
+            Control.AlwaysPresent = false;
+            // RoundedSliderBar restores its alpha when the disabled state changes, including on initial load.
+            Control.Scale = Vector2.Zero;
+            FlowContent.Add(numericControl);
         }
     }
 }
