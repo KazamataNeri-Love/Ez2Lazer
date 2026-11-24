@@ -255,7 +255,10 @@ namespace osu.Game.EzOsuGame
         /// </summary>
         public float GetNoteRatio(bool forceRecalculate = false, bool clampSquare = true)
         {
-            string noteSet = noteSetName.Value;
+            string? noteSet = noteSetName.Value;
+            if (string.IsNullOrWhiteSpace(noteSet))
+                return 1.0f;
+
             float raw = getRawNoteRatio(noteSet, forceRecalculate);
 
             return clampSquare && raw >= square_ratio_threshold ? 1.0f : raw;
@@ -263,6 +266,9 @@ namespace osu.Game.EzOsuGame
 
         private float getRawNoteRatio(string noteSet, bool forceRecalculate)
         {
+            if (string.IsNullOrWhiteSpace(noteSet))
+                return 1.0f;
+
             if (!forceRecalculate && note_ratio_cache.TryGetValue(noteSet, out float ratio))
                 return ratio;
 
