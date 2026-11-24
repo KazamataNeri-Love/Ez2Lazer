@@ -14,6 +14,10 @@ Android 端以 16 KB 页对齐要求构建原生依赖，避免 Android 16 设�
 
 依赖来源、重建方法与检查步骤见 [Android 16 KB 页对齐](docs/android-16kb-page-size.md)。Release 构建需检查 `XA0141` 为 0，并用 `zipalign -c -P 16 -v 4` 验证 APK，输出应包含 `Verification successful`。
 
+### Android 自建资源包覆盖
+
+为修复 OpenGL ES 3.20（如 Adreno 650）下 `CursorTrail/Texture` 着色器因缺少 `v_UseVertexMask` / `v_MaskingRect` / `v_MaskParameters` 输出导致的链接失败与启动卡加载页问题，`Ez2Lazer.Dependencies.props` 当前将 `ez2lazer.Game.Resources` 升级为本地自建版本 `2026.1124.0-neri.1`（随 `ez-local` 提供；待上游资源包包含该修复并合入 `master` 后可恢复统一版本）。
+
 ### Ruleset 保留
 
 Android 项目当前继续引用 osu! 官方四个 Ruleset：Catch、Mania、Osu、Taiko。Android 衍生线的规划不代表移除或替换其中任何一个。
