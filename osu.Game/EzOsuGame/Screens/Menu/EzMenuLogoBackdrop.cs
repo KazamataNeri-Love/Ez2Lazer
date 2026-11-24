@@ -19,8 +19,10 @@ namespace osu.Game.EzOsuGame.Screens.Menu
 
         private readonly Box fill;
         private readonly EzMaterialContainer material;
+        private readonly EzMenuLogoSunStripes sunStripes;
 
         private Bindable<EzLogoBackdropStyle>? style;
+        private Bindable<EzLogoSunStripesStyle>? sunStripesStyle;
         private Bindable<Colour4>? solidColour;
         private Bindable<Colour4>? gradientTopColour;
         private Bindable<Colour4>? gradientBottomColour;
@@ -40,6 +42,10 @@ namespace osu.Game.EzOsuGame.Screens.Menu
                 {
                     Depth = 1,
                 },
+                sunStripes = new EzMenuLogoSunStripes
+                {
+                    Depth = -1,
+                },
                 fill = new Box
                 {
                     RelativeSizeAxes = Axes.Both,
@@ -55,6 +61,7 @@ namespace osu.Game.EzOsuGame.Screens.Menu
                 return;
 
             style = ezConfig.GetBindable<EzLogoBackdropStyle>(Ez2Setting.MenuLogoBackdropStyle);
+            sunStripesStyle = ezConfig.GetBindable<EzLogoSunStripesStyle>(Ez2Setting.MenuLogoSunStripesStyle);
             solidColour = ezConfig.GetBindable<Colour4>(Ez2Setting.MenuLogoBackdropColour);
             gradientTopColour = ezConfig.GetBindable<Colour4>(Ez2Setting.MenuLogoBackdropColourTop);
             gradientBottomColour = ezConfig.GetBindable<Colour4>(Ez2Setting.MenuLogoBackdropColourBottom);
@@ -67,10 +74,11 @@ namespace osu.Game.EzOsuGame.Screens.Menu
         {
             base.LoadComplete();
 
-            if (style == null || solidColour == null || gradientTopColour == null || gradientBottomColour == null || blur == null || opacity == null)
+            if (style == null || solidColour == null || gradientTopColour == null || gradientBottomColour == null || blur == null || opacity == null || sunStripesStyle == null)
                 return;
 
             style.BindValueChanged(_ => apply(), true);
+            sunStripesStyle.BindValueChanged(_ => apply());
             solidColour.BindValueChanged(_ => apply());
             gradientTopColour.BindValueChanged(_ => apply());
             gradientBottomColour.BindValueChanged(_ => apply());
@@ -102,7 +110,7 @@ namespace osu.Game.EzOsuGame.Screens.Menu
 
         private void apply()
         {
-            if (style == null || solidColour == null || gradientTopColour == null || gradientBottomColour == null || blur == null)
+            if (style == null || solidColour == null || gradientTopColour == null || gradientBottomColour == null || blur == null || sunStripesStyle == null)
                 return;
 
             // 亚克力风格是 logo 自己的设置。全局材质为默认（不干预）时据此保持亚克力，
@@ -113,17 +121,19 @@ namespace osu.Game.EzOsuGame.Screens.Menu
             bool solidLook = style.Value == EzLogoBackdropStyle.Solid;
             bool gradientLook = style.Value == EzLogoBackdropStyle.Gradient;
             ShowDecorations.Value = solidLook || gradientLook;
+            bool useStripes = (solidLook || gradientLook) && sunStripesStyle?.Value != EzLogoSunStripesStyle.Off;
+            sunStripes.Alpha = useStripes ? 1 : 0;
 
             if (solidLook)
             {
                 var colour = solidColour.Value;
                 fill.Colour = ColourInfo.GradientVertical(colour, colour.Darken(0.2f));
-                fill.Alpha = 1;
+                fill.Alpha = useStripes ? 0 : 1;
             }
             else if (gradientLook)
             {
                 fill.Colour = ColourInfo.GradientVertical(gradientTopColour.Value, gradientBottomColour.Value);
-                fill.Alpha = 1;
+                fill.Alpha = useStripes ? 0 : 1;
             }
             else
             {

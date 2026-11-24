@@ -142,6 +142,38 @@ namespace osu.Game.Overlays.SkinEditor
             applyScreenSpaceOrigin(drawable, closest);
         }
 
+        public static void ApplyFixedAnchor(Drawable drawable, Anchor anchor)
+        {
+            if (drawable is ISerialisableDrawable serialisable)
+                serialisable.UsesFixedAnchor = true;
+
+            applyAnchor(drawable, anchor);
+        }
+
+        public static void ApplyClosestAnchor(Drawable drawable)
+        {
+            if (drawable is ISerialisableDrawable serialisable)
+                serialisable.UsesFixedAnchor = false;
+
+            ApplyClosestAnchorOrigin(drawable);
+        }
+
+        public static void ApplyLocalSpaceOrigin(Drawable drawable, Anchor origin) => applyLocalSpaceOrigin(drawable, origin);
+
+        public static void ResetPosition(Drawable drawable) => drawable.Position = Vector2.Zero;
+
+        public static void ResetRotation(Drawable drawable) => drawable.Rotation = 0;
+
+        public static void ResetScale(Drawable drawable)
+        {
+            drawable.Scale = Vector2.One;
+
+            if (drawable.RelativeSizeAxes.HasFlag(Axes.X))
+                drawable.Width = 1;
+            if (drawable.RelativeSizeAxes.HasFlag(Axes.Y))
+                drawable.Height = 1;
+        }
+
         protected override void OnSelectionChanged()
         {
             base.OnSelectionChanged();
@@ -173,26 +205,20 @@ namespace osu.Game.Overlays.SkinEditor
             yield return new OsuMenuItem(SkinEditorStrings.ResetPosition, MenuItemType.Standard, () =>
             {
                 foreach (var blueprint in SelectedBlueprints)
-                    ((Drawable)blueprint.Item).Position = Vector2.Zero;
+                    ResetPosition((Drawable)blueprint.Item);
             });
 
             yield return new OsuMenuItem(SkinEditorStrings.ResetRotation, MenuItemType.Standard, () =>
             {
                 foreach (var blueprint in SelectedBlueprints)
-                    ((Drawable)blueprint.Item).Rotation = 0;
+                    ResetRotation((Drawable)blueprint.Item);
             });
 
             yield return new OsuMenuItem(SkinEditorStrings.ResetScale, MenuItemType.Standard, () =>
             {
                 foreach (var blueprint in SelectedBlueprints)
                 {
-                    var blueprintItem = ((Drawable)blueprint.Item);
-                    blueprintItem.Scale = Vector2.One;
-
-                    if (blueprintItem.RelativeSizeAxes.HasFlag(Axes.X))
-                        blueprintItem.Width = 1;
-                    if (blueprintItem.RelativeSizeAxes.HasFlag(Axes.Y))
-                        blueprintItem.Height = 1;
+                    ResetScale((Drawable)blueprint.Item);
                 }
             });
 
@@ -267,7 +293,7 @@ namespace osu.Game.Overlays.SkinEditor
             {
                 var drawable = (Drawable)item;
 
-                applyLocalSpaceOrigin(drawable, origin);
+                ApplyLocalSpaceOrigin(drawable, origin);
             }
 
             OnOperationEnded();
@@ -288,8 +314,7 @@ namespace osu.Game.Overlays.SkinEditor
             {
                 var drawable = (Drawable)item;
 
-                item.UsesFixedAnchor = true;
-                applyAnchor(drawable, anchor);
+                ApplyFixedAnchor(drawable, anchor);
             }
 
             OnOperationEnded();
@@ -301,8 +326,7 @@ namespace osu.Game.Overlays.SkinEditor
 
             foreach (var item in SelectedItems)
             {
-                item.UsesFixedAnchor = false;
-                ApplyClosestAnchorOrigin((Drawable)item);
+                ApplyClosestAnchor((Drawable)item);
             }
 
             OnOperationEnded();
