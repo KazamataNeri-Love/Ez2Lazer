@@ -186,13 +186,18 @@ namespace osu.Game.Tests.Skins.IO
 
             assertCorrectMetadata(import, $"Totally fully features skin [Real Skin with Real Features] [{filename[..^4]}]", "Unknown", 2.7m, osu);
 
+            string displayName = import.PerformRead(EzLegacySkinFolders.GetDisplayName);
+
             import.PerformRead(skin =>
             {
                 if (!EzLegacySkinFolders.TryGetDirectory(skin, out string directory))
                 {
+                    Assert.That(displayName, Is.EqualTo(skin.ToString()));
                     Assert.That(skin.Files.Count, Is.EqualTo(3));
                     return;
                 }
+
+                Assert.That(displayName, Is.EqualTo($"{Path.GetFileName(directory)} / {skin}"));
 
                 int fileCount = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Count();
                 Assert.That(fileCount, Is.GreaterThanOrEqualTo(3));
@@ -417,7 +422,7 @@ namespace osu.Game.Tests.Skins.IO
         }
 
         /// <remarks>
-        /// Note that this test passing / failing is platform / OS-specific (if it is to fail, it'll fail on windows).
+        /// Filename sanitisation should produce the same result on every platform.
         /// </remarks>
         [Test]
         public async Task TestExternallyMountingImportWithInvalidFilename()

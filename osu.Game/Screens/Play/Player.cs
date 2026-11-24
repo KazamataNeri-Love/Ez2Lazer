@@ -244,6 +244,10 @@ namespace osu.Game.Screens.Play
 
         public DimmableStoryboard DimmableStoryboard { get; private set; }
 
+#nullable enable
+        internal EzGameplayBackgroundLayer? GameplayBackgroundLayer { get; private set; }
+#nullable disable
+
         private EzScaledBackgroundContainer scaledBackgroundContainer;
 
         /// <summary>
@@ -557,6 +561,9 @@ namespace osu.Game.Screens.Play
             // [Ez] 喷泉没有对应的用户设置，只能在极速模式下直接不构造。
             if (!EzTurboMode.Active)
                 children.Add(new KiaiGameplayFountains());
+
+            GameplayBackgroundLayer = new EzGameplayBackgroundLayer(DrawableRuleset);
+            children.Add(GameplayBackgroundLayer);
 
             var container = new Container
             {
