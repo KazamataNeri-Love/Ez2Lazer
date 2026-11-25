@@ -11,6 +11,7 @@ using osu.Framework.Graphics.Cursor;
 using osu.Framework.Testing;
 using osu.Framework.Utils;
 using osu.Game.Configuration;
+using osu.Game.EzOsuGame.Configuration;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Localisation;
@@ -142,6 +143,46 @@ namespace osu.Game.Tests.Visual.SongSelect
                 foreach (var score in fillFlow.Children)
                     score.Show();
             });
+        }
+
+        [Test]
+        public void TestStatisticsLayoutWhenResizing()
+        {
+            BeatmapLeaderboardScore score = null!;
+
+            AddStep("show score at regular width", () =>
+            {
+                var scoreInfo = TestResources.CreateTestScoreInfo();
+                scoreInfo.JudgeMode = (int)EzEnumJudgeMode.StableClassic;
+
+                Child = new PopoverContainer
+                {
+                    RelativeSizeAxes = Axes.X,
+                    AutoSizeAxes = Axes.Y,
+                    Child = score = new BeatmapLeaderboardScore(scoreInfo)
+                    {
+                        RelativeSizeAxes = Axes.None,
+                        Width = 500,
+                    },
+                };
+                score.Show();
+            });
+            AddUntilStep("statistics are side by side", () => statisticsAreLaidOut(FillDirection.Horizontal));
+            AddStep("shrink to compact width", () => score.Width = 450);
+            AddUntilStep("statistics are stacked", () => statisticsAreLaidOut(FillDirection.Vertical));
+            AddStep("restore regular width", () => score.Width = 500);
+            AddUntilStep("statistics are side by side again", () => statisticsAreLaidOut(FillDirection.Horizontal));
+
+            bool statisticsAreLaidOut(FillDirection direction)
+            {
+                var statistics = score.ChildrenOfType<FillFlowContainer>().Single(c => c.Name == @"Statistics container");
+                var children = statistics.Children;
+
+                return statistics.IsPresent && statistics.Direction == direction && children.All(c => c.IsPresent && c.DrawHeight > 0)
+                       && (direction == FillDirection.Horizontal
+                           ? children[0].DrawPosition.X < children[1].DrawPosition.X && children[1].DrawPosition.X < children[2].DrawPosition.X
+                           : children[0].DrawPosition.Y < children[1].DrawPosition.Y && children[1].DrawPosition.Y < children[2].DrawPosition.Y);
+            }
         }
 
         [Test]
