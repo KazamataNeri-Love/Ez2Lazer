@@ -101,13 +101,37 @@ namespace osu.Game.EzOsuGame.Screens.Menu
         }
 
         /// <summary>
-        /// Returns the opacity of the bridge over the first scrolling gap.
+        /// Returns the opacity of a top-to-bottom scrolling bridge.
         /// </summary>
         public static float ComputeBirthBridgeAlpha(float phase)
         {
             float t = Math.Clamp(phase, 0f, 1f);
             float smoothT = t * t * (3f - 2f * t);
             return 1f - smoothT;
+        }
+
+        /// <summary>
+        /// Returns the opacity of the bridge for the selected scrolling direction.
+        /// </summary>
+        /// <param name="phase">The normalized stripe phase.</param>
+        /// <param name="style">The direction in which the stripes are moving.</param>
+        public static float ComputeBirthBridgeAlpha(float phase, EzLogoSunStripesStyle style)
+            => ComputeBirthBridgeAlpha(style == EzLogoSunStripesStyle.ScrollingUp ? 1f - phase : phase);
+
+        /// <summary>
+        /// Returns the bounds of the gap where a stripe is born for the selected scrolling direction.
+        /// </summary>
+        /// <param name="phase">The normalized stripe phase.</param>
+        /// <param name="style">The direction in which the stripes are moving.</param>
+        public static (float Start, float End) ComputeBirthBridgeBounds(float phase, EzLogoSunStripesStyle style)
+        {
+            int stripeIndex = style == EzLogoSunStripesStyle.ScrollingUp ? stripe_count - 1 : 0;
+            float u = (stripeIndex + phase) / stripe_count;
+            float gapStart = top_end + lower_height * MathF.Pow(u, 1.45f);
+            float gapWidth = min_gap_width + lower_height * 0.115f * MathF.Pow(u, 1.35f);
+            float gapEnd = Math.Min(1, gapStart + gapWidth);
+
+            return (Math.Max(0, gapStart - bridge_overlap), Math.Min(1, gapEnd + bridge_overlap));
         }
 
         /// <summary>
@@ -189,11 +213,10 @@ namespace osu.Game.EzOsuGame.Screens.Menu
 
             if (scrolling)
             {
-                // Tuck the bridge under both solid bands so fractional edges cannot leave a seam.
-                float bridgeStart = Math.Max(0, geometry[0].End - bridge_overlap);
-                float bridgeEnd = Math.Min(1, geometry[1].Start + bridge_overlap);
+                // Bridge the gap where the next stripe is born, tucking it under solid bands to avoid seams.
+                var (bridgeStart, bridgeEnd) = ComputeBirthBridgeBounds(scrollPhase, style.Value);
                 setBand(birthBridge, bridgeStart, bridgeEnd, gradient);
-                birthBridge.Alpha = ComputeBirthBridgeAlpha(scrollPhase);
+                birthBridge.Alpha = ComputeBirthBridgeAlpha(scrollPhase, style.Value);
             }
             else
                 birthBridge.Alpha = 0;

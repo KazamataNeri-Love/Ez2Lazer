@@ -164,6 +164,36 @@ namespace osu.Game.Tests.NonVisual
             }
         }
 
+        [Test]
+        public void TestUpwardSunStripeBirthBridgeStartsOpaqueAtBottomBoundary()
+        {
+            float phase = EzMenuLogoSunStripes.AdvancePhase(0, 0.000001f, EzLogoSunStripesStyle.ScrollingUp);
+            Assert.That(phase, Is.GreaterThan(0.99999f));
+            Assert.That(EzMenuLogoSunStripes.ComputeBirthBridgeAlpha(phase, EzLogoSunStripesStyle.ScrollingUp), Is.EqualTo(1).Within(0.00001f));
+
+            var (start, end) = EzMenuLogoSunStripes.ComputeBirthBridgeBounds(phase, EzLogoSunStripesStyle.ScrollingUp);
+            Assert.That(start, Is.GreaterThan(0.99f));
+            Assert.That(end, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void TestUpwardSunStripeBirthBridgeFadesAsItMovesUp()
+        {
+            float previousAlpha = EzMenuLogoSunStripes.ComputeBirthBridgeAlpha(1, EzLogoSunStripesStyle.ScrollingUp);
+
+            for (int i = 1; i <= 100; i++)
+            {
+                float phase = 1 - i / 100f;
+                float alpha = EzMenuLogoSunStripes.ComputeBirthBridgeAlpha(phase, EzLogoSunStripesStyle.ScrollingUp);
+                Assert.That(alpha, Is.InRange(0, previousAlpha));
+                previousAlpha = alpha;
+            }
+
+            var (start, end) = EzMenuLogoSunStripes.ComputeBirthBridgeBounds(0, EzLogoSunStripesStyle.ScrollingUp);
+            Assert.That(start, Is.LessThan(0.95f));
+            Assert.That(end, Is.LessThan(1));
+        }
+
         [TestCase(EzLogoSunStripesStyle.Scrolling)]
         [TestCase(EzLogoSunStripesStyle.ScrollingUp)]
         public void TestSunStripeSlotsRemainContinuousAcrossCycle(EzLogoSunStripesStyle style)
@@ -181,8 +211,10 @@ namespace osu.Game.Tests.NonVisual
             int startCount = EzMenuLogoSunStripes.ComputeBands(atWrapPhase, start);
             int beforeWrapCount = EzMenuLogoSunStripes.ComputeBands(beforeWrapPhase, beforeWrap);
 
-            Assert.That(EzMenuLogoSunStripes.ComputeBirthBridgeAlpha(atWrapPhase), Is.EqualTo(1));
-            Assert.That(EzMenuLogoSunStripes.ComputeBirthBridgeAlpha(beforeWrapPhase), Is.LessThan(0.00001f));
+            float alphaAtWrap = EzMenuLogoSunStripes.ComputeBirthBridgeAlpha(atWrapPhase, style);
+            float alphaBeforeWrap = EzMenuLogoSunStripes.ComputeBirthBridgeAlpha(beforeWrapPhase, style);
+            Assert.That(alphaAtWrap, Is.EqualTo(upwards ? 0 : 1).Within(0.00001f));
+            Assert.That(alphaBeforeWrap, Is.EqualTo(upwards ? 1 : 0).Within(0.00001f));
             Assert.That(startCount, Is.EqualTo(beforeWrapCount + 1));
             // At phase zero the opaque bridge joins the first two bands into one.
             Assert.That(beforeWrap[0].Start, Is.EqualTo(start[0].Start).Within(0.00001f));
