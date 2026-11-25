@@ -152,6 +152,9 @@ namespace osu.Game.EzOsuGame.Configuration
 
         [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.LOGO_SUN_STRIPES_SCROLLING))]
         Scrolling = 2,
+
+        [LocalisableDescription(typeof(EzEnumStrings), nameof(EzEnumStrings.LOGO_SUN_STRIPES_SCROLLING_UP))]
+        ScrollingUp = 3,
     }
 
     public enum EzLogoBackdropStyle
