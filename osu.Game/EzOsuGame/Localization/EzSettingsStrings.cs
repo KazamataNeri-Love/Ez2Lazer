@@ -65,6 +65,9 @@ namespace osu.Game.EzOsuGame.Localization
             "限制游戏逻辑更新（Update）线程的最高帧率。Draw 帧率仍由图形设置中的「帧率限制」控制。",
             "Limits the maximum update rate of the game logic thread. Draw frame rate is still controlled by the \"Frame limiter\" setting in Graphics.");
 
+        public static readonly EzLocalizationManager.EzLocalisableString LOGO_SETTINGS_HEADER =
+            new EzLocalizationManager.EzLocalisableString("Logo 设置", "Logo settings");
+
         public static readonly EzLocalizationManager.EzLocalisableString LOGO_CENTRE_TEXT =
             new EzLocalizationManager.EzLocalisableString("Logo 中心文字", "Logo centre text");
 

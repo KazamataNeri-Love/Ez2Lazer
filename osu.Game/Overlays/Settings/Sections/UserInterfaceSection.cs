@@ -4,6 +4,7 @@
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Localisation;
+using osu.Game.EzOsuGame.Overlays;
 using osu.Game.Graphics;
 using osu.Game.Localisation;
 using osu.Game.Overlays.Settings.Sections.UserInterface;
@@ -25,6 +26,7 @@ namespace osu.Game.Overlays.Settings.Sections
             {
                 new GeneralSettings(),
                 new MainMenuSettings(),
+                new EzLogoSettings(),
                 new SongSelectSettings()
             };
         }

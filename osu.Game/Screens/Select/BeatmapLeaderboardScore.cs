@@ -343,9 +343,17 @@ namespace osu.Game.Screens.Select
                                                     {
                                                         EzScoreInfoExtensions.CreateDisplayDrawable(Score, fontSize: 12, anchor: Anchor.CentreLeft),
                                                         new ScoreComponentLabel(BeatmapsetsStrings.ShowScoreboardHeadersCombo.ToUpper(), $"{Score.MaxCombo.ToString()}x",
-                                                            Score.IsPerfect(), 60),
+                                                            Score.IsPerfect(), 60)
+                                                        {
+                                                            Anchor = Anchor.CentreLeft,
+                                                            Origin = Anchor.CentreLeft,
+                                                        },
                                                         new ScoreComponentLabel(BeatmapsetsStrings.ShowScoreboardHeadersAccuracy.ToUpper(), Score.DisplayAccuracy, Score.Accuracy == 1,
-                                                            45),
+                                                            45)
+                                                        {
+                                                            Anchor = Anchor.CentreLeft,
+                                                            Origin = Anchor.CentreLeft,
+                                                        },
                                                     },
                                                     Alpha = 0,
                                                 }
